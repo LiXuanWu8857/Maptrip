@@ -90,7 +90,26 @@ function endTrip() {
   activeTrip = null;
   document.getElementById('start-btn').disabled = false;
   document.getElementById('rec-banner').style.display = 'none';
-  toast(`✓ 第 ${todayTrips.length} 趟完成｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`);
+  const num = todayTrips.length;
+  toast(`✓ 第 ${num} 趟完成｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`);
+  showGoogleMapsPrompt(trip);
+}
+
+function showGoogleMapsPrompt(trip) {
+  if (!trip.coords || trip.coords.length < 2) return;
+  const start = trip.coords[0];
+  const end   = trip.coords.at(-1);
+  const el = document.getElementById('gmaps-prompt');
+  el.style.display = 'flex';
+  document.getElementById('gmaps-confirm').onclick = () => {
+    el.style.display = 'none';
+    const url = `https://www.google.com/maps/dir/?api=1` +
+      `&origin=${start.lat},${start.lng}` +
+      `&destination=${end.lat},${end.lng}` +
+      `&travelmode=driving`;
+    window.open(url, '_blank');
+  };
+  document.getElementById('gmaps-cancel').onclick = () => { el.style.display = 'none'; };
 }
 
 function drawTripLine(trip, idx) {

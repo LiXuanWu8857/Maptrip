@@ -187,3 +187,36 @@ html, body {
   from { transform: translateY(24px); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
+#gmaps-prompt {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+#gmaps-prompt-box {
+  background: #1a1d27; border-radius: 20px; padding: 28px 24px;
+  border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 340px;
+  text-align: center; animation: slideUp 0.25s ease;
+}
+#gmaps-icon   { font-size: 2.5rem; margin-bottom: 12px; }
+#gmaps-title  { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+#gmaps-desc   { font-size: 0.82rem; color: #9aa0a6; line-height: 1.5; margin-bottom: 20px; }
+#gmaps-btns   { display: flex; gap: 10px; }
+#gmaps-cancel {
+  flex: 1; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1);
+  color: #e8eaed; border-radius: 12px; padding: 12px; font-size: 0.9rem;
+  font-family: inherit; cursor: pointer;
+}
+#gmaps-confirm {
+  flex: 2; background: #1a73e8; border: none; color: #fff;
+  border-radius: 12px; padding: 12px; font-size: 0.9rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+#gmaps-confirm:active { opacity: 0.85; }
+
+#map-error {
+  position: fixed; top: 64px; left: 12px; right: 12px;
+  background: rgba(234,67,53,0.15); border: 1px solid rgba(234,67,53,0.4);
+  color: #ea4335; border-radius: 10px; padding: 10px 14px;
+  font-size: 0.8rem; z-index: 20; text-align: center;
+}

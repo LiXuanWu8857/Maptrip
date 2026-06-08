@@ -73,11 +73,33 @@
   <div id="history-body"></div>
 </div>
 
+<!-- Google Maps Prompt -->
+<div id="gmaps-prompt" style="display:none">
+  <div id="gmaps-prompt-box">
+    <div id="gmaps-icon">🗺️</div>
+    <div id="gmaps-title">在 Google Maps 查看路線？</div>
+    <div id="gmaps-desc">是否要在 Google Maps 中開啟這趟行程的起點和終點？</div>
+    <div id="gmaps-btns">
+      <button id="gmaps-cancel">取消</button>
+      <button id="gmaps-confirm">開啟 Google Maps</button>
+    </div>
+  </div>
+</div>
+
+<!-- Map Error Banner -->
+<div id="map-error" style="display:none">
+  ⚠️ 地圖載入失敗，請確認 API Key 已開啟 Maps JavaScript API
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
 <script src="js/app.js"></script>
-<!-- 將 YOUR_GOOGLE_MAPS_API_KEY 替換為你的 API Key -->
+<script>
+function gm_authFailure() {
+  document.getElementById('map-error').style.display = 'block';
+}
+</script>
 <script async defer
   src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAnJ66TMk48YXC6d7ygp6w8lzvjc6gTl5w&callback=initMap&language=zh-TW&region=TW">
 </script>
