@@ -26,6 +26,9 @@
 <!-- GPS Badge -->
 <div id="gps-badge" class="badge-off">📍 等待 GPS</div>
 
+<!-- Tile Toggle -->
+<button id="tile-toggle">🛰 衛星</button>
+
 <!-- Recording Banner -->
 <div id="rec-banner" style="display:none">
   <div id="rec-dot"></div>
@@ -72,6 +75,19 @@
     <button class="sheet-close" onclick="closeHistory()">✕</button>
   </div>
   <div id="history-body"></div>
+</div>
+
+<!-- Start Trip Dialog -->
+<div id="start-dialog" style="display:none">
+  <div id="start-dialog-box">
+    <div class="dialog-icon">🧭</div>
+    <div class="dialog-title">要去哪裡？</div>
+    <input id="dest-input" type="text" placeholder="輸入目的地（可略過）" autocomplete="off">
+    <div id="start-dialog-btns">
+      <button id="start-skip">略過，直接開始</button>
+      <button id="start-nav">導航 + 開始記錄</button>
+    </div>
+  </div>
 </div>
 
 <!-- Google Maps Prompt -->

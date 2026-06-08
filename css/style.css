@@ -61,6 +61,15 @@ html, body {
 .badge-warn { background: rgba(251,188,4,0.2);  color: #fbbc04; border: 1px solid rgba(251,188,4,0.35); }
 .badge-err  { background: rgba(234,67,53,0.2);  color: #ea4335; border: 1px solid rgba(234,67,53,0.35); }
 
+#tile-toggle {
+  position: fixed; top: 64px; left: 12px;
+  background: rgba(15,17,23,0.82); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.15); color: #e8eaed;
+  border-radius: 20px; padding: 4px 12px; font-size: 0.72rem;
+  cursor: pointer; z-index: 15; font-family: inherit;
+}
+#tile-toggle:active { opacity: 0.7; }
+
 #rec-banner {
   position: fixed; bottom: 88px; left: 12px; right: 12px;
   background: rgba(26,115,232,0.9); backdrop-filter: blur(12px);
@@ -220,3 +229,35 @@ html, body {
   color: #ea4335; border-radius: 10px; padding: 10px 14px;
   font-size: 0.8rem; z-index: 20; text-align: center;
 }
+
+#start-dialog {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+#start-dialog-box {
+  background: #1a1d27; border-radius: 20px; padding: 28px 24px;
+  border: 1px solid rgba(255,255,255,0.1); width: 100%; max-width: 340px;
+  text-align: center; animation: slideUp 0.25s ease;
+}
+.dialog-icon  { font-size: 2.2rem; margin-bottom: 10px; }
+.dialog-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; }
+#dest-input {
+  width: 100%; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px; padding: 12px 14px; color: #e8eaed; font-size: 0.95rem;
+  font-family: inherit; outline: none; margin-bottom: 16px;
+}
+#dest-input:focus { border-color: #1a73e8; }
+#dest-input::placeholder { color: #5f6368; }
+#start-dialog-btns { display: flex; flex-direction: column; gap: 10px; }
+#start-skip {
+  background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1);
+  color: #9aa0a6; border-radius: 12px; padding: 12px; font-size: 0.88rem;
+  font-family: inherit; cursor: pointer;
+}
+#start-nav {
+  background: #1a73e8; border: none; color: #fff;
+  border-radius: 12px; padding: 13px; font-size: 0.95rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+#start-nav:active { opacity: 0.85; }

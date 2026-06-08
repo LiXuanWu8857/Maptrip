@@ -6,13 +6,26 @@ let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 
+const TILE_LAYERS = {
+  road: L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    { subdomains: '0123', maxZoom: 20 }),
+  satellite: L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    { subdomains: '0123', maxZoom: 20 })
+};
+let currentTile = 'road';
+
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false })
          .setView([25.033, 121.565], 15);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19
-  }).addTo(map);
+  TILE_LAYERS.road.addTo(map);
+
+  document.getElementById('tile-toggle').addEventListener('click', () => {
+    map.removeLayer(TILE_LAYERS[currentTile]);
+    currentTile = currentTile === 'road' ? 'satellite' : 'road';
+    TILE_LAYERS[currentTile].addTo(map);
+    document.getElementById('tile-toggle').textContent = currentTile === 'road' ? '🛰 衛星' : '🗺 地圖';
+  });
 
   loadTodayFromStorage();
   startGpsWatch();
@@ -65,6 +78,39 @@ function onGpsError(err) {
 function startTrip() {
   if (activeTrip)  { toast('行程進行中，請先按「已抵達」'); return; }
   if (!currentPos) { toast('等待 GPS 訊號中...'); return; }
+
+  const dialog = document.getElementById('start-dialog');
+  const input  = document.getElementById('dest-input');
+  input.value  = '';
+  dialog.style.display = 'flex';
+  setTimeout(() => input.focus(), 100);
+
+  document.getElementById('start-skip').onclick = () => {
+    dialog.style.display = 'none';
+    beginRecording();
+  };
+  document.getElementById('start-nav').onclick = () => {
+    dialog.style.display = 'none';
+    const dest = input.value.trim();
+    if (dest) {
+      const url = `https://www.google.com/maps/dir/?api=1` +
+        `&origin=${currentPos.lat},${currentPos.lng}` +
+        `&destination=${encodeURIComponent(dest)}` +
+        `&travelmode=driving`;
+      window.open(url, '_blank');
+    }
+    beginRecording();
+  };
+
+  input.addEventListener('keydown', function handler(e) {
+    if (e.key === 'Enter') {
+      input.removeEventListener('keydown', handler);
+      document.getElementById('start-nav').click();
+    }
+  });
+}
+
+function beginRecording() {
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
   activePolyline = L.polyline([[currentPos.lat, currentPos.lng]],
     { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
