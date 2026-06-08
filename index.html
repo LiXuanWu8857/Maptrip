@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Maptrip 行程紀錄</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -25,7 +26,7 @@
 <!-- GPS Badge -->
 <div id="gps-badge" class="badge-off">📍 等待 GPS</div>
 
-<!-- Recording Banner (visible while trip active) -->
+<!-- Recording Banner -->
 <div id="rec-banner" style="display:none">
   <div id="rec-dot"></div>
   <span id="rec-time">00:00</span>
@@ -86,23 +87,10 @@
   </div>
 </div>
 
-<!-- Map Error Banner -->
-<div id="map-error" style="display:none">
-  ⚠️ 地圖載入失敗，請確認 API Key 已開啟 Maps JavaScript API
-</div>
-
 <!-- Toast -->
 <div id="toast"></div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/app.js"></script>
-<script>
-function gm_authFailure() {
-  document.getElementById('map-error').style.display = 'block';
-}
-</script>
-<script async defer
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAnJ66TMk48YXC6d7ygp6w8lzvjc6gTl5w&callback=initMap&language=zh-TW&region=TW">
-</script>
-
 </body>
 </html>

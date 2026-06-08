@@ -2,20 +2,18 @@ const STORAGE_KEY = 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
 const GPS_RECORD_MS  = 3000;
 
-let map = null, myDot = null, accuracyCircle = null, currentPos = null;
+let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
-let todayTrips = [], allMapMarkers = [];
+let todayTrips = [], allMapLayers = [];
 
 function initMap() {
-  map = new google.maps.Map(document.getElementById('map'), {
-    zoom: 15, center: { lat: 25.033, lng: 121.565 },
-    mapTypeId: 'roadmap', disableDefaultUI: true,
-    gestureHandling: 'greedy', clickableIcons: false,
-    styles: [
-      { featureType: 'poi',     stylers: [{ visibility: 'off' }] },
-      { featureType: 'transit', stylers: [{ visibility: 'simplified' }] }
-    ]
-  });
+  map = L.map('map', { zoomControl: false, attributionControl: false })
+         .setView([25.033, 121.565], 15);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+  }).addTo(map);
+
   loadTodayFromStorage();
   startGpsWatch();
   updateTopBar();
@@ -32,24 +30,24 @@ function onGpsUpdate(pos) {
   const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
   currentPos = { lat, lng };
   setGpsBadge(acc <= MIN_ACCURACY_M ? 'on' : 'warn', `📍 ±${Math.round(acc)} m`);
-  const latlng = { lat, lng };
-  if (!myDot) {
-    myDot = new google.maps.Marker({
-      position: latlng, map,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 9,
-              fillColor: '#4285F4', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2.5 },
-      zIndex: 200
+
+  if (!myDotMarker) {
+    const icon = L.divIcon({
+      className: '',
+      html: '<div style="width:16px;height:16px;border-radius:50%;background:#4285F4;border:2.5px solid #fff;box-shadow:0 0 6px rgba(66,133,244,0.6)"></div>',
+      iconSize: [16, 16], iconAnchor: [8, 8]
     });
-    accuracyCircle = new google.maps.Circle({
-      center: latlng, radius: acc, map,
-      strokeColor: '#4285F4', strokeOpacity: 0.25, strokeWeight: 1,
-      fillColor: '#4285F4', fillOpacity: 0.06
-    });
-    map.panTo(latlng);
+    myDotMarker = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
+    accuracyCircle = L.circle([lat, lng], {
+      radius: acc, color: '#4285F4', fillColor: '#4285F4',
+      fillOpacity: 0.06, weight: 1, opacity: 0.25
+    }).addTo(map);
+    map.setView([lat, lng], 16);
   } else {
-    myDot.setPosition(latlng);
-    accuracyCircle.setCenter(latlng); accuracyCircle.setRadius(acc);
+    myDotMarker.setLatLng([lat, lng]);
+    accuracyCircle.setLatLng([lat, lng]).setRadius(acc);
   }
+
   if (activeTrip) {
     const last = activeTrip.coords.at(-1);
     if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
@@ -68,13 +66,12 @@ function startTrip() {
   if (activeTrip)  { toast('行程進行中，請先按「已抵達」'); return; }
   if (!currentPos) { toast('等待 GPS 訊號中...'); return; }
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
-  activePolyline = new google.maps.Polyline({
-    path: [currentPos], map, strokeColor: '#1A73E8', strokeOpacity: 0.9, strokeWeight: 5
-  });
+  activePolyline = L.polyline([[currentPos.lat, currentPos.lng]],
+    { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
   document.getElementById('start-btn').disabled = true;
   document.getElementById('rec-banner').style.display = 'flex';
   timerTick = setInterval(refreshRecBanner, 1000);
-  map.panTo(currentPos);
+  map.panTo([currentPos.lat, currentPos.lng]);
   toast('行程開始！');
 }
 
@@ -83,8 +80,8 @@ function endTrip() {
   clearInterval(timerTick);
   const trip = { id: activeTrip.id, startTime: activeTrip.startTime, endTime: Date.now(),
                  coords: activeTrip.coords, totalDist: calcTotalDist(activeTrip.coords) };
-  if (activePolyline) { activePolyline.setMap(null); activePolyline = null; }
-  trip.polylineRef = drawTripLine(trip, todayTrips.length + 1);
+  if (activePolyline) { map.removeLayer(activePolyline); activePolyline = null; }
+  drawTripLine(trip, todayTrips.length + 1);
   todayTrips.push(trip);
   saveTodayToStorage(); updateTopBar();
   activeTrip = null;
@@ -113,30 +110,43 @@ function showGoogleMapsPrompt(trip) {
 }
 
 function drawTripLine(trip, idx) {
-  const path = trip.coords.map(c => ({ lat: c.lat, lng: c.lng }));
-  const line = new google.maps.Polyline({ path, map, strokeColor: '#1A73E8', strokeOpacity: 0.85, strokeWeight: 5 });
-  const startMk = new google.maps.Marker({ position: path[0], map, icon: dotIcon('#34A853'),
-    label: { text: String(idx), color: '#fff', fontSize: '11px', fontWeight: 'bold' } });
-  const endMk = new google.maps.Marker({ position: path.at(-1), map, icon: dotIcon('#EA4335') });
-  allMapMarkers.push(startMk, endMk);
-  line.addListener('click', () =>
+  const latlngs = trip.coords.map(c => [c.lat, c.lng]);
+  const line = L.polyline(latlngs, { color: '#1A73E8', weight: 5, opacity: 0.85 }).addTo(map);
+  line.on('click', () =>
     toast(`行程 ${idx}｜${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`));
-  return line;
+
+  const startIcon = makeNumberIcon(idx, '#34A853');
+  const endIcon   = makeDotIcon('#EA4335');
+  const startMk = L.marker(latlngs[0], { icon: startIcon }).addTo(map);
+  const endMk   = L.marker(latlngs.at(-1), { icon: endIcon }).addTo(map);
+  allMapLayers.push(line, startMk, endMk);
+  trip._layers = [line, startMk, endMk];
 }
 
-function dotIcon(color) {
-  return { path: google.maps.SymbolPath.CIRCLE, scale: 7,
-           fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 };
+function makeNumberIcon(n, color) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">${n}</div>`,
+    iconSize: [24, 24], iconAnchor: [12, 12]
+  });
+}
+
+function makeDotIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;"></div>`,
+    iconSize: [14, 14], iconAnchor: [7, 7]
+  });
 }
 
 function refreshActivePolyline() {
   if (!activePolyline || !activeTrip) return;
-  activePolyline.setPath(activeTrip.coords.map(c => ({ lat: c.lat, lng: c.lng })));
+  activePolyline.setLatLngs(activeTrip.coords.map(c => [c.lat, c.lng]));
 }
 
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
-  map.panTo(currentPos); map.setZoom(16);
+  map.setView([currentPos.lat, currentPos.lng], 16);
 }
 
 function updateTopBar() {
@@ -184,16 +194,15 @@ function renderTripSheet() {
 function focusTrip(idx) {
   const trip = todayTrips[idx];
   if (!trip?.coords?.length) return;
-  const bounds = new google.maps.LatLngBounds();
-  trip.coords.forEach(c => bounds.extend({ lat: c.lat, lng: c.lng }));
-  map.fitBounds(bounds, { top: 60, bottom: 90, left: 16, right: 16 });
+  const bounds = L.latLngBounds(trip.coords.map(c => [c.lat, c.lng]));
+  map.fitBounds(bounds, { paddingTopLeft: [16, 60], paddingBottomRight: [16, 90] });
 }
 
 function deleteTodayTrip(e, idx) {
   e.stopPropagation();
   if (!confirm(`刪除第 ${idx + 1} 趟行程？`)) return;
   const t = todayTrips[idx];
-  if (t.polylineRef) t.polylineRef.setMap(null);
+  if (t._layers) t._layers.forEach(l => map.removeLayer(l));
   todayTrips.splice(idx, 1);
   saveTodayToStorage(); updateTopBar(); renderTripSheet();
   toast(`已刪除第 ${idx + 1} 趟`);
@@ -202,9 +211,8 @@ function deleteTodayTrip(e, idx) {
 function confirmClearDay() {
   if (!todayTrips.length) { toast('今日無行程可清除'); return; }
   if (!confirm(`確定清除今日全部 ${todayTrips.length} 趟行程？`)) return;
-  todayTrips.forEach(t => { if (t.polylineRef) t.polylineRef.setMap(null); });
-  allMapMarkers.forEach(m => m.setMap(null));
-  allMapMarkers = []; todayTrips = [];
+  allMapLayers.forEach(l => map.removeLayer(l));
+  allMapLayers = []; todayTrips = [];
   saveTodayToStorage(); updateTopBar(); closeSheet();
   toast('今日行程已清除');
 }
@@ -245,10 +253,11 @@ function loadTodayFromStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const saved = raw[todayKey()] || [];
   if (!saved.length) return;
-  saved.forEach((t, i) => { todayTrips.push({ ...t, polylineRef: drawTripLine(t, i + 1) }); });
-  const bounds = new google.maps.LatLngBounds();
-  saved.forEach(t => t.coords.forEach(c => bounds.extend({ lat: c.lat, lng: c.lng })));
-  if (!bounds.isEmpty()) map.fitBounds(bounds, { top: 60, bottom: 90, left: 16, right: 16 });
+  saved.forEach((t, i) => { todayTrips.push({ ...t }); drawTripLine(t, i + 1); });
+  const allCoords = saved.flatMap(t => t.coords.map(c => [c.lat, c.lng]));
+  if (allCoords.length) {
+    map.fitBounds(L.latLngBounds(allCoords), { paddingTopLeft: [16, 60], paddingBottomRight: [16, 90] });
+  }
   updateTopBar();
 }
 
@@ -285,3 +294,5 @@ function toast(msg) {
   el.textContent = msg; el.classList.add('show');
   clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2800);
 }
+
+window.addEventListener('load', initMap);
