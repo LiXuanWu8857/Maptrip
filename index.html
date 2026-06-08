@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Maptrip 行程紀錄</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Top Bar -->
+<div id="top-bar">
+  <div id="top-left">
+    <div id="top-date"></div>
+    <div id="top-tripcount"><span id="trip-count">0</span> 趟</div>
+  </div>
+  <button class="icon-btn" onclick="toggleTripList()" title="行程清單">☰</button>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- GPS Badge -->
+<div id="gps-badge" class="badge-off">📍 等待 GPS</div>
+
+<!-- Recording Banner (visible while trip active) -->
+<div id="rec-banner" style="display:none">
+  <div id="rec-dot"></div>
+  <span id="rec-time">00:00</span>
+  <span id="rec-dist">0 m</span>
+  <button id="arrive-btn" onclick="endTrip()">已抵達 ✓</button>
+</div>
+
+<!-- Bottom Controls -->
+<div id="bottom-bar">
+  <button class="ctrl-btn" id="start-btn" onclick="startTrip()">
+    <span class="ctrl-icon">▶</span>
+    <span class="ctrl-label">開始行程</span>
+  </button>
+  <button class="ctrl-btn" onclick="centerOnMe()">
+    <span class="ctrl-icon">⊕</span>
+    <span class="ctrl-label">我的位置</span>
+  </button>
+  <button class="ctrl-btn" onclick="showHistory()">
+    <span class="ctrl-icon">📅</span>
+    <span class="ctrl-label">歷史紀錄</span>
+  </button>
+</div>
+
+<!-- Trip List Sheet -->
+<div id="sheet-overlay" onclick="closeSheet()" style="display:none"></div>
+<div id="trip-sheet" style="display:none">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span id="sheet-title">今日行程</span>
+    <button class="sheet-close" onclick="closeSheet()">✕</button>
+  </div>
+  <div id="sheet-body"></div>
+  <div class="sheet-footer">
+    <button class="danger-btn" onclick="confirmClearDay()">清除今日全部行程</button>
+  </div>
+</div>
+
+<!-- History Sheet -->
+<div id="history-sheet" style="display:none">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span>歷史紀錄</span>
+    <button class="sheet-close" onclick="closeHistory()">✕</button>
+  </div>
+  <div id="history-body"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="js/app.js"></script>
+<!-- 將 YOUR_GOOGLE_MAPS_API_KEY 替換為你的 API Key -->
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap&language=zh-TW&region=TW">
+</script>
+
+</body>
+</html>
