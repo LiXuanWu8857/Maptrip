@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Maptrip">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="css/style.css">
@@ -22,6 +25,18 @@
 
 <!-- Map -->
 <div id="map"></div>
+
+<!-- Arrival Banner -->
+<div id="arrival-banner">
+  <div id="arrival-info">
+    <span id="arrival-icon">📍</span>
+    <span id="arrival-msg">偵測到您已停車，要結束行程嗎？</span>
+  </div>
+  <div id="arrival-btns">
+    <button id="arrival-dismiss" onclick="arrivalDismiss()">繼續記錄</button>
+    <button id="arrival-confirm" onclick="arrivalConfirm()">結束行程</button>
+  </div>
+</div>
 
 <!-- GPS Badge -->
 <div id="gps-badge" class="badge-off">📍 等待 GPS</div>

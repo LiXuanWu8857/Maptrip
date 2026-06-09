@@ -1,10 +1,14 @@
 const STORAGE_KEY = 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
 const GPS_RECORD_MS  = 3000;
+const MOVING_SPEED_MS   = 4;   // >4 m/s (~15 km/h) = 行駛中
+const STOPPED_SPEED_MS  = 1;   // <1 m/s (~3.6 km/h) = 停車
+const ARRIVAL_DELAY_MS  = 8000; // 停車滿 8 秒才提示
 
 let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
+let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 
 const TILE_LAYERS = {
   road: L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
@@ -17,14 +21,14 @@ let currentTile = 'road';
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false })
          .setView([25.033, 121.565], 15);
-
   TILE_LAYERS.road.addTo(map);
 
   document.getElementById('tile-toggle').addEventListener('click', () => {
     map.removeLayer(TILE_LAYERS[currentTile]);
     currentTile = currentTile === 'road' ? 'satellite' : 'road';
     TILE_LAYERS[currentTile].addTo(map);
-    document.getElementById('tile-toggle').textContent = currentTile === 'road' ? '🛰 衛星' : '🗺 地圖';
+    document.getElementById('tile-toggle').textContent =
+      currentTile === 'road' ? '🛰 衛星' : '🗺 地圖';
   });
 
   loadTodayFromStorage();
@@ -40,7 +44,7 @@ function startGpsWatch() {
 }
 
 function onGpsUpdate(pos) {
-  const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
+  const { latitude: lat, longitude: lng, accuracy: acc, speed } = pos.coords;
   currentPos = { lat, lng };
   setGpsBadge(acc <= MIN_ACCURACY_M ? 'on' : 'warn', `📍 ±${Math.round(acc)} m`);
 
@@ -67,7 +71,48 @@ function onGpsUpdate(pos) {
       activeTrip.coords.push({ lat, lng, t: Date.now() });
       refreshActivePolyline();
     }
+    checkArrival(speed);
   }
+}
+
+function checkArrival(speed) {
+  if (speed === null || speed === undefined) return;
+  if (speed > MOVING_SPEED_MS) {
+    wasMoving = true;
+    arrivalBannerShown = false;
+    clearTimeout(stoppedTimer);
+    hideArrivalBanner();
+  } else if (speed < STOPPED_SPEED_MS && wasMoving && !arrivalBannerShown) {
+    clearTimeout(stoppedTimer);
+    stoppedTimer = setTimeout(() => {
+      if (activeTrip && !arrivalBannerShown) {
+        arrivalBannerShown = true;
+        showArrivalBanner();
+      }
+    }, ARRIVAL_DELAY_MS);
+  }
+}
+
+function showArrivalBanner() {
+  const b = document.getElementById('arrival-banner');
+  b.classList.add('show');
+  clearTimeout(b._autoDismiss);
+  b._autoDismiss = setTimeout(() => hideArrivalBanner(), 30000);
+}
+
+function hideArrivalBanner() {
+  document.getElementById('arrival-banner').classList.remove('show');
+}
+
+function arrivalConfirm() {
+  hideArrivalBanner();
+  endTrip();
+}
+
+function arrivalDismiss() {
+  hideArrivalBanner();
+  wasMoving = false;
+  arrivalBannerShown = false;
 }
 
 function onGpsError(err) {
@@ -111,6 +156,8 @@ function startTrip() {
 }
 
 function beginRecording() {
+  wasMoving = false;
+  arrivalBannerShown = false;
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
   activePolyline = L.polyline([[currentPos.lat, currentPos.lng]],
     { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
@@ -124,35 +171,21 @@ function beginRecording() {
 function endTrip() {
   if (!activeTrip) return;
   clearInterval(timerTick);
-  const trip = { id: activeTrip.id, startTime: activeTrip.startTime, endTime: Date.now(),
-                 coords: activeTrip.coords, totalDist: calcTotalDist(activeTrip.coords) };
+  clearTimeout(stoppedTimer);
+  hideArrivalBanner();
+  const trip = {
+    id: activeTrip.id, startTime: activeTrip.startTime, endTime: Date.now(),
+    coords: activeTrip.coords, totalDist: calcTotalDist(activeTrip.coords)
+  };
   if (activePolyline) { map.removeLayer(activePolyline); activePolyline = null; }
   drawTripLine(trip, todayTrips.length + 1);
   todayTrips.push(trip);
   saveTodayToStorage(); updateTopBar();
   activeTrip = null;
+  wasMoving = false; arrivalBannerShown = false;
   document.getElementById('start-btn').disabled = false;
   document.getElementById('rec-banner').style.display = 'none';
-  const num = todayTrips.length;
-  toast(`✓ 第 ${num} 趟完成｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`);
-  showGoogleMapsPrompt(trip);
-}
-
-function showGoogleMapsPrompt(trip) {
-  if (!trip.coords || trip.coords.length < 2) return;
-  const start = trip.coords[0];
-  const end   = trip.coords.at(-1);
-  const el = document.getElementById('gmaps-prompt');
-  el.style.display = 'flex';
-  document.getElementById('gmaps-confirm').onclick = () => {
-    el.style.display = 'none';
-    const url = `https://www.google.com/maps/dir/?api=1` +
-      `&origin=${start.lat},${start.lng}` +
-      `&destination=${end.lat},${end.lng}` +
-      `&travelmode=driving`;
-    window.open(url, '_blank');
-  };
-  document.getElementById('gmaps-cancel').onclick = () => { el.style.display = 'none'; };
+  toast(`✓ 第 ${todayTrips.length} 趟完成｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`);
 }
 
 function drawTripLine(trip, idx) {
@@ -160,11 +193,8 @@ function drawTripLine(trip, idx) {
   const line = L.polyline(latlngs, { color: '#1A73E8', weight: 5, opacity: 0.85 }).addTo(map);
   line.on('click', () =>
     toast(`行程 ${idx}｜${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`));
-
-  const startIcon = makeNumberIcon(idx, '#34A853');
-  const endIcon   = makeDotIcon('#EA4335');
-  const startMk = L.marker(latlngs[0], { icon: startIcon }).addTo(map);
-  const endMk   = L.marker(latlngs.at(-1), { icon: endIcon }).addTo(map);
+  const startMk = L.marker(latlngs[0], { icon: makeNumberIcon(idx, '#34A853') }).addTo(map);
+  const endMk   = L.marker(latlngs.at(-1), { icon: makeDotIcon('#EA4335') }).addTo(map);
   allMapLayers.push(line, startMk, endMk);
   trip._layers = [line, startMk, endMk];
 }
