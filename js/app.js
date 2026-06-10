@@ -173,36 +173,7 @@ function onGpsError(err) {
 function startTrip() {
   if (activeTrip)  { toast('行程進行中，請先按「已抵達」'); return; }
   if (!currentPos) { toast('等待 GPS 訊號中...'); return; }
-
-  const dialog = document.getElementById('start-dialog');
-  const input  = document.getElementById('dest-input');
-  input.value  = '';
-  dialog.style.display = 'flex';
-  setTimeout(() => input.focus(), 100);
-
-  document.getElementById('start-skip').onclick = () => {
-    dialog.style.display = 'none';
-    beginRecording();
-  };
-  document.getElementById('start-nav').onclick = () => {
-    dialog.style.display = 'none';
-    const dest = input.value.trim();
-    if (dest) {
-      const url = `https://www.google.com/maps/dir/?api=1` +
-        `&origin=${currentPos.lat},${currentPos.lng}` +
-        `&destination=${encodeURIComponent(dest)}` +
-        `&travelmode=driving`;
-      window.open(url, '_blank');
-    }
-    beginRecording();
-  };
-
-  input.addEventListener('keydown', function handler(e) {
-    if (e.key === 'Enter') {
-      input.removeEventListener('keydown', handler);
-      document.getElementById('start-nav').click();
-    }
-  });
+  beginRecording();
 }
 
 function beginRecording() {
@@ -365,6 +336,105 @@ function renderHistorySheet() {
       </div>`).join('');
     return `<div class="history-day">${day} · ${trips.length} 趟 · ${fmtDist(totalDist)}</div>${rows}`;
   }).join('');
+}
+
+// ===== 每日行程回放 =====
+let replayDot = null, replayInterval = null;
+let replayTripIdx = 0, replayCoordIdx = 0;
+let replayPaused = false, replaySpeed = 5;
+
+function openReplay() {
+  if (!todayTrips.length) { toast('今日尚無行程可回放'); return; }
+  closeSheet();
+  document.getElementById('replay-panel').classList.add('show');
+  startReplay();
+}
+
+function startReplay() {
+  stopReplay();
+  replayTripIdx = 0; replayCoordIdx = 0; replayPaused = false;
+  document.getElementById('replay-play-btn').textContent = '⏸';
+
+  const first = todayTrips[0].coords[0];
+  replayDot = L.marker([first.lat, first.lng], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div class="replay-dot"></div>',
+      iconSize: [22, 22], iconAnchor: [11, 11]
+    }),
+    zIndexOffset: 2000
+  }).addTo(map);
+
+  map.setView([first.lat, first.lng], 16);
+  updateReplayPanel();
+  scheduleStep();
+}
+
+function scheduleStep() {
+  clearInterval(replayInterval);
+  replayInterval = setInterval(stepReplay, Math.round(200 / replaySpeed));
+}
+
+function stepReplay() {
+  if (replayPaused) return;
+  const trip = todayTrips[replayTripIdx];
+  if (!trip) { finishReplay(); return; }
+
+  if (replayCoordIdx >= trip.coords.length) {
+    replayTripIdx++;
+    replayCoordIdx = 0;
+    clearInterval(replayInterval);
+    if (replayTripIdx >= todayTrips.length) { finishReplay(); return; }
+    updateReplayPanel();
+    const c = todayTrips[replayTripIdx].coords[0];
+    replayDot.setLatLng([c.lat, c.lng]);
+    map.panTo([c.lat, c.lng]);
+    setTimeout(scheduleStep, 700);
+    return;
+  }
+
+  const c = trip.coords[replayCoordIdx];
+  replayDot.setLatLng([c.lat, c.lng]);
+  map.panTo([c.lat, c.lng]);
+  replayCoordIdx++;
+}
+
+function toggleReplayPause() {
+  replayPaused = !replayPaused;
+  document.getElementById('replay-play-btn').textContent = replayPaused ? '▶' : '⏸';
+}
+
+function setReplaySpeed(s, btn) {
+  replaySpeed = s;
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (replayInterval) scheduleStep();
+}
+
+function stopReplay() {
+  clearInterval(replayInterval); replayInterval = null;
+  if (replayDot) { map.removeLayer(replayDot); replayDot = null; }
+}
+
+function closeReplay() {
+  stopReplay();
+  document.getElementById('replay-panel').classList.remove('show');
+}
+
+function finishReplay() {
+  clearInterval(replayInterval); replayInterval = null;
+  document.getElementById('replay-play-btn').textContent = '▶';
+  document.getElementById('replay-trip-label').textContent = '回放完畢';
+  toast('✓ 今日行程回放完畢');
+}
+
+function updateReplayPanel() {
+  if (replayTripIdx >= todayTrips.length) return;
+  const t = todayTrips[replayTripIdx];
+  document.getElementById('replay-trip-label').textContent =
+    `第 ${replayTripIdx + 1} 趟 / 共 ${todayTrips.length} 趟`;
+  document.getElementById('replay-trip-info').textContent =
+    `${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　${fmtDist(t.totalDist)}`;
 }
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }

@@ -74,6 +74,7 @@
   <div class="sheet-handle"></div>
   <div class="sheet-header">
     <span id="sheet-title">今日行程</span>
+    <button class="replay-btn" onclick="openReplay()">▶ 回放</button>
     <button class="sheet-close" onclick="closeSheet()">✕</button>
   </div>
   <div id="sheet-body"></div>
@@ -92,28 +93,23 @@
   <div id="history-body"></div>
 </div>
 
-<!-- Start Trip Dialog -->
-<div id="start-dialog" style="display:none">
-  <div id="start-dialog-box">
-    <div class="dialog-icon">🧭</div>
-    <div class="dialog-title">要去哪裡？</div>
-    <input id="dest-input" type="text" placeholder="輸入目的地（可略過）" autocomplete="off">
-    <div id="start-dialog-btns">
-      <button id="start-skip">略過，直接開始</button>
-      <button id="start-nav">導航 + 開始記錄</button>
-    </div>
+<!-- Replay Panel -->
+<div id="replay-panel">
+  <div class="sheet-handle"></div>
+  <div id="replay-header">
+    <div id="replay-trip-label">第 1 趟 / 共 1 趟</div>
+    <button id="replay-close-btn" onclick="closeReplay()">✕</button>
   </div>
-</div>
-
-<!-- Google Maps Prompt -->
-<div id="gmaps-prompt" style="display:none">
-  <div id="gmaps-prompt-box">
-    <div id="gmaps-icon">🗺️</div>
-    <div id="gmaps-title">在 Google Maps 查看路線？</div>
-    <div id="gmaps-desc">是否要在 Google Maps 中開啟這趟行程的起點和終點？</div>
-    <div id="gmaps-btns">
-      <button id="gmaps-cancel">取消</button>
-      <button id="gmaps-confirm">開啟 Google Maps</button>
+  <div id="replay-trip-info"></div>
+  <div id="replay-controls">
+    <div id="replay-speed-btns">
+      <button class="speed-btn" onclick="setReplaySpeed(1,this)">1x</button>
+      <button class="speed-btn active" onclick="setReplaySpeed(5,this)">5x</button>
+      <button class="speed-btn" onclick="setReplaySpeed(10,this)">10x</button>
+    </div>
+    <div id="replay-action-btns">
+      <button id="replay-restart-btn" onclick="startReplay()" title="重播">↺</button>
+      <button id="replay-play-btn" onclick="toggleReplayPause()">⏸</button>
     </div>
   </div>
 </div>

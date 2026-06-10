@@ -181,9 +181,15 @@ html, body {
   border-radius: 2px; margin: 10px auto 0; flex-shrink: 0;
 }
 .sheet-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; gap: 8px;
   padding: 12px 18px 10px; border-bottom: 1px solid rgba(0,0,0,0.06);
   flex-shrink: 0; font-size: 0.95rem; font-weight: 600; color: #202124;
+}
+.sheet-header span { flex: 1; }
+.replay-btn {
+  background: rgba(26,115,232,0.1); border: 1px solid rgba(26,115,232,0.25);
+  color: #1a73e8; border-radius: 8px; padding: 4px 10px;
+  font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer;
 }
 .sheet-close { background: none; border: none; color: #9aa0a6; font-size: 1.1rem; cursor: pointer; padding: 4px 8px; }
 #sheet-body, #history-body { overflow-y: auto; flex: 1; }
@@ -275,6 +281,53 @@ html, body {
   background: rgba(234,67,53,0.08); border: 1px solid rgba(234,67,53,0.3);
   color: #c5221f; border-radius: 10px; padding: 10px 14px;
   font-size: 0.8rem; z-index: 20; text-align: center;
+}
+
+/* ===== 回放面板 ===== */
+#replay-panel {
+  position: fixed; bottom: -160px; left: 0; right: 0;
+  background: #fff; border-radius: 20px 20px 0 0;
+  border-top: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
+  z-index: 31; padding: 0 18px 20px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0));
+  transition: bottom 0.35s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+#replay-panel.show { bottom: 0; }
+#replay-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0 6px; font-size: 0.95rem; font-weight: 700; color: #202124;
+}
+#replay-close-btn {
+  background: none; border: none; color: #9aa0a6; font-size: 1.1rem; cursor: pointer;
+}
+#replay-trip-info { font-size: 0.8rem; color: #5f6368; margin-bottom: 14px; }
+#replay-controls { display: flex; align-items: center; justify-content: space-between; }
+#replay-speed-btns { display: flex; gap: 6px; }
+.speed-btn {
+  background: #f1f3f4; border: none; color: #5f6368;
+  border-radius: 8px; padding: 7px 14px; font-size: 0.82rem;
+  font-family: inherit; cursor: pointer; font-weight: 500;
+}
+.speed-btn.active { background: #1a73e8; color: #fff; }
+#replay-action-btns { display: flex; gap: 10px; }
+#replay-play-btn, #replay-restart-btn {
+  width: 42px; height: 42px; border-radius: 50%; border: none;
+  font-size: 1.1rem; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+}
+#replay-restart-btn { background: #f1f3f4; color: #5f6368; }
+#replay-play-btn { background: #1a73e8; color: #fff; }
+
+.replay-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #fa7b17; border: 3px solid #fff;
+  box-shadow: 0 0 0 3px rgba(250,123,23,0.3);
+  animation: replayPulse 1s infinite;
+}
+@keyframes replayPulse {
+  0%,100% { box-shadow: 0 0 0 3px rgba(250,123,23,0.3); }
+  50%      { box-shadow: 0 0 0 7px rgba(250,123,23,0.1); }
 }
 
 #start-dialog {
