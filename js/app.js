@@ -10,6 +10,9 @@ let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 
+const TEST_MODE = new URLSearchParams(location.search).has('test');
+let simTick = 0, simTimer = null;
+
 const TILE_LAYERS = {
   road: L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
     { subdomains: '0123', maxZoom: 20 }),
@@ -38,9 +41,40 @@ function initMap() {
 }
 
 function startGpsWatch() {
+  if (TEST_MODE) { startSimulation(); return; }
   if (!navigator.geolocation) { setGpsBadge('err', '⚠ 不支援定位'); return; }
   navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 });
+}
+
+// ===== 測試模式：模擬 GPS（網址加 ?test=1 啟用）=====
+// 流程：靜止 5 秒 → 行駛 25 秒（約 12 m/s）→ 停車（觸發到站偵測）
+function startSimulation() {
+  toast('🧪 測試模式：模擬 GPS 已啟用');
+  const base = { lat: 25.0330, lng: 121.5654 };
+  simTick = 0;
+  clearInterval(simTimer);
+  simTimer = setInterval(() => {
+    simTick++;
+    let lat, lng, speed;
+    if (simTick <= 5) {            // 靜止暖機
+      lat = base.lat; lng = base.lng; speed = 0;
+    } else if (simTick <= 30) {    // 行駛中：往東北移動
+      const p = simTick - 5;
+      lat = base.lat + p * 0.0001;
+      lng = base.lng + p * 0.00012;
+      speed = 12;
+    } else {                       // 停車：停在終點
+      lat = base.lat + 25 * 0.0001;
+      lng = base.lng + 25 * 0.00012;
+      speed = 0;
+    }
+    onGpsUpdate({ coords: { latitude: lat, longitude: lng, accuracy: 10, speed } });
+  }, 1000);
+}
+
+function restartSimulation() {
+  if (TEST_MODE) { simTick = 0; }
 }
 
 function onGpsUpdate(pos) {
@@ -156,6 +190,7 @@ function startTrip() {
 }
 
 function beginRecording() {
+  restartSimulation();
   wasMoving = false;
   arrivalBannerShown = false;
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
