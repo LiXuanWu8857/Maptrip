@@ -93,6 +93,35 @@
   <div id="history-body"></div>
 </div>
 
+<!-- Fare Dialog -->
+<div id="fare-overlay"></div>
+<div id="fare-dialog">
+  <div class="sheet-handle"></div>
+  <div id="fare-header">行程完成</div>
+  <div id="fare-summary">
+    <div class="fare-row">
+      <span class="fare-label">開始</span><span id="fs-start"></span>
+    </div>
+    <div class="fare-row">
+      <span class="fare-label">結束</span><span id="fs-end"></span>
+    </div>
+    <div class="fare-row">
+      <span class="fare-label">時間</span><span id="fs-dur"></span>
+    </div>
+    <div class="fare-row">
+      <span class="fare-label">里程</span><span id="fs-dist"></span>
+    </div>
+  </div>
+  <div id="fare-input-row">
+    <span id="fare-currency">NT$</span>
+    <input id="fare-input" type="number" inputmode="numeric" placeholder="輸入金額" min="0">
+  </div>
+  <div id="fare-btns">
+    <button id="fare-skip">略過</button>
+    <button id="fare-save">儲存行程</button>
+  </div>
+</div>
+
 <!-- Replay Panel -->
 <div id="replay-panel">
   <div class="sheet-handle"></div>

@@ -195,19 +195,50 @@ function endTrip() {
   clearInterval(timerTick);
   clearTimeout(stoppedTimer);
   hideArrivalBanner();
+
   const trip = {
     id: activeTrip.id, startTime: activeTrip.startTime, endTime: Date.now(),
-    coords: activeTrip.coords, totalDist: calcTotalDist(activeTrip.coords)
+    coords: activeTrip.coords, totalDist: calcTotalDist(activeTrip.coords), fare: 0
   };
+
   if (activePolyline) { map.removeLayer(activePolyline); activePolyline = null; }
-  drawTripLine(trip, todayTrips.length + 1);
-  todayTrips.push(trip);
-  saveTodayToStorage(); updateTopBar();
   activeTrip = null;
   wasMoving = false; arrivalBannerShown = false;
   document.getElementById('start-btn').disabled = false;
   document.getElementById('rec-banner').style.display = 'none';
-  toast(`✓ 第 ${todayTrips.length} 趟完成｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`);
+
+  showFareDialog(trip);
+}
+
+function showFareDialog(trip) {
+  document.getElementById('fs-start').textContent  = fmtTime(trip.startTime);
+  document.getElementById('fs-end').textContent    = fmtTime(trip.endTime);
+  document.getElementById('fs-dur').textContent    = fmtDur(trip.endTime - trip.startTime);
+  document.getElementById('fs-dist').textContent   = fmtDist(trip.totalDist);
+  document.getElementById('fare-input').value = '';
+
+  document.getElementById('fare-overlay').style.display = 'block';
+  document.getElementById('fare-dialog').classList.add('show');
+  setTimeout(() => document.getElementById('fare-input').focus(), 300);
+
+  const save = (fare) => {
+    trip.fare = fare;
+    document.getElementById('fare-overlay').style.display = 'none';
+    document.getElementById('fare-dialog').classList.remove('show');
+    saveTripFinal(trip);
+  };
+
+  document.getElementById('fare-save').onclick = () =>
+    save(parseInt(document.getElementById('fare-input').value) || 0);
+  document.getElementById('fare-skip').onclick = () => save(0);
+}
+
+function saveTripFinal(trip) {
+  drawTripLine(trip, todayTrips.length + 1);
+  todayTrips.push(trip);
+  saveTodayToStorage(); updateTopBar();
+  const fareStr = trip.fare ? `　NT$ ${trip.fare}` : '';
+  toast(`✓ 第 ${todayTrips.length} 趟　${fmtDur(trip.endTime - trip.startTime)}　${fmtDist(trip.totalDist)}${fareStr}`);
 }
 
 function drawTripLine(trip, idx) {
@@ -278,12 +309,19 @@ function renderTripSheet() {
   if (!todayTrips.length) {
     body.innerHTML = '<div class="empty-state">今日尚無行程紀錄<br>按「開始行程」開始追蹤</div>'; return;
   }
-  body.innerHTML = todayTrips.map((t, i) => `
+  const totalFare = todayTrips.reduce((s, t) => s + (t.fare || 0), 0);
+  const totalDist = todayTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
+  const summary = `<div class="day-summary">
+    <span>${todayTrips.length} 趟</span>
+    <span>${fmtDist(totalDist)}</span>
+    ${totalFare ? `<span class="day-fare">NT$ ${totalFare.toLocaleString()}</span>` : ''}
+  </div>`;
+  body.innerHTML = summary + todayTrips.map((t, i) => `
     <div class="trip-row" onclick="focusTrip(${i}); closeSheet()">
       <div class="trip-num">${i + 1}</div>
       <div class="trip-meta">
-        <div class="trip-time">${fmtTime(t.startTime)} &rarr; ${fmtTime(t.endTime)}</div>
-        <div class="trip-stats">${fmtDur(t.endTime - t.startTime)} &nbsp;|&nbsp; ${fmtDist(t.totalDist)}</div>
+        <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
+        <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}</div>
       </div>
       <span class="trip-del" onclick="deleteTodayTrip(event,${i})">🗑</span>
     </div>`).join('');
@@ -326,15 +364,17 @@ function renderHistorySheet() {
   body.innerHTML = days.map(day => {
     const trips = raw[day];
     const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
+    const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
+    const fareStr = totalFare ? `　NT$ ${totalFare.toLocaleString()}` : '';
     const rows = trips.map((t, i) => `
       <div class="trip-row">
         <div class="trip-num">${i + 1}</div>
         <div class="trip-meta">
-          <div class="trip-time">${fmtTime(t.startTime)} &rarr; ${fmtTime(t.endTime)}</div>
-          <div class="trip-stats">${fmtDur(t.endTime - t.startTime)} &nbsp;|&nbsp; ${fmtDist(t.totalDist)}</div>
+          <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
+          <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}</div>
         </div>
       </div>`).join('');
-    return `<div class="history-day">${day} · ${trips.length} 趟 · ${fmtDist(totalDist)}</div>${rows}`;
+    return `<div class="history-day">${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</div>${rows}`;
   }).join('');
 }
 

@@ -283,6 +283,68 @@ html, body {
   font-size: 0.8rem; z-index: 20; text-align: center;
 }
 
+/* ===== 金額輸入 ===== */
+#fare-overlay {
+  display: none; position: fixed; inset: 0; z-index: 40;
+  background: rgba(0,0,0,0.35); backdrop-filter: blur(2px);
+}
+#fare-dialog {
+  position: fixed; bottom: -340px; left: 0; right: 0;
+  background: #fff; border-radius: 20px 20px 0 0;
+  border-top: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
+  z-index: 41; padding: 0 20px 28px;
+  padding-bottom: calc(28px + env(safe-area-inset-bottom, 0));
+  transition: bottom 0.35s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+#fare-dialog.show { bottom: 0; }
+#fare-header {
+  padding: 14px 0 14px; font-size: 1rem; font-weight: 700;
+  text-align: center; color: #202124; border-bottom: 1px solid rgba(0,0,0,0.06);
+  margin-bottom: 14px;
+}
+#fare-summary { margin-bottom: 18px; }
+.fare-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 0; font-size: 0.88rem;
+}
+.fare-label { color: #5f6368; }
+.fare-row span:last-child { font-weight: 500; color: #202124; }
+#fare-input-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #f8f9fa; border: 1.5px solid rgba(0,0,0,0.12);
+  border-radius: 14px; padding: 12px 16px; margin-bottom: 16px;
+}
+#fare-input-row:focus-within { border-color: #1a73e8; background: #fff; }
+#fare-currency { font-size: 1rem; font-weight: 700; color: #5f6368; }
+#fare-input {
+  flex: 1; border: none; background: none; font-size: 1.3rem;
+  font-weight: 700; color: #202124; outline: none; font-family: inherit;
+}
+#fare-input::placeholder { color: #dadce0; font-weight: 400; font-size: 1rem; }
+#fare-btns { display: flex; gap: 10px; }
+#fare-skip {
+  flex: 1; background: #f1f3f4; border: none; color: #5f6368;
+  border-radius: 12px; padding: 13px; font-size: 0.9rem;
+  font-family: inherit; cursor: pointer; font-weight: 500;
+}
+#fare-save {
+  flex: 2; background: #1a73e8; border: none; color: #fff;
+  border-radius: 12px; padding: 13px; font-size: 0.95rem;
+  font-family: inherit; cursor: pointer; font-weight: 600;
+}
+#fare-save:active { opacity: 0.85; }
+
+.day-summary {
+  display: flex; gap: 12px; align-items: center;
+  padding: 10px 18px; background: #f8f9fa;
+  font-size: 0.82rem; color: #5f6368; font-weight: 500;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.day-fare { color: #1a73e8; font-weight: 700; margin-left: auto; }
+.trip-dur { color: #5f6368; font-size: 0.82rem; }
+.trip-fare-tag { color: #1a73e8; font-weight: 600; }
+
 /* ===== 回放面板 ===== */
 #replay-panel {
   position: fixed; bottom: -160px; left: 0; right: 0;
