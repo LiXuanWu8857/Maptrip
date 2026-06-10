@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'maptrip_v1';
+const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
+const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
 const GPS_RECORD_MS  = 3000;
 const MOVING_SPEED_MS   = 4;   // >4 m/s (~15 km/h) = 行駛中
@@ -10,7 +11,7 @@ let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 
-const TEST_MODE = new URLSearchParams(location.search).has('test');
+const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
 
 const TILE_LAYERS = {
@@ -49,9 +50,21 @@ function startGpsWatch() {
 
 // ===== 測試模式：模擬 GPS（網址加 ?test=1 啟用）=====
 // 流程：靜止 5 秒 → 行駛 25 秒（約 12 m/s）→ 停車（觸發到站偵測）
+// 起點優先使用裝置真實位置，抓不到才退回台北 101
 function startSimulation() {
   toast('🧪 測試模式：模擬 GPS 已啟用');
-  const base = { lat: 25.0330, lng: 121.5654 };
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      p => runSimulation({ lat: p.coords.latitude, lng: p.coords.longitude }),
+      ()  => runSimulation({ lat: 25.0330, lng: 121.5654 }),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  } else {
+    runSimulation({ lat: 25.0330, lng: 121.5654 });
+  }
+}
+
+function runSimulation(base) {
   simTick = 0;
   clearInterval(simTimer);
   simTimer = setInterval(() => {
@@ -74,7 +87,10 @@ function startSimulation() {
 }
 
 function restartSimulation() {
-  if (TEST_MODE) { simTick = 0; }
+  if (!TEST_MODE) return;
+  clearInterval(simTimer);
+  const base = currentPos || { lat: 25.0330, lng: 121.5654 };
+  runSimulation(base);
 }
 
 function onGpsUpdate(pos) {
