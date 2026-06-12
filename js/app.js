@@ -126,15 +126,18 @@ function onGpsUpdate(pos) {
 }
 
 function checkArrival(speed) {
-  if (speed === null || speed === undefined) return;
+  // speed 可能是 null（某些裝置不提供），直接忽略
+  if (speed == null || isNaN(speed) || speed < 0) return;
   if (speed > MOVING_SPEED_MS) {
     wasMoving = true;
     arrivalBannerShown = false;
     clearTimeout(stoppedTimer);
+    stoppedTimer = null;
     hideArrivalBanner();
   } else if (speed < STOPPED_SPEED_MS && wasMoving && !arrivalBannerShown) {
-    clearTimeout(stoppedTimer);
+    if (stoppedTimer) return; // 已在倒數中，不重複設定
     stoppedTimer = setTimeout(() => {
+      stoppedTimer = null;
       if (activeTrip && !arrivalBannerShown) {
         arrivalBannerShown = true;
         showArrivalBanner();
@@ -192,8 +195,8 @@ function beginRecording() {
 
 function endTrip() {
   if (!activeTrip) return;
-  clearInterval(timerTick);
-  clearTimeout(stoppedTimer);
+  clearInterval(timerTick);  timerTick = null;
+  clearTimeout(stoppedTimer); stoppedTimer = null;
   hideArrivalBanner();
 
   const trip = {
@@ -481,8 +484,8 @@ function todayKey() { return new Date().toISOString().slice(0, 10); }
 
 function saveTodayToStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  raw[todayKey()] = todayTrips.map(({ id, startTime, endTime, coords, totalDist }) =>
-    ({ id, startTime, endTime, coords, totalDist }));
+  raw[todayKey()] = todayTrips.map(({ id, startTime, endTime, coords, totalDist, fare }) =>
+    ({ id, startTime, endTime, coords, totalDist, fare: fare || 0 }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
 }
 
