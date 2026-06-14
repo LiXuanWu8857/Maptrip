@@ -220,12 +220,26 @@ async function beginRecording() {
   toast('行程開始！');
 
   // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
+  await requestWakeLock();
+}
+
+// 取得螢幕常亮鎖
+async function requestWakeLock() {
   try {
     if ('wakeLock' in navigator) {
       wakeLock = await navigator.wakeLock.request('screen');
+      // 系統在熄屏/切 App 時會自動釋放，記錄下來以便回前景時重取
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
     }
-  } catch (_) { /* 不支援時靜默略過 */ }
+  } catch (_) { /* 不支援或被拒時靜默略過 */ }
 }
+
+// 回到前景時自動重新鎖定螢幕常亮（系統會在熄屏/切 App 時釋放鎖）
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && activeTrip && wakeLock === null) {
+    requestWakeLock();
+  }
+});
 
 function endTrip() {
   if (!activeTrip) return;
