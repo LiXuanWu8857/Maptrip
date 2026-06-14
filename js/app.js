@@ -11,6 +11,7 @@ let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
+let activeSnapPending = false;
 
 const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
@@ -131,6 +132,12 @@ function onGpsUpdate(pos) {
     const last = activeTrip.coords.at(-1);
     if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
       activeTrip.coords.push({ lat, lng, t: Date.now() });
+      // 每累積 10 個存儲點（約 30 秒）即時貼合一次道路
+      const n = activeTrip.coords.length;
+      if (n >= 4 && n % 10 === 0 && !activeSnapPending) {
+        activeSnapPending = true;
+        snapLiveRoute();
+      }
     }
     checkArrival(speed);
   }
@@ -200,6 +207,7 @@ async function beginRecording() {
   restartSimulation();
   wasMoving = false;
   arrivalBannerShown = false;
+  activeSnapPending = false;
   setAutoFollow(true);
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
   activePolyline = L.polyline([[currentPos.lat, currentPos.lng]],
@@ -312,6 +320,19 @@ async function snapToRoads(coords) {
     }
   } catch (_) {}
   return null;
+}
+
+// 即時路線貼合：行程進行中定期更新地圖折線為道路路徑
+async function snapLiveRoute() {
+  if (!activeTrip) { activeSnapPending = false; return; }
+  const snapshot = activeTrip.coords.slice(); // 快照避免競態
+  const snapped = await snapToRoads(snapshot);
+  activeSnapPending = false;
+  if (!snapped || !activePolyline || !activeTrip) return;
+  // 重建折線：貼合段 + 貼合後新增的原始 GPS 尾段
+  const latlngs = snapped.map(c => [c.lat, c.lng]);
+  activeTrip.coords.slice(snapshot.length).forEach(c => latlngs.push([c.lat, c.lng]));
+  activePolyline.setLatLngs(latlngs);
 }
 
 function drawTripLine(trip, idx) {
