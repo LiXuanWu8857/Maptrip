@@ -1,7 +1,8 @@
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
-const GPS_RECORD_MS  = 3000;
+const GPS_RECORD_MS  = 1000;   // 每秒存一點，路線更細緻
+const LIVE_SNAP_PTS  = 30;     // 每累積 30 點（約 30 秒）即時貼合一次道路
 const MOVING_SPEED_MS   = 4;   // >4 m/s (~15 km/h) = 行駛中
 const STOPPED_SPEED_MS  = 1;   // <1 m/s (~3.6 km/h) = 停車
 const ARRIVAL_DELAY_MS  = 8000; // 停車滿 8 秒才提示
@@ -52,7 +53,7 @@ function startGpsWatch() {
   if (TEST_MODE) { startSimulation(); return; }
   if (!navigator.geolocation) { setGpsBadge('err', '⚠ 不支援定位'); return; }
   navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
-    { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 });
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 });
 }
 
 // ===== 測試模式：模擬 GPS（網址加 ?test=1 啟用）=====
@@ -132,9 +133,9 @@ function onGpsUpdate(pos) {
     const last = activeTrip.coords.at(-1);
     if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
       activeTrip.coords.push({ lat, lng, t: Date.now() });
-      // 每累積 10 個存儲點（約 30 秒）即時貼合一次道路
+      // 定期把累積軌跡貼合到道路上（即時更新折線）
       const n = activeTrip.coords.length;
-      if (n >= 4 && n % 10 === 0 && !activeSnapPending) {
+      if (n >= 4 && n % LIVE_SNAP_PTS === 0 && !activeSnapPending) {
         activeSnapPending = true;
         snapLiveRoute();
       }
