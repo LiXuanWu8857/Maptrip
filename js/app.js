@@ -253,10 +253,17 @@ function showFareDialog(trip) {
   document.getElementById('fare-dialog').classList.add('show');
   setTimeout(() => document.getElementById('fare-input').focus(), 300);
 
-  const save = (fare) => {
+  const save = async (fare) => {
     trip.fare = fare;
+    const saveBtn = document.getElementById('fare-save');
+    const skipBtn = document.getElementById('fare-skip');
+    saveBtn.textContent = '路線貼合中…'; saveBtn.disabled = true; skipBtn.disabled = true;
+
+    trip.roadCoords = await snapToRoads(trip.coords);
+
     document.getElementById('fare-overlay').style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
+    saveBtn.textContent = '儲存行程'; saveBtn.disabled = false; skipBtn.disabled = false;
     saveTripFinal(trip);
   };
 
@@ -270,11 +277,46 @@ function saveTripFinal(trip) {
   todayTrips.push(trip);
   saveTodayToStorage(); updateTopBar();
   const fareStr = trip.fare ? `　NT$ ${trip.fare}` : '';
-  toast(`✓ 第 ${todayTrips.length} 趟　${fmtDur(trip.endTime - trip.startTime)}　${fmtDist(trip.totalDist)}${fareStr}`);
+  const roadTag = trip.roadCoords ? '' : '（直線）';
+  toast(`✓ 第 ${todayTrips.length} 趟　${fmtDur(trip.endTime - trip.startTime)}　${fmtDist(trip.totalDist)}${fareStr}${roadTag}`);
+}
+
+// OSRM Map Matching：將 GPS 座標貼合到道路上
+async function snapToRoads(coords) {
+  if (coords.length < 2) return null;
+
+  // OSRM 公開服務最多 100 點，超過則均勻取樣
+  const MAX_PTS = 100;
+  let pts = coords;
+  if (pts.length > MAX_PTS) {
+    const step = Math.floor(pts.length / (MAX_PTS - 1));
+    pts = coords.filter((_, i) => i % step === 0);
+    if (pts[pts.length - 1] !== coords[coords.length - 1])
+      pts.push(coords[coords.length - 1]);
+  }
+
+  const coordStr = pts.map(c => `${c.lng},${c.lat}`).join(';');
+  const radii    = pts.map(() => '30').join(';');
+  const ts       = pts.map(c => Math.floor(c.t / 1000)).join(';');
+  const url = `https://router.project-osrm.org/match/v1/driving/${coordStr}` +
+    `?radiuses=${radii}&timestamps=${ts}&geometries=geojson&overview=full&annotations=false`;
+
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.code === 'Ok' && data.matchings?.length) {
+      return data.matchings.flatMap(m =>
+        m.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
+      );
+    }
+  } catch (_) {}
+  return null;
 }
 
 function drawTripLine(trip, idx) {
-  const latlngs = trip.coords.map(c => [c.lat, c.lng]);
+  // 優先用道路貼合座標，否則退回 GPS 直線
+  const latlngs = (trip.roadCoords || trip.coords).map(c => [c.lat, c.lng]);
   const line = L.polyline(latlngs, { color: '#1A73E8', weight: 5, opacity: 0.85 }).addTo(map);
   line.on('click', () =>
     toast(`行程 ${idx}｜${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`));
@@ -511,8 +553,8 @@ function todayKey() { return new Date().toISOString().slice(0, 10); }
 
 function saveTodayToStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  raw[todayKey()] = todayTrips.map(({ id, startTime, endTime, coords, totalDist, fare }) =>
-    ({ id, startTime, endTime, coords, totalDist, fare: fare || 0 }));
+  raw[todayKey()] = todayTrips.map(({ id, startTime, endTime, coords, totalDist, fare, roadCoords }) =>
+    ({ id, startTime, endTime, coords, totalDist, fare: fare || 0, ...(roadCoords ? { roadCoords } : {}) }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
 }
 
