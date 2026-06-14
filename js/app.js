@@ -10,7 +10,7 @@ let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
-let autoFollow = false;
+let autoFollow = false, wakeLock = null;
 
 const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
@@ -124,10 +124,13 @@ function onGpsUpdate(pos) {
   if (autoFollow) map.panTo([lat, lng], { animate: true, duration: 0.5 });
 
   if (activeTrip) {
+    // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）
+    activePolyline.addLatLng([lat, lng]);
+
+    // 每 GPS_RECORD_MS 才存一個座標點（節省儲存空間）
     const last = activeTrip.coords.at(-1);
     if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
       activeTrip.coords.push({ lat, lng, t: Date.now() });
-      refreshActivePolyline();
     }
     checkArrival(speed);
   }
@@ -193,7 +196,7 @@ function setAutoFollow(on) {
   if (btn) btn.classList.toggle('follow-active', on);
 }
 
-function beginRecording() {
+async function beginRecording() {
   restartSimulation();
   wasMoving = false;
   arrivalBannerShown = false;
@@ -206,6 +209,13 @@ function beginRecording() {
   timerTick = setInterval(refreshRecBanner, 1000);
   map.panTo([currentPos.lat, currentPos.lng]);
   toast('行程開始！');
+
+  // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (_) { /* 不支援時靜默略過 */ }
 }
 
 function endTrip() {
@@ -225,6 +235,9 @@ function endTrip() {
   setAutoFollow(false);
   document.getElementById('start-btn').disabled = false;
   document.getElementById('rec-banner').style.display = 'none';
+
+  // 釋放螢幕常亮鎖
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 
   showFareDialog(trip);
 }
@@ -287,10 +300,7 @@ function makeDotIcon(color) {
   });
 }
 
-function refreshActivePolyline() {
-  if (!activePolyline || !activeTrip) return;
-  activePolyline.setLatLngs(activeTrip.coords.map(c => [c.lat, c.lng]));
-}
+
 
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
