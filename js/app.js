@@ -16,6 +16,12 @@ let activeSnapPending = false;
 
 const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
+let nativeWatcherId = null;
+
+// 是否跑在 Capacitor 原生殼裡（iOS App）
+function isNative() {
+  return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+}
 
 const TILE_LAYERS = {
   road: L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
@@ -51,9 +57,35 @@ function initMap() {
 
 function startGpsWatch() {
   if (TEST_MODE) { startSimulation(); return; }
+  if (isNative()) { startNativeGpsWatch(); return; }
   if (!navigator.geolocation) { setGpsBadge('err', '⚠ 不支援定位'); return; }
   navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
     { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 });
+}
+
+// 原生 iOS：用背景定位外掛，鎖屏 / 切到 55688 時仍持續記錄
+function startNativeGpsWatch() {
+  const BG = window.Capacitor.Plugins.BackgroundGeolocation;
+  if (!BG) { setGpsBadge('err', '⚠ 背景定位未安裝'); return; }
+  BG.addWatcher({
+    backgroundTitle: 'Maptrip 行程記錄中',
+    backgroundMessage: '正在背景記錄你的路線',
+    requestPermissions: true,
+    stale: false,
+    distanceFilter: 5   // 移動滿 5 公尺才回報，省電
+  }, (location, error) => {
+    if (error) {
+      if (error.code === 'NOT_AUTHORIZED') setGpsBadge('err', '⚠ 定位權限被拒');
+      return;
+    }
+    onGpsUpdate({ coords: {
+      latitude:  location.latitude,
+      longitude: location.longitude,
+      accuracy:  location.accuracy,
+      speed:     location.speed
+    }});
+  }).then(id => { nativeWatcherId = id; })
+    .catch(() => setGpsBadge('err', '⚠ 背景定位啟動失敗'));
 }
 
 // ===== 測試模式：模擬 GPS（網址加 ?test=1 啟用）=====

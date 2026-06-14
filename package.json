@@ -1,0 +1,18 @@
+{
+  "name": "maptrip",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Maptrip 行程紀錄 — iOS 原生殼（Capacitor），網頁內容遠端載入 GitHub Pages",
+  "scripts": {
+    "ios": "cap open ios",
+    "sync": "cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/ios": "^6.1.2",
+    "@capacitor-community/background-geolocation": "^1.2.20"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}
