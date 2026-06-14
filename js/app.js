@@ -10,6 +10,7 @@ let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
+let autoFollow = false;
 
 const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
@@ -33,6 +34,11 @@ function initMap() {
     TILE_LAYERS[currentTile].addTo(map);
     document.getElementById('tile-toggle').textContent =
       currentTile === 'road' ? '🛰 衛星' : '🗺 地圖';
+  });
+
+  // 使用者手動拖地圖時，暫停自動跟隨
+  map.on('dragstart', () => {
+    if (autoFollow) setAutoFollow(false);
   });
 
   loadTodayFromStorage();
@@ -115,6 +121,8 @@ function onGpsUpdate(pos) {
     accuracyCircle.setLatLng([lat, lng]).setRadius(acc);
   }
 
+  if (autoFollow) map.panTo([lat, lng], { animate: true, duration: 0.5 });
+
   if (activeTrip) {
     const last = activeTrip.coords.at(-1);
     if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
@@ -179,10 +187,17 @@ function startTrip() {
   beginRecording();
 }
 
+function setAutoFollow(on) {
+  autoFollow = on;
+  const btn = document.getElementById('locate-btn');
+  if (btn) btn.classList.toggle('follow-active', on);
+}
+
 function beginRecording() {
   restartSimulation();
   wasMoving = false;
   arrivalBannerShown = false;
+  setAutoFollow(true);
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
   activePolyline = L.polyline([[currentPos.lat, currentPos.lng]],
     { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
@@ -207,6 +222,7 @@ function endTrip() {
   if (activePolyline) { map.removeLayer(activePolyline); activePolyline = null; }
   activeTrip = null;
   wasMoving = false; arrivalBannerShown = false;
+  setAutoFollow(false);
   document.getElementById('start-btn').disabled = false;
   document.getElementById('rec-banner').style.display = 'none';
 
@@ -278,6 +294,7 @@ function refreshActivePolyline() {
 
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
+  setAutoFollow(true);
   map.setView([currentPos.lat, currentPos.lng], 16);
 }
 

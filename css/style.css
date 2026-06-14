@@ -156,6 +156,8 @@ html, body {
   border: 1.5px solid rgba(26,115,232,0.35);
 }
 #start-btn:disabled { opacity: 0.35; pointer-events: none; }
+#locate-btn.follow-active .ctrl-icon { color: #1a73e8; }
+#locate-btn.follow-active .ctrl-label { color: #1a73e8; }
 
 .ctrl-icon { font-size: 1.3rem; }
 .ctrl-label { font-size: 0.7rem; color: #5f6368; }
