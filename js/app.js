@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.13';
+const APP_VERSION  = '1.1.14';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -438,7 +438,8 @@ async function snapLiveRoute() {
   activePolyline.setLatLngs(latlngs);
 }
 
-function drawGapLine(from, to) {
+// 兩趟之間的連接曲線座標（二次 Bezier，向外彎一點）
+function bezierGapPoints(from, to) {
   const lat0 = from.lat, lng0 = from.lng;
   const lat2 = to.lat,   lng2 = to.lng;
   const dLat = lat2 - lat0, dLng = lng2 - lng0;
@@ -450,7 +451,12 @@ function drawGapLine(from, to) {
     pts.push([u*u*lat0 + 2*u*t*midLat + t*t*lat2,
               u*u*lng0 + 2*u*t*midLng + t*t*lng2]);
   }
-  return L.polyline(pts, { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5' }).addTo(map);
+  return pts;
+}
+
+function drawGapLine(from, to) {
+  return L.polyline(bezierGapPoints(from, to),
+    { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5' }).addTo(map);
 }
 
 function drawTripLine(trip, idx) {
@@ -681,22 +687,15 @@ function stepReplay() {
   if (!trip) { finishReplay(); return; }
 
   if (replayCoordIdx >= replayCoords.length) {
+    const prevEnd = replayCoords[replayCoords.length - 1];
     replayTripIdx++;
     replayCoordIdx = 0;
     clearInterval(replayInterval);
     if (replayTripIdx >= todayTrips.length) { finishReplay(); return; }
     replayCoords = replayCoordsForTrip(todayTrips[replayTripIdx]);
     updateReplayPanel();
-    const c = replayCoords[0];
-    // 切換行程時暫停 transition，避免跨城市移動動畫
-    const el = replayDot.getElement();
-    if (el) el.style.transition = 'none';
-    replayDot.setLatLng([c.lat, c.lng]);
-    map.panTo([c.lat, c.lng]);
-    setTimeout(() => {
-      if (el) el.style.transition = '';
-      scheduleStep();
-    }, 700);
+    // 沿著紅色連接線快速滑到下一趟起點，再繼續正常回放
+    animateGapAlongRed(prevEnd, replayCoords[0], scheduleStep);
     return;
   }
 
@@ -704,6 +703,25 @@ function stepReplay() {
   replayDot.setLatLng([c.lat, c.lng]);
   map.panTo([c.lat, c.lng]);
   replayCoordIdx++;
+}
+
+// 趟與趟之間：沿紅色 Bezier 連接線快速移動，固定速度與回放倍率無關
+function animateGapAlongRed(from, to, onDone) {
+  const pts = bezierGapPoints(from, to);
+  const el = replayDot.getElement();
+  if (el) el.style.transition = ''; // 保留平滑過場
+  let gi = 0;
+  replayInterval = setInterval(() => {
+    if (replayPaused) return;
+    if (gi >= pts.length) {
+      clearInterval(replayInterval);
+      onDone();
+      return;
+    }
+    replayDot.setLatLng(pts[gi]);
+    map.panTo(pts[gi]);
+    gi++;
+  }, 35);
 }
 
 function toggleReplayPause() {
