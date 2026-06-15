@@ -10,7 +10,8 @@
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="css/style.css">
+<!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
+<script>document.write('<link rel="stylesheet" href="css/style.css?t=' + Date.now() + '">');</script>
 </head>
 <body>
 
@@ -165,6 +166,7 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="js/app.js"></script>
+<!-- 同上：強制取得最新 app.js -->
+<script>document.write('<script src="js/app.js?t=' + Date.now() + '"><\/script>');</script>
 </body>
 </html>

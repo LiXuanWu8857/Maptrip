@@ -165,22 +165,15 @@ html, body {
 #arrive-btn:active { opacity: 0.8; }
 
 #bottom-bar {
-  position: fixed;
-  bottom: env(safe-area-inset-bottom, 0px);
-  left: 0; right: 0; height: 80px;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(72px + env(safe-area-inset-bottom, 0px));
   background: rgba(255,255,255,0.95); backdrop-filter: blur(16px);
   border-top: 1px solid rgba(0,0,0,0.08);
   display: flex; align-items: center; justify-content: space-around;
-  padding: 0 12px; z-index: 20;
-  box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
-}
-#bottom-bar::after {
-  content: '';
-  position: fixed; bottom: 0; left: 0; right: 0;
-  height: env(safe-area-inset-bottom, 0px);
-  background: rgba(255,255,255,0.95);
-  backdrop-filter: blur(16px);
+  padding: 0 12px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 20;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
 
 .ctrl-btn {
@@ -496,8 +489,7 @@ html, body {
   #top-tripcount { color: #6ab4ff; background: rgba(106,180,255,0.15); }
   .icon-btn { background: rgba(255,255,255,0.1); color: #e8eaed; }
 
-  #bottom-bar, #bottom-bar::after { background: rgba(24,24,24,0.96); }
-  #bottom-bar { border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -2px 12px rgba(0,0,0,0.3); }
+  #bottom-bar { background: rgba(24,24,24,0.96); border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -2px 12px rgba(0,0,0,0.3); }
   .ctrl-btn { color: #e8eaed; }
   .ctrl-label { color: #9aa0a6; }
   #start-btn { background: rgba(106,180,255,0.12); border-color: rgba(106,180,255,0.3); }
