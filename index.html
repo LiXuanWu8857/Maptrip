@@ -158,6 +158,13 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Update Bar -->
+<div id="update-bar">
+  <span>🆕 有新版本 <span id="update-ver"></span>，重新載入以更新</span>
+  <button onclick="location.reload(true)">更新</button>
+  <button onclick="this.closest('#update-bar').classList.remove('show')">✕</button>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/app.js"></script>
 </body>

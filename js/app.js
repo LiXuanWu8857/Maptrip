@@ -1,3 +1,4 @@
+const APP_VERSION  = '1.0.5';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -718,4 +719,26 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2400);
 }
 
-window.addEventListener('load', initMap);
+// ===== 版本更新偵測 =====
+async function checkForUpdate() {
+  try {
+    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const { version } = await res.json();
+    if (version && version !== APP_VERSION) {
+      showUpdateToast(version);
+    }
+  } catch (_) {}
+}
+
+function showUpdateToast(newVer) {
+  const el = document.getElementById('update-bar');
+  if (!el) return;
+  el.querySelector('#update-ver').textContent = `v${newVer}`;
+  el.classList.add('show');
+}
+
+window.addEventListener('load', () => {
+  initMap();
+  setTimeout(checkForUpdate, 3000); // 啟動 3 秒後靜默偵測
+});
