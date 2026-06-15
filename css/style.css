@@ -225,7 +225,7 @@ html, body {
   font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer;
 }
 .sheet-close { background: none; border: none; color: #9aa0a6; font-size: 1.1rem; cursor: pointer; padding: 4px 8px; }
-#sheet-body, #history-body { overflow-y: auto; flex: 1; }
+#sheet-body, #history-body { overflow-y: auto; flex: 1; padding-bottom: 12px; }
 .sheet-footer { padding: 10px 18px 14px; border-top: 1px solid rgba(0,0,0,0.06); flex-shrink: 0; }
 
 .danger-btn {

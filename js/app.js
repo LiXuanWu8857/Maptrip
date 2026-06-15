@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.0.6';
+const APP_VERSION  = '1.0.7';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -545,7 +545,7 @@ function closeHistory() { document.getElementById('history-sheet').style.display
 function renderHistorySheet() {
   const body = document.getElementById('history-body');
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  const days = Object.keys(raw).sort().reverse();
+  const days = Object.keys(raw).sort().reverse().filter(d => raw[d]?.length > 0);
   if (!days.length) { body.innerHTML = '<div class="empty-state">尚無歷史紀錄</div>'; return; }
   body.innerHTML = days.map(day => {
     const trips = raw[day];
