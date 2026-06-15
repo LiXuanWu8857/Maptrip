@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.0.5';
+const APP_VERSION  = '1.0.6';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -7,8 +7,8 @@ const LIVE_SNAP_PTS  = 30;     // 每累積 30 點（約 30 秒）即時貼合�
 const MOVING_SPEED_MS      = 4;     // >4 m/s (~15 km/h) = 行駛中
 const STOPPED_SPEED_MS     = 1;     // <1 m/s (~3.6 km/h) = 停車
 const ARRIVAL_DELAY_MS     = 8000;  // 停車滿 8 秒才提示
-const AUTO_START_SPEED_MS  = 10 / 3.6; // >10 km/h 持續才問是否開始
-const AUTO_START_DELAY_MS  = 8000;  // 行駛滿 8 秒才跳提示
+const AUTO_START_SPEED_MS  = 5 / 3.6; // >5 km/h 持續才問是否開始
+const AUTO_START_DELAY_MS  = 4000;  // 行駛滿 4 秒才跳提示
 
 let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
