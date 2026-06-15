@@ -21,15 +21,14 @@ html, body {
 #top-bar {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 56px;
+  height: calc(56px + env(safe-area-inset-top, 0px));
   background: rgba(255,255,255,0.9);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  padding-top: env(safe-area-inset-top, 0);
+  padding: env(safe-area-inset-top, 0px) 16px 0;
   z-index: 20;
   border-bottom: 1px solid rgba(0,0,0,0.08);
 }
@@ -52,7 +51,7 @@ html, body {
 .icon-btn:active { opacity: 0.7; }
 
 #gps-badge {
-  position: fixed; top: 64px; right: 12px;
+  position: fixed; top: calc(64px + env(safe-area-inset-top, 0px)); right: 12px;
   font-size: 0.7rem; padding: 4px 10px; border-radius: 20px;
   z-index: 15; backdrop-filter: blur(8px); pointer-events: none; transition: all 0.3s;
 }
@@ -73,7 +72,7 @@ html, body {
   z-index: 25;
   transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-#autostart-banner.show { top: 64px; }
+#autostart-banner.show { top: calc(64px + env(safe-area-inset-top, 0px)); }
 #autostart-info {
   display: flex; align-items: center; gap: 8px;
   font-size: 0.88rem; font-weight: 500; color: #202124;
@@ -104,7 +103,7 @@ html, body {
   z-index: 25;
   transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-#arrival-banner.show { top: 64px; }
+#arrival-banner.show { top: calc(64px + env(safe-area-inset-top, 0px)); }
 #arrival-info {
   display: flex; align-items: center; gap: 8px;
   font-size: 0.88rem; font-weight: 500; color: #202124;
@@ -125,7 +124,7 @@ html, body {
 #arrival-confirm:active { opacity: 0.85; }
 
 #tile-toggle {
-  position: fixed; top: 64px; left: 12px;
+  position: fixed; top: calc(64px + env(safe-area-inset-top, 0px)); left: 12px;
   background: rgba(255,255,255,0.9); backdrop-filter: blur(8px);
   border: 1px solid rgba(0,0,0,0.12); color: #202124;
   border-radius: 20px; padding: 4px 12px; font-size: 0.72rem;
@@ -135,7 +134,7 @@ html, body {
 #tile-toggle:active { opacity: 0.7; }
 
 #rec-banner {
-  position: fixed; bottom: 88px; left: 12px; right: 12px;
+  position: fixed; bottom: calc(88px + env(safe-area-inset-bottom, 0px)); left: 12px; right: 12px;
   background: #1a73e8; backdrop-filter: blur(12px);
   border-radius: 16px;
   padding: 12px 16px; display: flex; align-items: center; gap: 10px;
@@ -166,11 +165,12 @@ html, body {
 #arrive-btn:active { opacity: 0.8; }
 
 #bottom-bar {
-  position: fixed; bottom: 0; left: 0; right: 0; height: 80px;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(80px + env(safe-area-inset-bottom, 0px));
   background: rgba(255,255,255,0.95); backdrop-filter: blur(16px);
   border-top: 1px solid rgba(0,0,0,0.08);
-  display: flex; align-items: center; justify-content: space-around;
-  padding: 0 12px; padding-bottom: env(safe-area-inset-bottom, 0); z-index: 20;
+  display: flex; align-items: flex-start; justify-content: space-around;
+  padding: 0 12px; padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 20;
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
 
@@ -278,7 +278,7 @@ html, body {
 }
 
 #update-bar {
-  position: fixed; bottom: 88px; left: 12px; right: 12px;
+  position: fixed; bottom: calc(88px + env(safe-area-inset-bottom, 0px)); left: 12px; right: 12px;
   background: #202124; color: #fff; border-radius: 14px;
   padding: 12px 14px; display: flex; align-items: center; gap: 8px;
   font-size: 0.82rem; z-index: 20;
@@ -327,7 +327,7 @@ html, body {
 #gmaps-confirm:active { opacity: 0.85; }
 
 #map-error {
-  position: fixed; top: 64px; left: 12px; right: 12px;
+  position: fixed; top: calc(64px + env(safe-area-inset-top, 0px)); left: 12px; right: 12px;
   background: rgba(234,67,53,0.08); border: 1px solid rgba(234,67,53,0.3);
   color: #c5221f; border-radius: 10px; padding: 10px 14px;
   font-size: 0.8rem; z-index: 20; text-align: center;
@@ -474,3 +474,63 @@ html, body {
   font-family: inherit; cursor: pointer;
 }
 #start-nav:active { opacity: 0.85; }
+
+/* ===== 深色模式 ===== */
+@media (prefers-color-scheme: dark) {
+  html, body { background: #121212; color: #e8eaed; }
+
+  /* 地圖磚片反色（只反底圖，不影響標記和折線） */
+  .leaflet-tile-pane { filter: invert(92%) hue-rotate(180deg) brightness(0.88) saturate(0.9); }
+
+  #top-bar { background: rgba(24,24,24,0.92); border-bottom-color: rgba(255,255,255,0.07); }
+  #top-date { color: #9aa0a6; }
+  #top-tripcount { color: #6ab4ff; background: rgba(106,180,255,0.15); }
+  .icon-btn { background: rgba(255,255,255,0.1); color: #e8eaed; }
+
+  #bottom-bar { background: rgba(24,24,24,0.96); border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -2px 12px rgba(0,0,0,0.3); }
+  .ctrl-btn { color: #e8eaed; }
+  .ctrl-label { color: #9aa0a6; }
+  #start-btn { background: rgba(106,180,255,0.12); border-color: rgba(106,180,255,0.3); }
+  #start-btn .ctrl-label { color: #6ab4ff; }
+
+  #gps-badge { backdrop-filter: blur(8px); }
+  .badge-off { background: rgba(30,30,30,0.85); color: #9aa0a6; border-color: rgba(255,255,255,0.1); }
+
+  #tile-toggle { background: rgba(30,30,30,0.9); border-color: rgba(255,255,255,0.12); color: #e8eaed; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+
+  #arrival-banner, #autostart-banner { background: #1e1e1e; border-color: rgba(255,255,255,0.1); box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
+  #arrival-info, #autostart-info { color: #e8eaed; }
+  #arrival-dismiss, #autostart-dismiss { background: #2a2a2a; color: #9aa0a6; }
+
+  #trip-sheet, #history-sheet { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -4px 24px rgba(0,0,0,0.4); }
+  .sheet-handle { background: rgba(255,255,255,0.12); }
+  .sheet-header { border-bottom-color: rgba(255,255,255,0.06); color: #e8eaed; }
+  .sheet-close { color: #9aa0a6; }
+  .trip-row { border-bottom-color: rgba(255,255,255,0.05); }
+  .trip-row:active { background: rgba(255,255,255,0.04); }
+  .trip-time { color: #e8eaed; }
+  .day-summary { background: #222; border-bottom-color: rgba(255,255,255,0.05); color: #9aa0a6; }
+  .history-day { color: #6ab4ff; }
+  .empty-state { color: #9aa0a6; }
+  .danger-btn { background: rgba(234,67,53,0.15); color: #f28b82; border-color: rgba(234,67,53,0.3); }
+
+  #fare-dialog { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); }
+  #fare-header { color: #e8eaed; border-bottom-color: rgba(255,255,255,0.06); }
+  .fare-label { color: #9aa0a6; }
+  .fare-row span:last-child { color: #e8eaed; }
+  #fare-input-row { background: #252525; border-color: rgba(255,255,255,0.12); }
+  #fare-input-row:focus-within { border-color: #6ab4ff; background: #1e1e1e; }
+  #fare-currency { color: #9aa0a6; }
+  #fare-input { color: #e8eaed; }
+  #fare-skip { background: #252525; color: #9aa0a6; }
+
+  #replay-panel { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); }
+  #replay-header { color: #e8eaed; }
+  #replay-trip-info { color: #9aa0a6; }
+  .speed-btn { background: #252525; color: #9aa0a6; }
+
+  #update-bar { background: #2a2a2a; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+  #update-bar button:first-of-type { background: #6ab4ff; }
+
+  #sheet-overlay { background: rgba(0,0,0,0.5); }
+}
