@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.18';
+const APP_VERSION  = '1.1.19';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -643,6 +643,8 @@ let replayDot = null, replayInterval = null;
 let replayTripIdx = 0, replayCoordIdx = 0;
 let replayPaused = false, replaySpeed = 5;
 let replayCoords = null; // 當前趟的回放座標（優先用 roadCoords）
+let replayStepMs = 40;   // 目前步進間隔（地圖平移與圓點過場共用）
+let replayPauseTimer = null; // 結束點停留 2 秒的計時器
 
 function openReplay() {
   if (!todayTrips.length) { toast('今日尚無行程可回放'); return; }
@@ -683,11 +685,16 @@ function setReplayTransition(ms) {
   if (el) el.style.setProperty('transition', `transform ${ms}ms linear`, 'important');
 }
 
+// 地圖平移時間與步進/過場一致，圓點才會穩穩停在畫面中心
+function panMap(latlng, ms) {
+  map.panTo(latlng, { animate: true, duration: Math.max(ms, 1) / 1000, easeLinearity: 1, noMoveStart: true });
+}
+
 function scheduleStep() {
   clearInterval(replayInterval);
-  const stepMs = Math.round(200 / replaySpeed);
-  setReplayTransition(stepMs);
-  replayInterval = setInterval(stepReplay, stepMs);
+  replayStepMs = Math.round(200 / replaySpeed);
+  setReplayTransition(replayStepMs);
+  replayInterval = setInterval(stepReplay, replayStepMs);
 }
 
 function stepReplay() {
@@ -703,21 +710,24 @@ function stepReplay() {
     if (replayTripIdx >= todayTrips.length) { finishReplay(); return; }
     replayCoords = replayCoordsForTrip(todayTrips[replayTripIdx]);
     updateReplayPanel();
-    // 沿著紅色連接線快速滑到下一趟起點，再繼續正常回放
-    animateGapAlongRed(prevEnd, replayCoords[0], scheduleStep);
+    // 在結束點停留 2 秒，再沿紅色連接線快速滑到下一趟起點
+    replayPauseTimer = setTimeout(() => {
+      animateGapAlongRed(prevEnd, replayCoords[0], scheduleStep);
+    }, 2000);
     return;
   }
 
   const c = replayCoords[replayCoordIdx];
   replayDot.setLatLng([c.lat, c.lng]);
-  map.panTo([c.lat, c.lng]);
+  panMap([c.lat, c.lng], replayStepMs);
   replayCoordIdx++;
 }
 
 // 趟與趟之間：沿紅色 Bezier 連接線快速移動，固定速度與回放倍率無關
 function animateGapAlongRed(from, to, onDone) {
   const pts = bezierGapPoints(from, to);
-  setReplayTransition(35); // 過場時間對齊步進，緊貼紅線
+  const GAP_MS = 18; // 比一般步進更快，整段約 0.6 秒
+  setReplayTransition(GAP_MS);
   let gi = 0;
   replayInterval = setInterval(() => {
     if (replayPaused) return;
@@ -727,9 +737,9 @@ function animateGapAlongRed(from, to, onDone) {
       return;
     }
     replayDot.setLatLng(pts[gi]);
-    map.panTo(pts[gi]);
+    panMap(pts[gi], GAP_MS);
     gi++;
-  }, 35);
+  }, GAP_MS);
 }
 
 function toggleReplayPause() {
@@ -746,6 +756,7 @@ function setReplaySpeed(s, btn) {
 
 function stopReplay() {
   clearInterval(replayInterval); replayInterval = null;
+  clearTimeout(replayPauseTimer); replayPauseTimer = null;
   if (replayDot) { map.removeLayer(replayDot); replayDot = null; }
 }
 
