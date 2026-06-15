@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.0.9';
+const APP_VERSION  = '1.1.0';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -720,25 +720,21 @@ function toast(msg) {
 }
 
 // ===== 版本更新偵測 =====
-async function checkForUpdate() {
-  try {
-    const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return;
-    const { version } = await res.json();
-    if (version && version !== APP_VERSION) {
-      showUpdateToast(version);
+// App 從 GitHub Pages 遠端載入，啟動時比對上次記錄的版號
+// 若有新版（代表 WKWebView 快取更新了），顯示「已更新」提示
+function checkForUpdate() {
+  const lastSeen = localStorage.getItem('maptrip_version');
+  if (lastSeen && lastSeen !== APP_VERSION) {
+    const el = document.getElementById('update-bar');
+    if (el) {
+      el.querySelector('#update-ver').textContent = `v${APP_VERSION}`;
+      el.classList.add('show');
     }
-  } catch (_) {}
-}
-
-function showUpdateToast(newVer) {
-  const el = document.getElementById('update-bar');
-  if (!el) return;
-  el.querySelector('#update-ver').textContent = `v${newVer}`;
-  el.classList.add('show');
+  }
+  localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
 window.addEventListener('load', () => {
   initMap();
-  setTimeout(checkForUpdate, 3000); // 啟動 3 秒後靜默偵測
+  setTimeout(checkForUpdate, 2000);
 });
