@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.8';
+const APP_VERSION  = '1.1.9';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -507,10 +507,52 @@ function renderTripSheet() {
       <div class="trip-num">${i + 1}</div>
       <div class="trip-meta">
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-        <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}</div>
+        <div class="trip-stats">
+          ${fmtDist(t.totalDist)}
+          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}
+          <button class="fare-edit-btn" onclick="editFare(event,${i})">${t.fare ? '✏' : '＋金額'}</button>
+        </div>
       </div>
       <span class="trip-del" onclick="deleteTodayTrip(event,${i})">🗑</span>
     </div>`).join('');
+}
+
+function editFare(e, idx) {
+  e.stopPropagation();
+  const trip = todayTrips[idx];
+
+  document.getElementById('fs-start').textContent = fmtTime(trip.startTime);
+  document.getElementById('fs-end').textContent   = fmtTime(trip.endTime);
+  document.getElementById('fs-dur').textContent   = fmtDur(trip.endTime - trip.startTime);
+  document.getElementById('fs-dist').textContent  = fmtDist(trip.totalDist);
+  document.getElementById('fare-header').textContent = `第 ${idx + 1} 趟 — 編輯金額`;
+
+  const input   = document.getElementById('fare-input');
+  const saveBtn = document.getElementById('fare-save');
+  const skipBtn = document.getElementById('fare-skip');
+  input.value = trip.fare || '';
+  saveBtn.textContent = '儲存'; saveBtn.disabled = false;
+  skipBtn.textContent = '取消'; skipBtn.disabled = false;
+
+  document.getElementById('fare-overlay').style.display = 'block';
+  document.getElementById('fare-dialog').classList.add('show');
+  setTimeout(() => input.focus(), 300);
+
+  const close = () => {
+    document.getElementById('fare-overlay').style.display = 'none';
+    document.getElementById('fare-dialog').classList.remove('show');
+    document.getElementById('fare-header').textContent = '行程完成';
+    saveBtn.textContent = '儲存行程';
+    skipBtn.textContent = '略過';
+  };
+
+  saveBtn.onclick = () => {
+    trip.fare = parseInt(input.value) || 0;
+    close();
+    saveTodayToStorage();
+    renderTripSheet();
+  };
+  skipBtn.onclick = close;
 }
 
 function focusTrip(idx) {

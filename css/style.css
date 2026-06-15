@@ -410,6 +410,12 @@ html, body {
 .day-fare { color: #1a73e8; font-weight: 700; margin-left: auto; }
 .trip-dur { color: #5f6368; font-size: 0.82rem; }
 .trip-fare-tag { color: #1a73e8; font-weight: 600; }
+.fare-edit-btn {
+  background: none; border: none;
+  color: #1a73e8; font-size: 0.78rem;
+  cursor: pointer; padding: 0 4px;
+  font-family: inherit; vertical-align: middle;
+}
 
 /* ===== 回放面板 ===== */
 #replay-panel {
