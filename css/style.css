@@ -6,7 +6,7 @@
 
 html, body {
   height: 100%; width: 100%;
-  font-family: -apple-system, 'Noto Sans TC', sans-serif;
+  font-family: 'PingFang TC', 'Noto Sans TC', -apple-system, 'Helvetica Neue', sans-serif;
   overflow: hidden;
   background: #ffffff;
   color: #202124;
