@@ -44,6 +44,7 @@ html, body {
 }
 
 #top-left { display: flex; align-items: center; gap: 12px; }
+#top-actions { display: flex; align-items: center; gap: 8px; }
 
 #top-date { font-size: 0.88rem; font-weight: 500; color: #5f6368; }
 
@@ -437,15 +438,27 @@ html, body {
   background: none; border: none; color: #9aa0a6; font-size: 1.1rem; cursor: pointer;
 }
 #replay-trip-info { font-size: 0.8rem; color: #5f6368; margin-bottom: 14px; }
-#replay-controls { display: flex; align-items: center; justify-content: space-between; }
-#replay-speed-btns { display: flex; gap: 6px; }
-.speed-btn {
-  background: #f1f3f4; border: none; color: #5f6368;
-  border-radius: 8px; padding: 7px 14px; font-size: 0.82rem;
-  font-family: inherit; cursor: pointer; font-weight: 500;
+#replay-controls { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+#replay-speed { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.speed-end { font-size: 0.7rem; color: #9aa0a6; flex-shrink: 0; }
+#speed-value {
+  font-size: 0.85rem; font-weight: 700; color: #1a73e8;
+  min-width: 34px; text-align: right; flex-shrink: 0;
 }
-.speed-btn.active { background: #1a73e8; color: #fff; }
-#replay-action-btns { display: flex; gap: 10px; }
+#speed-slider {
+  flex: 1; min-width: 0; height: 28px; -webkit-appearance: none; appearance: none;
+  background: transparent; cursor: pointer;
+}
+#speed-slider::-webkit-slider-runnable-track {
+  height: 5px; border-radius: 3px; background: #dadce0;
+}
+#speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; border-radius: 50%; background: #1a73e8;
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  margin-top: -8.5px;
+}
+#replay-action-btns { display: flex; gap: 10px; flex-shrink: 0; }
 #replay-play-btn, #replay-restart-btn {
   width: 42px; height: 42px; border-radius: 50%; border: none;
   font-size: 1.1rem; cursor: pointer; display: flex;
@@ -555,7 +568,8 @@ html, body {
   #replay-panel { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); }
   #replay-header { color: #e8eaed; }
   #replay-trip-info { color: #9aa0a6; }
-  .speed-btn { background: #252525; color: #9aa0a6; }
+  #speed-slider::-webkit-slider-runnable-track { background: #3c4043; }
+  #speed-slider::-webkit-slider-thumb { border-color: #1a1a1a; }
 
   #update-bar { background: #2a2a2a; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
   #update-bar button:first-of-type { background: #6ab4ff; }

@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.19';
+const APP_VERSION  = '1.1.20';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -747,10 +747,9 @@ function toggleReplayPause() {
   document.getElementById('replay-play-btn').textContent = replayPaused ? '▶' : '⏸';
 }
 
-function setReplaySpeed(s, btn) {
-  replaySpeed = s;
-  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+function onSpeedSlider(v) {
+  replaySpeed = parseInt(v) || 1;
+  document.getElementById('speed-value').textContent = `${replaySpeed}x`;
   if (replayInterval) scheduleStep();
 }
 
@@ -873,6 +872,12 @@ function toast(msg) {
 // 若有新版（代表 WKWebView 快取更新了），顯示「已更新」提示
 function dismissUpdateBar() {
   document.getElementById('update-bar').classList.remove('show');
+}
+
+// 手動重新整理：抓最新版本立即生效，不需從多工關閉 App
+function hardReload() {
+  if (activeTrip) { toast('行程記錄中，請先結束行程再重新整理'); return; }
+  location.replace(location.origin + location.pathname + '?v=2&r=' + Date.now());
 }
 
 function checkForUpdate() {

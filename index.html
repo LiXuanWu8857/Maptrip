@@ -47,7 +47,10 @@
     <div id="top-date"></div>
     <div id="top-tripcount"><span id="trip-count">0</span> 趟</div>
   </div>
-  <button class="icon-btn" onclick="toggleTripList()" title="行程清單">☰</button>
+  <div id="top-actions">
+    <button class="icon-btn" onclick="hardReload()" title="重新整理">🔄</button>
+    <button class="icon-btn" onclick="toggleTripList()" title="行程清單">☰</button>
+  </div>
 </div>
 
 <!-- Map -->
@@ -172,10 +175,12 @@
   </div>
   <div id="replay-trip-info"></div>
   <div id="replay-controls">
-    <div id="replay-speed-btns">
-      <button class="speed-btn" onclick="setReplaySpeed(1,this)">1x</button>
-      <button class="speed-btn active" onclick="setReplaySpeed(5,this)">5x</button>
-      <button class="speed-btn" onclick="setReplaySpeed(10,this)">10x</button>
+    <div id="replay-speed">
+      <span class="speed-end">1x</span>
+      <input type="range" id="speed-slider" min="1" max="10" step="1" value="5"
+             oninput="onSpeedSlider(this.value)">
+      <span class="speed-end">10x</span>
+      <span id="speed-value">5x</span>
     </div>
     <div id="replay-action-btns">
       <button id="replay-restart-btn" onclick="startReplay()" title="重播">↺</button>
