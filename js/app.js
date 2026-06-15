@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.10';
+const APP_VERSION  = '1.1.11';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -374,6 +374,13 @@ function showFareDialog(trip) {
 }
 
 function saveTripFinal(trip) {
+  if (todayTrips.length > 0) {
+    const prev = todayTrips[todayTrips.length - 1];
+    const prevCoords = prev.roadCoords || prev.coords;
+    const curCoords  = trip.roadCoords || trip.coords;
+    const gap = drawGapLine(prevCoords.at(-1), curCoords[0]);
+    allMapLayers.push(gap);
+  }
   drawTripLine(trip, todayTrips.length + 1);
   todayTrips.push(trip);
   saveTodayToStorage(); updateTopBar();
@@ -426,6 +433,21 @@ async function snapLiveRoute() {
   const latlngs = snapped.map(c => [c.lat, c.lng]);
   activeTrip.coords.slice(snapshot.length).forEach(c => latlngs.push([c.lat, c.lng]));
   activePolyline.setLatLngs(latlngs);
+}
+
+function drawGapLine(from, to) {
+  const lat0 = from.lat, lng0 = from.lng;
+  const lat2 = to.lat,   lng2 = to.lng;
+  const dLat = lat2 - lat0, dLng = lng2 - lng0;
+  const midLat = (lat0 + lat2) / 2 - dLng * 0.25;
+  const midLng = (lng0 + lng2) / 2 + dLat * 0.25;
+  const pts = [];
+  for (let i = 0; i <= 32; i++) {
+    const t = i / 32, u = 1 - t;
+    pts.push([u*u*lat0 + 2*u*t*midLat + t*t*lat2,
+              u*u*lng0 + 2*u*t*midLng + t*t*lng2]);
+  }
+  return L.polyline(pts, { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5' }).addTo(map);
 }
 
 function drawTripLine(trip, idx) {
@@ -732,7 +754,17 @@ function loadTodayFromStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const saved = raw[todayKey()] || [];
   if (!saved.length) return;
-  saved.forEach((t, i) => { todayTrips.push({ ...t }); drawTripLine(t, i + 1); });
+  saved.forEach((t, i) => {
+    if (i > 0) {
+      const prev = todayTrips[todayTrips.length - 1];
+      const prevCoords = prev.roadCoords || prev.coords;
+      const curCoords  = t.roadCoords || t.coords;
+      const gap = drawGapLine(prevCoords.at(-1), curCoords[0]);
+      allMapLayers.push(gap);
+    }
+    todayTrips.push({ ...t });
+    drawTripLine(t, i + 1);
+  });
   const allCoords = saved.flatMap(t => t.coords.map(c => [c.lat, c.lng]));
   if (allCoords.length) {
     map.fitBounds(L.latLngBounds(allCoords), { paddingTopLeft: [16, 60], paddingBottomRight: [16, 90] });
