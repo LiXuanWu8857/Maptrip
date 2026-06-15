@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Maptrip">
@@ -12,6 +12,36 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
 <script>document.write('<link rel="stylesheet" href="css/style.css?t=' + Date.now() + '">');</script>
+<!-- Inline critical CSS: overrides external CSS so it works even when style.css is stale-cached -->
+<style>
+#bottom-bar {
+  position: fixed !important;
+  bottom: env(safe-area-inset-bottom, 0px) !important;
+  left: 0 !important; right: 0 !important;
+  height: 72px !important;
+  padding: 0 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-around !important;
+  background: rgba(255,255,255,0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-top: 1px solid rgba(0,0,0,0.08) !important;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.06) !important;
+  z-index: 20 !important;
+}
+#bottom-safe {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: env(safe-area-inset-bottom, 0px);
+  background: rgba(255,255,255,0.95);
+  z-index: 19;
+}
+@media (prefers-color-scheme: dark) {
+  #bottom-bar  { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
+  #bottom-safe { background: rgba(24,24,24,0.96); }
+}
+</style>
 </head>
 <body>
 
@@ -155,6 +185,9 @@
     </div>
   </div>
 </div>
+
+<!-- Safe-area fill below bottom bar -->
+<div id="bottom-safe"></div>
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
