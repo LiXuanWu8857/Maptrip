@@ -3,9 +3,11 @@ const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
 const GPS_RECORD_MS  = 1000;   // 每秒存一點，路線更細緻
 const LIVE_SNAP_PTS  = 30;     // 每累積 30 點（約 30 秒）即時貼合一次道路
-const MOVING_SPEED_MS   = 4;   // >4 m/s (~15 km/h) = 行駛中
-const STOPPED_SPEED_MS  = 1;   // <1 m/s (~3.6 km/h) = 停車
-const ARRIVAL_DELAY_MS  = 8000; // 停車滿 8 秒才提示
+const MOVING_SPEED_MS      = 4;     // >4 m/s (~15 km/h) = 行駛中
+const STOPPED_SPEED_MS     = 1;     // <1 m/s (~3.6 km/h) = 停車
+const ARRIVAL_DELAY_MS     = 8000;  // 停車滿 8 秒才提示
+const AUTO_START_SPEED_MS  = 10 / 3.6; // >10 km/h 持續才問是否開始
+const AUTO_START_DELAY_MS  = 8000;  // 行駛滿 8 秒才跳提示
 
 let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
@@ -13,6 +15,7 @@ let todayTrips = [], allMapLayers = [];
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let activeSnapPending = false;
+let autoStartTimer = null, autoStartShown = false, lastKnownPos = null;
 
 const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
@@ -135,6 +138,14 @@ function restartSimulation() {
 
 function onGpsUpdate(pos) {
   const { latitude: lat, longitude: lng, accuracy: acc, speed } = pos.coords;
+
+  // 計算有效速度（GPS 不提供時從位置差推算）
+  let effectiveSpeed = speed;
+  if ((effectiveSpeed == null || isNaN(effectiveSpeed) || effectiveSpeed < 0) && lastKnownPos) {
+    const dt = (Date.now() - lastKnownPos.t) / 1000;
+    if (dt > 0 && dt < 15) effectiveSpeed = haversine(lastKnownPos, { lat, lng }) / dt;
+  }
+  lastKnownPos = { lat, lng, t: Date.now() };
   currentPos = { lat, lng };
   setGpsBadge(acc <= MIN_ACCURACY_M ? 'on' : 'warn', `📍 ±${Math.round(acc)} m`);
 
@@ -172,18 +183,9 @@ function onGpsUpdate(pos) {
         snapLiveRoute();
       }
     }
-    // GPS 不提供速度時，從座標差計算
-    let effectiveSpeed = speed;
-    if ((effectiveSpeed == null || isNaN(effectiveSpeed) || effectiveSpeed < 0) &&
-        activeTrip.coords.length >= 2) {
-      const p1 = activeTrip.coords.at(-2);
-      const p2 = activeTrip.coords.at(-1);
-      if (p1 && p2) {
-        const dt = (p2.t - p1.t) / 1000;
-        effectiveSpeed = dt > 0 ? haversine(p1, p2) / dt : 0;
-      }
-    }
     checkArrival(effectiveSpeed);
+  } else {
+    checkAutoStart(effectiveSpeed);
   }
 }
 
@@ -227,6 +229,38 @@ function arrivalDismiss() {
   hideArrivalBanner();
   wasMoving = false;
   arrivalBannerShown = false;
+}
+
+function checkAutoStart(speed) {
+  if (activeTrip || autoStartShown) return;
+  if (speed == null || isNaN(speed) || speed < 0) return;
+  if (speed > AUTO_START_SPEED_MS) {
+    if (!autoStartTimer) {
+      autoStartTimer = setTimeout(() => {
+        autoStartTimer = null;
+        if (!activeTrip && !autoStartShown) {
+          autoStartShown = true;
+          document.getElementById('autostart-banner').classList.add('show');
+        }
+      }, AUTO_START_DELAY_MS);
+    }
+  } else {
+    clearTimeout(autoStartTimer);
+    autoStartTimer = null;
+  }
+}
+
+function confirmAutoStart() {
+  document.getElementById('autostart-banner').classList.remove('show');
+  autoStartShown = false;
+  beginRecording();
+}
+
+function dismissAutoStart() {
+  document.getElementById('autostart-banner').classList.remove('show');
+  autoStartShown = true; // 略過後本次不再提示，直到停車再重置
+  clearTimeout(autoStartTimer);
+  autoStartTimer = null;
 }
 
 function onGpsError(err) {
@@ -297,6 +331,7 @@ function endTrip() {
   if (activePolyline) { map.removeLayer(activePolyline); activePolyline = null; }
   activeTrip = null;
   wasMoving = false; arrivalBannerShown = false;
+  autoStartShown = false; // 行程結束後，下次出發可再次偵測
   setAutoFollow(false);
   document.getElementById('start-btn').disabled = false;
   document.getElementById('rec-banner').style.display = 'none';
