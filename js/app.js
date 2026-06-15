@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.5';
+const APP_VERSION  = '1.1.6';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -722,19 +722,35 @@ function toast(msg) {
 // ===== 版本更新偵測 =====
 // App 從 GitHub Pages 遠端載入，啟動時比對上次記錄的版號
 // 若有新版（代表 WKWebView 快取更新了），顯示「已更新」提示
+function dismissUpdateBar() {
+  document.getElementById('update-bar').classList.remove('show');
+}
+
 function checkForUpdate() {
+  // 安全措施：確保 fare overlay 沒有卡住
+  const fo = document.getElementById('fare-overlay');
+  if (fo && fo.style.display === 'block') {
+    fo.style.display = 'none';
+    document.getElementById('fare-dialog').classList.remove('show');
+  }
+
   const lastSeen = localStorage.getItem('maptrip_version');
   if (lastSeen && lastSeen !== APP_VERSION) {
     const el = document.getElementById('update-bar');
     if (el) {
-      el.querySelector('#update-ver').textContent = `v${APP_VERSION}`;
+      document.getElementById('update-ver').textContent = `v${APP_VERSION}`;
       el.classList.add('show');
+      // 6 秒後自動消失
+      setTimeout(dismissUpdateBar, 6000);
     }
   }
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
 window.addEventListener('load', () => {
+  // 更新列的關閉按鈕用 JS 綁定（比 inline onclick 更可靠）
+  document.getElementById('update-bar').querySelector('button')
+    .addEventListener('click', dismissUpdateBar);
   initMap();
   setTimeout(checkForUpdate, 2000);
 });
