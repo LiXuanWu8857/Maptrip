@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.14';
+const APP_VERSION  = '1.1.15';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -496,7 +496,8 @@ function centerOnMe() {
 }
 
 function updateTopBar() {
-  const d = new Date();
+  // 顯示「營業日」日期（07:00 之前仍算前一天）
+  const d = new Date(Date.now() - DAY_SPLIT_HOUR * 3600 * 1000);
   document.getElementById('top-date').textContent =
     d.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' });
   document.getElementById('trip-count').textContent = todayTrips.length;
@@ -676,9 +677,17 @@ function startReplay() {
   scheduleStep();
 }
 
+// 讓圓點過場時間跟步進間隔一致，高倍速才不會抄近路偏離路線
+function setReplayTransition(ms) {
+  const el = replayDot && replayDot.getElement();
+  if (el) el.style.setProperty('transition', `transform ${ms}ms linear`, 'important');
+}
+
 function scheduleStep() {
   clearInterval(replayInterval);
-  replayInterval = setInterval(stepReplay, Math.round(200 / replaySpeed));
+  const stepMs = Math.round(200 / replaySpeed);
+  setReplayTransition(stepMs);
+  replayInterval = setInterval(stepReplay, stepMs);
 }
 
 function stepReplay() {
@@ -708,8 +717,7 @@ function stepReplay() {
 // 趟與趟之間：沿紅色 Bezier 連接線快速移動，固定速度與回放倍率無關
 function animateGapAlongRed(from, to, onDone) {
   const pts = bezierGapPoints(from, to);
-  const el = replayDot.getElement();
-  if (el) el.style.transition = ''; // 保留平滑過場
+  setReplayTransition(35); // 過場時間對齊步進，緊貼紅線
   let gi = 0;
   replayInterval = setInterval(() => {
     if (replayPaused) return;
@@ -762,12 +770,33 @@ function updateReplayPanel() {
     `${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　${fmtDist(t.totalDist)}`;
 }
 
-function todayKey() { return new Date().toISOString().slice(0, 10); }
+// 每日以早上 7:00 為分界：07:00 之前算前一天
+// （例：6/16 的紀錄＝6/16 早上 7:00 ～ 6/17 早上 6:59）
+const DAY_SPLIT_HOUR = 7;
+
+function businessDayKey(ts = Date.now()) {
+  const d = new Date(ts - DAY_SPLIT_HOUR * 3600 * 1000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function todayKey() { return businessDayKey(); }
+
+function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords }) {
+  return { id, startTime, endTime, coords, totalDist, fare: fare || 0, ...(roadCoords ? { roadCoords } : {}) };
+}
 
 function saveTodayToStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  raw[todayKey()] = todayTrips.map(({ id, startTime, endTime, coords, totalDist, fare, roadCoords }) =>
-    ({ id, startTime, endTime, coords, totalDist, fare: fare || 0, ...(roadCoords ? { roadCoords } : {}) }));
+  // 依每趟「開始時間」的營業日歸檔，跨 7:00 也不會把昨天的行程蓋掉
+  const grouped = {};
+  for (const t of todayTrips) {
+    const key = businessDayKey(t.startTime);
+    (grouped[key] = grouped[key] || []).push(serializeTrip(t));
+  }
+  Object.assign(raw, grouped);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
 }
 
