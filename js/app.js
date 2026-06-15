@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.22';
+const APP_VERSION  = '1.1.23';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -36,7 +36,7 @@ const TILE_LAYERS = {
 let currentTile = 'road';
 
 function initMap() {
-  map = L.map('map', { zoomControl: false, attributionControl: false })
+  map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0 })
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
 
@@ -639,12 +639,14 @@ function renderHistorySheet() {
 }
 
 // ===== 每日行程回放 =====
-let replayDot = null, replayInterval = null;
-let replayTripIdx = 0, replayCoordIdx = 0;
+let replayDot = null, replayRAF = null;
+let replayTripIdx = 0, replayProgress = 0; // replayProgress：在當前趟 coords 的浮點索引
 let replayPaused = false, replaySpeed = 5;
-let replayCoords = null; // 當前趟的回放座標（優先用 roadCoords）
-let replayStepMs = 40;   // 目前步進間隔（地圖平移與圓點過場共用）
-let replayPauseTimer = null; // 結束點停留 2 秒的計時器
+let replayCoords = null;       // 當前趟的回放座標（優先用 roadCoords）
+let replayLastTs = 0;          // 上一個動畫影格時間戳
+let replayPauseTimer = null;   // 結束點停留 2 秒的計時器
+let replayTripCenter = null, replayFitZoom = 14, replayCloseZoom = 16.5;
+const REPLAY_CLOSE_ZOOM = 16.5; // 跟隨時的近距離縮放層級
 
 function openReplay() {
   if (!todayTrips.length) { toast('今日尚無行程可回放'); return; }
@@ -658,10 +660,21 @@ function replayCoordsForTrip(trip) {
   return trip.roadCoords || trip.coords;
 }
 
+// 計算某趟的整段範圍與縮放層級（給運鏡用）
+function setupReplayTrip(idx) {
+  replayCoords = replayCoordsForTrip(todayTrips[idx]);
+  replayProgress = 0;
+  const bounds = L.latLngBounds(replayCoords.map(c => [c.lat, c.lng]));
+  replayTripCenter = bounds.getCenter();
+  // 預留上方狀態列與下方面板空間，讓整段路線完整可見
+  replayFitZoom = map.getBoundsZoom(bounds, false, L.point(60, 200));
+  replayCloseZoom = Math.max(REPLAY_CLOSE_ZOOM, replayFitZoom);
+}
+
 function startReplay() {
   stopReplay();
-  replayTripIdx = 0; replayCoordIdx = 0; replayPaused = false;
-  replayCoords = replayCoordsForTrip(todayTrips[0]);
+  replayTripIdx = 0; replayPaused = false;
+  setupReplayTrip(0);
   document.getElementById('replay-play-btn').textContent = '⏸';
 
   const first = replayCoords[0];
@@ -674,72 +687,109 @@ function startReplay() {
     zIndexOffset: 2000
   }).addTo(map);
 
-  map.setView([first.lat, first.lng], 16);
+  map.setView([first.lat, first.lng], replayCloseZoom, { animate: false });
   updateReplayPanel();
-  scheduleStep();
+  startReplayRAF();
 }
 
-// 讓圓點過場時間跟步進間隔一致，高倍速才不會抄近路偏離路線
-function setReplayTransition(ms) {
-  const el = replayDot && replayDot.getElement();
-  if (el) el.style.setProperty('transition', `transform ${ms}ms linear`, 'important');
+function startReplayRAF() {
+  cancelAnimationFrame(replayRAF);
+  replayLastTs = 0;
+  replayRAF = requestAnimationFrame(replayFrame);
 }
 
-// 地圖平移時間與步進/過場一致，圓點才會穩穩停在畫面中心
-function panMap(latlng, ms) {
-  map.panTo(latlng, { animate: true, duration: Math.max(ms, 1) / 1000, easeLinearity: 1, noMoveStart: true });
-}
+// 每影格依經過時間前進，並內插座標 → 不論幾倍速都平滑、不晃動
+function replayFrame(ts) {
+  if (replayPaused) { replayLastTs = ts; replayRAF = requestAnimationFrame(replayFrame); return; }
+  if (!replayLastTs) replayLastTs = ts;
+  let dt = ts - replayLastTs;
+  if (dt > 100) dt = 100; // App 切回前景時避免一次跳太多
+  replayLastTs = ts;
 
-function scheduleStep() {
-  clearInterval(replayInterval);
-  replayStepMs = Math.round(200 / replaySpeed);
-  setReplayTransition(replayStepMs);
-  replayInterval = setInterval(stepReplay, replayStepMs);
-}
+  replayProgress += dt * (replaySpeed / 200); // 1x 約 5 點/秒
 
-function stepReplay() {
-  if (replayPaused) return;
-  const trip = todayTrips[replayTripIdx];
-  if (!trip) { finishReplay(); return; }
-
-  if (replayCoordIdx >= replayCoords.length) {
-    const prevEnd = replayCoords[replayCoords.length - 1];
-    replayTripIdx++;
-    replayCoordIdx = 0;
-    clearInterval(replayInterval);
-    if (replayTripIdx >= todayTrips.length) { finishReplay(); return; }
-    replayCoords = replayCoordsForTrip(todayTrips[replayTripIdx]);
-    updateReplayPanel();
-    // 在結束點停留 2 秒，再沿紅色連接線快速滑到下一趟起點
-    replayPauseTimer = setTimeout(() => {
-      animateGapAlongRed(prevEnd, replayCoords[0], scheduleStep);
-    }, 2000);
+  const lastIdx = replayCoords.length - 1;
+  if (replayProgress >= lastIdx) {
+    replayProgress = lastIdx;
+    renderReplayFrame();
+    endOfTripTransition();
     return;
   }
-
-  const c = replayCoords[replayCoordIdx];
-  replayDot.setLatLng([c.lat, c.lng]);
-  panMap([c.lat, c.lng], replayStepMs);
-  replayCoordIdx++;
+  renderReplayFrame();
+  replayRAF = requestAnimationFrame(replayFrame);
 }
 
-// 趟與趟之間：沿紅色 Bezier 連接線快速移動，固定速度與回放倍率無關
-function animateGapAlongRed(from, to, onDone) {
+function renderReplayFrame() {
+  const lastIdx = replayCoords.length - 1;
+  const i = Math.min(Math.floor(replayProgress), lastIdx);
+  const frac = replayProgress - i;
+  const a = replayCoords[i];
+  const b = replayCoords[Math.min(i + 1, lastIdx)];
+  const lat = a.lat + (b.lat - a.lat) * frac;
+  const lng = a.lng + (b.lng - a.lng) * frac;
+  replayDot.setLatLng([lat, lng]);
+
+  // 運鏡：前 30% 由近拉遠至可見整段，中段維持，後 30% 拉回跟隨
+  const p = lastIdx > 0 ? replayProgress / lastIdx : 1;
+  let zoom, cLat, cLng;
+  if (p < 0.3) {
+    const f = p / 0.3;
+    zoom = replayCloseZoom + (replayFitZoom - replayCloseZoom) * f;
+    cLat = lat + (replayTripCenter.lat - lat) * f;
+    cLng = lng + (replayTripCenter.lng - lng) * f;
+  } else if (p > 0.7) {
+    const f = (p - 0.7) / 0.3;
+    zoom = replayFitZoom + (replayCloseZoom - replayFitZoom) * f;
+    cLat = replayTripCenter.lat + (lat - replayTripCenter.lat) * f;
+    cLng = replayTripCenter.lng + (lng - replayTripCenter.lng) * f;
+  } else {
+    zoom = replayFitZoom;
+    cLat = replayTripCenter.lat; cLng = replayTripCenter.lng;
+  }
+  map.setView([cLat, cLng], Math.round(zoom * 100) / 100, { animate: false });
+}
+
+// 一趟結束：停留 2 秒，再沿紅線快速滑到下一趟起點
+function endOfTripTransition() {
+  cancelAnimationFrame(replayRAF); replayRAF = null;
+  const prevEnd = replayCoords[replayCoords.length - 1];
+  replayTripIdx++;
+  if (replayTripIdx >= todayTrips.length) { finishReplay(); return; }
+  setupReplayTrip(replayTripIdx);
+  updateReplayPanel();
+  replayPauseTimer = setTimeout(() => {
+    glideGap(prevEnd, replayCoords[0], () => {
+      replayProgress = 0;
+      startReplayRAF();
+    });
+  }, 2000);
+}
+
+// 沿紅色 Bezier 連接線快速移動（約 0.6 秒，與回放倍率無關）
+function glideGap(from, to, onDone) {
   const pts = bezierGapPoints(from, to);
-  const GAP_MS = 18; // 比一般步進更快，整段約 0.6 秒
-  setReplayTransition(GAP_MS);
-  let gi = 0;
-  replayInterval = setInterval(() => {
-    if (replayPaused) return;
-    if (gi >= pts.length) {
-      clearInterval(replayInterval);
+  const lastIdx = pts.length - 1;
+  const speed = lastIdx / 600;
+  let gi = 0, last = 0;
+  const step = (ts) => {
+    if (replayPaused) { last = ts; replayRAF = requestAnimationFrame(step); return; }
+    if (!last) last = ts;
+    let dt = ts - last; if (dt > 100) dt = 100; last = ts;
+    gi += dt * speed;
+    if (gi >= lastIdx) {
+      replayDot.setLatLng(pts[lastIdx]);
+      map.setView(pts[lastIdx], replayCloseZoom, { animate: false });
       onDone();
       return;
     }
-    replayDot.setLatLng(pts[gi]);
-    panMap(pts[gi], GAP_MS);
-    gi++;
-  }, GAP_MS);
+    const idx = Math.floor(gi), frac = gi - idx;
+    const a = pts[idx], b = pts[idx + 1];
+    const ll = [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac];
+    replayDot.setLatLng(ll);
+    map.setView(ll, replayCloseZoom, { animate: false });
+    replayRAF = requestAnimationFrame(step);
+  };
+  replayRAF = requestAnimationFrame(step);
 }
 
 function toggleReplayPause() {
@@ -750,11 +800,11 @@ function toggleReplayPause() {
 function onSpeedSlider(v) {
   replaySpeed = parseInt(v) || 1;
   document.getElementById('speed-value').textContent = `${replaySpeed}x`;
-  if (replayInterval) scheduleStep();
+  // rAF 迴圈會即時讀取 replaySpeed，不需重新排程
 }
 
 function stopReplay() {
-  clearInterval(replayInterval); replayInterval = null;
+  cancelAnimationFrame(replayRAF); replayRAF = null;
   clearTimeout(replayPauseTimer); replayPauseTimer = null;
   if (replayDot) { map.removeLayer(replayDot); replayDot = null; }
 }
@@ -765,7 +815,7 @@ function closeReplay() {
 }
 
 function finishReplay() {
-  clearInterval(replayInterval); replayInterval = null;
+  cancelAnimationFrame(replayRAF); replayRAF = null;
   document.getElementById('replay-play-btn').textContent = '▶';
   document.getElementById('replay-trip-label').textContent = '回放完畢';
   toast('✓ 今日行程回放完畢');
@@ -869,11 +919,6 @@ function toast(msg) {
 
 // ===== 版本更新偵測 =====
 // App 從 GitHub Pages 遠端載入，啟動時比對上次記錄的版號
-// 若有新版（代表 WKWebView 快取更新了），顯示「已更新」提示
-function dismissUpdateBar() {
-  document.getElementById('update-bar').classList.remove('show');
-}
-
 // 手動重新整理：抓最新版本立即生效，不需從多工關閉 App
 function hardReload() {
   if (activeTrip) { toast('行程記錄中，請先結束行程再重新整理'); return; }
@@ -900,16 +945,7 @@ function checkForUpdate() {
     fo.style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
   }
-
-  const lastSeen = localStorage.getItem('maptrip_version');
-  if (lastSeen && lastSeen !== APP_VERSION) {
-    const el = document.getElementById('update-bar');
-    if (el) {
-      document.getElementById('update-ver').textContent = `v${APP_VERSION}`;
-      el.classList.add('show');
-      setTimeout(dismissUpdateBar, 6000); // 6 秒後自動消失
-    }
-  }
+  // 更新通知列已移除：不再顯示「已更新至 vX.X.X」
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 

@@ -473,9 +473,9 @@ html, body {
   box-shadow: 0 0 0 3px rgba(250,123,23,0.3);
   animation: replayPulse 1s infinite;
 }
-/* 回放標記平滑移動 */
+/* 回放標記：逐影格內插定位，不要 CSS 過場，避免高倍速晃動 */
 .replay-marker-icon {
-  transition: transform 0.18s linear !important;
+  transition: none !important;
 }
 @keyframes replayPulse {
   0%,100% { box-shadow: 0 0 0 3px rgba(250,123,23,0.3); }
