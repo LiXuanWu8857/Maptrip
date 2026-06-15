@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.24';
+const APP_VERSION  = '1.1.25';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -918,45 +918,26 @@ function toast(msg) {
 }
 
 // ===== 版本更新偵測 =====
+// 重新整理一律用 location.reload()：不改變網址，才能保留 Capacitor 原生環境
+// （改網址會脫離原生橋接、變成純網頁版）。新鮮度由 Service Worker 負責。
 function hardReload() {
   if (activeTrip) { toast('行程記錄中，請先結束行程再重新整理'); return; }
-  location.replace(location.origin + location.pathname + '?r=' + Date.now());
+  location.reload();
 }
 
-// index.html 快取保鮮：app.js 帶時間戳必定是最新，若 INDEX_VERSION 不符就重整。
-// 用時間戳記作 cooldown，避免 CDN 尚未更新時無限重整。
-function ensureFreshIndex() {
-  if (window.INDEX_VERSION === APP_VERSION) {
-    sessionStorage.removeItem('maptrip_autoreload');
-    return false;
-  }
-  const last = Number(sessionStorage.getItem('maptrip_autoreload') || 0);
-  if (Date.now() - last < 30000) return false; // 30 秒內不重複重整
-  sessionStorage.setItem('maptrip_autoreload', Date.now());
-  location.replace(location.origin + location.pathname + '?r=' + Date.now());
-  return true;
-}
-
-// 啟動 2 秒後透過 version.json（不快取）再次確認版號，
-// 作為 Service Worker 尚未安裝時的第二道防線。
-async function checkForUpdate() {
+function checkForUpdate() {
+  // 安全措施：確保 fare overlay 沒有卡住
   const fo = document.getElementById('fare-overlay');
   if (fo && fo.style.display === 'block') {
     fo.style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
   }
-  try {
-    const resp = await fetch('version.json', { cache: 'no-store' });
-    const { version } = await resp.json();
-    if (version !== APP_VERSION) { hardReload(); return; }
-  } catch (e) {}
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
 window.addEventListener('load', () => {
-  if (ensureFreshIndex()) return;
-  // Service Worker：攔截每次導覽請求，以 no-store 取得最新 index.html，
-  // 永久解決 WKWebView 的 HTML 快取問題。
+  // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
+  // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
