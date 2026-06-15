@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.9';
+const APP_VERSION  = '1.1.10';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -789,17 +789,7 @@ function checkForUpdate() {
     fo.style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
   }
-
-  const lastSeen = localStorage.getItem('maptrip_version');
-  if (lastSeen && lastSeen !== APP_VERSION) {
-    const el = document.getElementById('update-bar');
-    if (el) {
-      document.getElementById('update-ver').textContent = `v${APP_VERSION}`;
-      el.classList.add('show');
-      // 6 秒後自動消失
-      setTimeout(dismissUpdateBar, 6000);
-    }
-  }
+  // 更新通知列暫時停用
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
