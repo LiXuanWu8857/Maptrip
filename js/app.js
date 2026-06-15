@@ -72,7 +72,7 @@ function startNativeGpsWatch() {
     backgroundMessage: '正在背景記錄你的路線',
     requestPermissions: true,
     stale: false,
-    distanceFilter: 5   // 移動滿 5 公尺才回報，省電
+    distanceFilter: 0   // 每次定位都回報（含停車），確保到站偵測正常運作
   }, (location, error) => {
     if (error) {
       if (error.code === 'NOT_AUTHORIZED') setGpsBadge('err', '⚠ 定位權限被拒');
@@ -172,12 +172,22 @@ function onGpsUpdate(pos) {
         snapLiveRoute();
       }
     }
-    checkArrival(speed);
+    // GPS 不提供速度時，從座標差計算
+    let effectiveSpeed = speed;
+    if ((effectiveSpeed == null || isNaN(effectiveSpeed) || effectiveSpeed < 0) &&
+        activeTrip.coords.length >= 2) {
+      const p1 = activeTrip.coords.at(-2);
+      const p2 = activeTrip.coords.at(-1);
+      if (p1 && p2) {
+        const dt = (p2.t - p1.t) / 1000;
+        effectiveSpeed = dt > 0 ? haversine(p1, p2) / dt : 0;
+      }
+    }
+    checkArrival(effectiveSpeed);
   }
 }
 
 function checkArrival(speed) {
-  // speed 可能是 null（某些裝置不提供），直接忽略
   if (speed == null || isNaN(speed) || speed < 0) return;
   if (speed > MOVING_SPEED_MS) {
     wasMoving = true;
