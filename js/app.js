@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.23';
+const APP_VERSION  = '1.1.24';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -918,40 +918,48 @@ function toast(msg) {
 }
 
 // ===== 版本更新偵測 =====
-// App 從 GitHub Pages 遠端載入，啟動時比對上次記錄的版號
-// 手動重新整理：抓最新版本立即生效，不需從多工關閉 App
 function hardReload() {
   if (activeTrip) { toast('行程記錄中，請先結束行程再重新整理'); return; }
-  location.replace(location.origin + location.pathname + '?v=2&r=' + Date.now());
+  location.replace(location.origin + location.pathname + '?r=' + Date.now());
 }
 
-// 自動保鮮：app.js 一定是最新（帶時間戳），若偵測到 index.html 是舊快取版本，
-// 就自動重新整理一次抓新的，解決 WKWebView 對 index.html 的 10 分鐘快取問題。
+// index.html 快取保鮮：app.js 帶時間戳必定是最新，若 INDEX_VERSION 不符就重整。
+// 用時間戳記作 cooldown，避免 CDN 尚未更新時無限重整。
 function ensureFreshIndex() {
   if (window.INDEX_VERSION === APP_VERSION) {
     sessionStorage.removeItem('maptrip_autoreload');
     return false;
   }
-  if (sessionStorage.getItem('maptrip_autoreload')) return false; // 已自動重整過，避免無限迴圈
-  sessionStorage.setItem('maptrip_autoreload', '1');
-  location.replace(location.origin + location.pathname + '?v=2&r=' + Date.now());
+  const last = Number(sessionStorage.getItem('maptrip_autoreload') || 0);
+  if (Date.now() - last < 30000) return false; // 30 秒內不重複重整
+  sessionStorage.setItem('maptrip_autoreload', Date.now());
+  location.replace(location.origin + location.pathname + '?r=' + Date.now());
   return true;
 }
 
-function checkForUpdate() {
-  // 安全措施：確保 fare overlay 沒有卡住
+// 啟動 2 秒後透過 version.json（不快取）再次確認版號，
+// 作為 Service Worker 尚未安裝時的第二道防線。
+async function checkForUpdate() {
   const fo = document.getElementById('fare-overlay');
   if (fo && fo.style.display === 'block') {
     fo.style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
   }
-  // 更新通知列已移除：不再顯示「已更新至 vX.X.X」
+  try {
+    const resp = await fetch('version.json', { cache: 'no-store' });
+    const { version } = await resp.json();
+    if (version !== APP_VERSION) { hardReload(); return; }
+  } catch (e) {}
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
 window.addEventListener('load', () => {
-  // 偵測到 index.html 是舊快取版本就自動重整，後續程式碼不必執行
   if (ensureFreshIndex()) return;
+  // Service Worker：攔截每次導覽請求，以 no-store 取得最新 index.html，
+  // 永久解決 WKWebView 的 HTML 快取問題。
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
   initMap();
   setTimeout(checkForUpdate, 2000);
 });
