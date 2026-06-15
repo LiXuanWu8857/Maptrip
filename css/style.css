@@ -18,17 +18,27 @@ html, body {
   z-index: 0;
 }
 
-#top-bar {
+#top-safe {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: calc(56px + env(safe-area-inset-top, 0px));
+  height: env(safe-area-inset-top, 0px);
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 21;
+}
+
+#top-bar {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px); left: 0; right: 0;
+  height: 56px;
   background: rgba(255,255,255,0.9);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: env(safe-area-inset-top, 0px) 16px 0;
+  padding: 0 16px;
   z-index: 20;
   border-bottom: 1px solid rgba(0,0,0,0.08);
 }
@@ -495,7 +505,8 @@ html, body {
   /* 地圖磚片反色（只反底圖，不影響標記和折線） */
   .leaflet-tile-pane { filter: invert(92%) hue-rotate(180deg) brightness(0.88) saturate(0.9); }
 
-  #top-bar { background: rgba(24,24,24,0.92); border-bottom-color: rgba(255,255,255,0.07); }
+  #top-safe { background: rgba(24,24,24,0.92); }
+  #top-bar  { background: rgba(24,24,24,0.92); border-bottom-color: rgba(255,255,255,0.07); }
   #top-date { color: #9aa0a6; }
   #top-tripcount { color: #6ab4ff; background: rgba(106,180,255,0.15); }
   .icon-btn { background: rgba(255,255,255,0.1); color: #e8eaed; }
