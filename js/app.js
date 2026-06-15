@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.12';
+const APP_VERSION  = '1.1.13';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -71,7 +71,7 @@ function startGpsWatch() {
 function startNativeGpsWatch() {
   const BG = window.Capacitor.Plugins.BackgroundGeolocation;
   if (!BG) { setGpsBadge('err', '⚠ 背景定位未安裝'); return; }
-  BG.addWatcher({
+  const result = BG.addWatcher({
     backgroundTitle: 'Maptrip 行程記錄中',
     backgroundMessage: '正在背景記錄你的路線',
     requestPermissions: true,
@@ -88,7 +88,10 @@ function startNativeGpsWatch() {
       accuracy:  location.accuracy,
       speed:     location.speed
     }});
-  }).then(id => { nativeWatcherId = id; })
+  });
+  // addWatcher 在不同版本可能回傳 Promise<id> 或直接回傳 id 字串，兩者皆相容
+  Promise.resolve(result)
+    .then(id => { nativeWatcherId = id; })
     .catch(() => setGpsBadge('err', '⚠ 背景定位啟動失敗'));
 }
 
