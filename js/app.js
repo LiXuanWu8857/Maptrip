@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.21';
+const APP_VERSION  = '1.1.22';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -916,9 +916,6 @@ function checkForUpdate() {
 window.addEventListener('load', () => {
   // 偵測到 index.html 是舊快取版本就自動重整，後續程式碼不必執行
   if (ensureFreshIndex()) return;
-  // 更新列的關閉按鈕用 JS 綁定（比 inline onclick 更可靠）
-  document.getElementById('update-bar').querySelector('button')
-    .addEventListener('click', dismissUpdateBar);
   initMap();
   setTimeout(checkForUpdate, 2000);
 });
