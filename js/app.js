@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.7';
+const APP_VERSION  = '1.1.8';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -568,6 +568,7 @@ function renderHistorySheet() {
 let replayDot = null, replayInterval = null;
 let replayTripIdx = 0, replayCoordIdx = 0;
 let replayPaused = false, replaySpeed = 5;
+let replayCoords = null; // 當前趟的回放座標（優先用 roadCoords）
 
 function openReplay() {
   if (!todayTrips.length) { toast('今日尚無行程可回放'); return; }
@@ -576,15 +577,21 @@ function openReplay() {
   startReplay();
 }
 
+function replayCoordsForTrip(trip) {
+  // 優先用道路貼合座標（更平滑），無則用原始 GPS 座標
+  return trip.roadCoords || trip.coords;
+}
+
 function startReplay() {
   stopReplay();
   replayTripIdx = 0; replayCoordIdx = 0; replayPaused = false;
+  replayCoords = replayCoordsForTrip(todayTrips[0]);
   document.getElementById('replay-play-btn').textContent = '⏸';
 
-  const first = todayTrips[0].coords[0];
+  const first = replayCoords[0];
   replayDot = L.marker([first.lat, first.lng], {
     icon: L.divIcon({
-      className: '',
+      className: 'replay-marker-icon',
       html: '<div class="replay-dot"></div>',
       iconSize: [22, 22], iconAnchor: [11, 11]
     }),
@@ -606,20 +613,27 @@ function stepReplay() {
   const trip = todayTrips[replayTripIdx];
   if (!trip) { finishReplay(); return; }
 
-  if (replayCoordIdx >= trip.coords.length) {
+  if (replayCoordIdx >= replayCoords.length) {
     replayTripIdx++;
     replayCoordIdx = 0;
     clearInterval(replayInterval);
     if (replayTripIdx >= todayTrips.length) { finishReplay(); return; }
+    replayCoords = replayCoordsForTrip(todayTrips[replayTripIdx]);
     updateReplayPanel();
-    const c = todayTrips[replayTripIdx].coords[0];
+    const c = replayCoords[0];
+    // 切換行程時暫停 transition，避免跨城市移動動畫
+    const el = replayDot.getElement();
+    if (el) el.style.transition = 'none';
     replayDot.setLatLng([c.lat, c.lng]);
     map.panTo([c.lat, c.lng]);
-    setTimeout(scheduleStep, 700);
+    setTimeout(() => {
+      if (el) el.style.transition = '';
+      scheduleStep();
+    }, 700);
     return;
   }
 
-  const c = trip.coords[replayCoordIdx];
+  const c = replayCoords[replayCoordIdx];
   replayDot.setLatLng([c.lat, c.lng]);
   map.panTo([c.lat, c.lng]);
   replayCoordIdx++;

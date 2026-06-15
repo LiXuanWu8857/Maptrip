@@ -175,23 +175,17 @@ html, body {
 #arrive-btn:active { opacity: 0.8; }
 
 #bottom-bar {
-  position: fixed;
-  bottom: env(safe-area-inset-bottom, 0px);
-  left: 0; right: 0;
-  height: 72px;
+  position: fixed; bottom: 0; left: 0; right: 0;
   background: rgba(255,255,255,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid rgba(0,0,0,0.08);
-  display: flex; align-items: center; justify-content: space-around;
-  padding: 0 12px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 20;
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
-#bottom-safe {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: env(safe-area-inset-bottom, 0px);
-  background: rgba(255,255,255,0.95);
-  z-index: 19;
+#bottom-buttons {
+  height: 72px;
+  display: flex; align-items: center; justify-content: space-around;
+  padding: 0 12px;
 }
 
 .ctrl-btn {
@@ -211,7 +205,7 @@ html, body {
 #locate-btn.follow-active .ctrl-label { color: #1a73e8; }
 
 .ctrl-icon { font-size: 1.3rem; }
-.ctrl-label { font-size: 0.7rem; color: #5f6368; }
+.ctrl-label { font-size: 0.75rem; color: #3c4043; }
 #start-btn .ctrl-label { color: #1a73e8; }
 
 #sheet-overlay {
@@ -460,6 +454,10 @@ html, body {
   box-shadow: 0 0 0 3px rgba(250,123,23,0.3);
   animation: replayPulse 1s infinite;
 }
+/* 回放標記平滑移動 */
+.replay-marker-icon {
+  transition: transform 0.18s linear !important;
+}
 @keyframes replayPulse {
   0%,100% { box-shadow: 0 0 0 3px rgba(250,123,23,0.3); }
   50%      { box-shadow: 0 0 0 7px rgba(250,123,23,0.1); }
@@ -511,8 +509,7 @@ html, body {
   #top-tripcount { color: #6ab4ff; background: rgba(106,180,255,0.15); }
   .icon-btn { background: rgba(255,255,255,0.1); color: #e8eaed; }
 
-  #bottom-bar  { background: rgba(24,24,24,0.96); border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -2px 12px rgba(0,0,0,0.3); }
-  #bottom-safe { background: rgba(24,24,24,0.96); }
+  #bottom-bar { background: rgba(24,24,24,0.96); border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -2px 12px rgba(0,0,0,0.3); }
   .ctrl-btn { color: #e8eaed; }
   .ctrl-label { color: #9aa0a6; }
   #start-btn { background: rgba(106,180,255,0.12); border-color: rgba(106,180,255,0.3); }

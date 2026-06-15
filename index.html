@@ -16,13 +16,9 @@
 <style>
 #bottom-bar {
   position: fixed !important;
-  bottom: env(safe-area-inset-bottom, 0px) !important;
+  bottom: 0 !important;
   left: 0 !important; right: 0 !important;
-  height: 72px !important;
-  padding: 0 12px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-around !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   background: rgba(255,255,255,0.95) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
@@ -30,16 +26,13 @@
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06) !important;
   z-index: 20 !important;
 }
-#bottom-safe {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: env(safe-area-inset-bottom, 0px);
-  background: rgba(255,255,255,0.95);
-  z-index: 19;
+#bottom-buttons {
+  height: 72px;
+  display: flex; align-items: center; justify-content: space-around;
+  padding: 0 12px;
 }
 @media (prefers-color-scheme: dark) {
-  #bottom-bar  { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
-  #bottom-safe { background: rgba(24,24,24,0.96); }
+  #bottom-bar { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
 }
 </style>
 </head>
@@ -100,18 +93,20 @@
 
 <!-- Bottom Controls -->
 <div id="bottom-bar">
-  <button class="ctrl-btn" id="start-btn" onclick="startTrip()">
-    <span class="ctrl-icon">▶</span>
-    <span class="ctrl-label">開始行程</span>
-  </button>
-  <button class="ctrl-btn" id="locate-btn" onclick="centerOnMe()">
-    <span class="ctrl-icon">⊕</span>
-    <span class="ctrl-label">我的位置</span>
-  </button>
-  <button class="ctrl-btn" onclick="showHistory()">
-    <span class="ctrl-icon">📅</span>
-    <span class="ctrl-label">歷史紀錄</span>
-  </button>
+  <div id="bottom-buttons">
+    <button class="ctrl-btn" id="start-btn" onclick="startTrip()">
+      <span class="ctrl-icon">▶</span>
+      <span class="ctrl-label">開始行程</span>
+    </button>
+    <button class="ctrl-btn" id="locate-btn" onclick="centerOnMe()">
+      <span class="ctrl-icon">⊕</span>
+      <span class="ctrl-label">我的位置</span>
+    </button>
+    <button class="ctrl-btn" onclick="showHistory()">
+      <span class="ctrl-icon">📅</span>
+      <span class="ctrl-label">歷史紀錄</span>
+    </button>
+  </div>
 </div>
 
 <!-- Trip List Sheet -->
@@ -188,9 +183,6 @@
     </div>
   </div>
 </div>
-
-<!-- Safe-area fill below bottom bar -->
-<div id="bottom-safe"></div>
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
