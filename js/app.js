@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.20';
+const APP_VERSION  = '1.1.21';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -880,6 +880,19 @@ function hardReload() {
   location.replace(location.origin + location.pathname + '?v=2&r=' + Date.now());
 }
 
+// 自動保鮮：app.js 一定是最新（帶時間戳），若偵測到 index.html 是舊快取版本，
+// 就自動重新整理一次抓新的，解決 WKWebView 對 index.html 的 10 分鐘快取問題。
+function ensureFreshIndex() {
+  if (window.INDEX_VERSION === APP_VERSION) {
+    sessionStorage.removeItem('maptrip_autoreload');
+    return false;
+  }
+  if (sessionStorage.getItem('maptrip_autoreload')) return false; // 已自動重整過，避免無限迴圈
+  sessionStorage.setItem('maptrip_autoreload', '1');
+  location.replace(location.origin + location.pathname + '?v=2&r=' + Date.now());
+  return true;
+}
+
 function checkForUpdate() {
   // 安全措施：確保 fare overlay 沒有卡住
   const fo = document.getElementById('fare-overlay');
@@ -901,6 +914,8 @@ function checkForUpdate() {
 }
 
 window.addEventListener('load', () => {
+  // 偵測到 index.html 是舊快取版本就自動重整，後續程式碼不必執行
+  if (ensureFreshIndex()) return;
   // 更新列的關閉按鈕用 JS 綁定（比 inline onclick 更可靠）
   document.getElementById('update-bar').querySelector('button')
     .addEventListener('click', dismissUpdateBar);
