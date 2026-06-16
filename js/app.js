@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.32';
+const APP_VERSION  = '1.1.33';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -657,11 +657,12 @@ function renderHistorySheet() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const days = Object.keys(raw).sort().reverse().filter(d => raw[d]?.length > 0);
   if (!days.length) { body.innerHTML = '<div class="empty-state">尚無歷史紀錄</div>'; return; }
-  body.innerHTML = days.map(day => {
+  body.innerHTML = days.map((day, dayIdx) => {
     const trips = raw[day];
     const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
     const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
     const fareStr = totalFare ? `　NT$ ${totalFare.toLocaleString()}` : '';
+    const isOpen = dayIdx === 0;
     const rows = trips.map((t, i) => `
       <div class="trip-row">
         <div class="trip-num">${i + 1}</div>
@@ -670,11 +671,20 @@ function renderHistorySheet() {
           <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}</div>
         </div>
       </div>`).join('');
-    return `<div class="history-day">
-        <span>${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</span>
-        <button class="replay-btn" onclick="replayDay('${day}')">▶ 回放</button>
-      </div>${rows}`;
+    return `<div class="history-day" onclick="toggleDay('${day}')">
+        <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
+        <span class="day-info">${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</span>
+        <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
+      </div>
+      <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
   }).join('');
+}
+
+function toggleDay(day) {
+  const rows = document.getElementById('day-rows-' + day);
+  const caret = rows.previousElementSibling.querySelector('.day-caret');
+  const nowCollapsed = rows.classList.toggle('collapsed');
+  caret.textContent = nowCollapsed ? '▶' : '▼';
 }
 
 // ===== 每日行程回放 =====

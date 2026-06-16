@@ -266,10 +266,15 @@ html, body {
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 
 .history-day {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   padding: 10px 18px 4px; font-size: 0.75rem; font-weight: 600; color: #1a73e8; letter-spacing: 0.04em;
+  cursor: pointer; user-select: none;
 }
+.history-day:active { background: rgba(26,115,232,0.06); }
+.day-caret { font-size: 0.65rem; color: #9aa0a6; flex-shrink: 0; width: 12px; }
+.day-info { flex: 1; }
 .history-day .replay-btn { flex-shrink: 0; }
+.day-rows.collapsed { display: none; }
 
 .toast {
   position: fixed;
@@ -553,6 +558,7 @@ html, body {
   .trip-time { color: #e8eaed; }
   .day-summary { background: #222; border-bottom-color: rgba(255,255,255,0.05); color: #9aa0a6; }
   .history-day { color: #6ab4ff; }
+  .history-day:active { background: rgba(106,180,255,0.08); }
   .empty-state { color: #9aa0a6; }
   .danger-btn { background: rgba(234,67,53,0.15); color: #f28b82; border-color: rgba(234,67,53,0.3); }
 
