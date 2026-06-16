@@ -9,4 +9,11 @@ class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(LiveActivityPlugin())
     }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // WKWebView 在 reload 後會重複套用安全區內距，導致頂端出現空白、
+        // 首次載入時容器尺寸也算錯。關閉自動內距，改由 CSS 的 env() 處理。
+        webView?.scrollView.contentInsetAdjustmentBehavior = .never
+    }
 }

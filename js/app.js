@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.35';
+const APP_VERSION  = '1.1.36';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -48,6 +48,15 @@ function initMap() {
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
 
+  // WKWebView 首次載入時容器尺寸常還沒就緒，地圖會變灰/卡住，需重算尺寸。
+  // 多次延遲呼叫 + 監聽旋轉/縮放，避免「第一次開要按重置才能用」。
+  const fixMapSize = () => map.invalidateSize();
+  setTimeout(fixMapSize, 100);
+  setTimeout(fixMapSize, 500);
+  setTimeout(fixMapSize, 1200);
+  window.addEventListener('resize', fixMapSize);
+  window.addEventListener('orientationchange', () => setTimeout(fixMapSize, 250));
+
   document.getElementById('tile-toggle').addEventListener('click', () => {
     map.removeLayer(TILE_LAYERS[currentTile]);
     currentTile = currentTile === 'road' ? 'satellite' : 'road';
@@ -81,9 +90,9 @@ function initMap() {
       consumePendingWidgetCmd();
       // 前景續命計時器（背景由 onGpsUpdate 觸發）
       setInterval(widgetHeartbeat, 30000);
-      // 回到前景時：重新顯示/刷新方塊，並補做鎖屏指令
+      // 回到前景時：重算地圖尺寸、重新顯示/刷新方塊，並補做鎖屏指令
       window.Capacitor?.Plugins?.App?.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) { la.initActivity(); consumePendingWidgetCmd(); }
+        if (isActive) { fixMapSize(); la.initActivity(); consumePendingWidgetCmd(); }
       });
     }
   }
