@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.29';
+const APP_VERSION  = '1.1.30';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -661,7 +661,10 @@ function renderHistorySheet() {
           <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}</div>
         </div>
       </div>`).join('');
-    return `<div class="history-day">${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</div>${rows}`;
+    return `<div class="history-day">
+        <span>${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</span>
+        <button class="replay-btn" onclick="replayDay('${day}')">▶ 回放</button>
+      </div>${rows}`;
   }).join('');
 }
 
@@ -674,12 +677,42 @@ let replayLastTs = 0;          // 上一個動畫影格時間戳
 let replayPauseTimer = null;   // 結束點停留 2 秒的計時器
 let replayTripCenter = null, replayFitZoom = 14, replayCloseZoom = 16.5;
 const REPLAY_CLOSE_ZOOM = 16.5; // 跟隨時的近距離縮放層級
+let replaySet = [];            // 目前回放的行程陣列（今日或歷史某日）
+let replayTempLayers = [];     // 回放歷史日時臨時畫上的路線，關閉時清除
 
 function openReplay() {
   if (!todayTrips.length) { toast('今日尚無行程可回放'); return; }
+  replaySet = todayTrips;
   closeSheet();
   document.getElementById('replay-panel').classList.add('show');
   startReplay();
+}
+
+// 回放歷史任一天：載入該日行程、臨時畫出路線、開始回放
+function replayDay(dayKey) {
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const trips = raw[dayKey] || [];
+  if (!trips.length) { toast('該日無行程可回放'); return; }
+  replaySet = trips;
+  closeHistory(); closeSheet();
+  clearReplayTempLayers();
+  trips.forEach((t, i) => {
+    const cur = t.roadCoords || t.coords;
+    if (i > 0) {
+      const prev = (trips[i - 1].roadCoords || trips[i - 1].coords);
+      replayTempLayers.push(drawGapLine(prev.at(-1), cur[0]));
+    }
+    replayTempLayers.push(
+      L.polyline(cur.map(c => [c.lat, c.lng]),
+        { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map));
+  });
+  document.getElementById('replay-panel').classList.add('show');
+  startReplay();
+}
+
+function clearReplayTempLayers() {
+  replayTempLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
+  replayTempLayers = [];
 }
 
 function replayCoordsForTrip(trip) {
@@ -689,7 +722,7 @@ function replayCoordsForTrip(trip) {
 
 // 計算某趟的整段範圍與縮放層級（給運鏡用）
 function setupReplayTrip(idx) {
-  replayCoords = replayCoordsForTrip(todayTrips[idx]);
+  replayCoords = replayCoordsForTrip(replaySet[idx]);
   replayProgress = 0;
   const bounds = L.latLngBounds(replayCoords.map(c => [c.lat, c.lng]));
   replayTripCenter = bounds.getCenter();
@@ -781,7 +814,7 @@ function endOfTripTransition() {
   cancelAnimationFrame(replayRAF); replayRAF = null;
   const prevEnd = replayCoords[replayCoords.length - 1];
   replayTripIdx++;
-  if (replayTripIdx >= todayTrips.length) { finishReplay(); return; }
+  if (replayTripIdx >= replaySet.length) { finishReplay(); return; }
   setupReplayTrip(replayTripIdx);
   updateReplayPanel();
   replayPauseTimer = setTimeout(() => {
@@ -838,6 +871,7 @@ function stopReplay() {
 
 function closeReplay() {
   stopReplay();
+  clearReplayTempLayers();
   document.getElementById('replay-panel').classList.remove('show');
 }
 
@@ -845,14 +879,14 @@ function finishReplay() {
   cancelAnimationFrame(replayRAF); replayRAF = null;
   document.getElementById('replay-play-btn').textContent = '▶';
   document.getElementById('replay-trip-label').textContent = '回放完畢';
-  toast('✓ 今日行程回放完畢');
+  toast('✓ 行程回放完畢');
 }
 
 function updateReplayPanel() {
-  if (replayTripIdx >= todayTrips.length) return;
-  const t = todayTrips[replayTripIdx];
+  if (replayTripIdx >= replaySet.length) return;
+  const t = replaySet[replayTripIdx];
   document.getElementById('replay-trip-label').textContent =
-    `第 ${replayTripIdx + 1} 趟 / 共 ${todayTrips.length} 趟`;
+    `第 ${replayTripIdx + 1} 趟 / 共 ${replaySet.length} 趟`;
   document.getElementById('replay-trip-info').textContent =
     `${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　${fmtDist(t.totalDist)}`;
 }
@@ -877,6 +911,8 @@ function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCo
 
 function saveTodayToStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  // 先移除今天這一格的舊資料，刪除／清空才會真的寫回（否則 Object.assign 不會覆蓋空陣列）
+  delete raw[todayKey()];
   // 依每趟「開始時間」的營業日歸檔，跨 7:00 也不會把昨天的行程蓋掉
   const grouped = {};
   for (const t of todayTrips) {
@@ -884,6 +920,8 @@ function saveTodayToStorage() {
     (grouped[key] = grouped[key] || []).push(serializeTrip(t));
   }
   Object.assign(raw, grouped);
+  // 清掉任何空陣列的日期，歷史清單才不會出現空白日
+  Object.keys(raw).forEach(k => { if (!raw[k] || !raw[k].length) delete raw[k]; });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
 }
 

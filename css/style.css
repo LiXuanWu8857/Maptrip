@@ -184,15 +184,15 @@ html, body {
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
 #bottom-buttons {
-  height: 62px;
+  height: 54px;
   display: flex; align-items: center; justify-content: space-around;
-  padding: 0 12px;
+  padding: 0 12px 2px;
 }
 
 .ctrl-btn {
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: none; border: none; color: #202124; cursor: pointer;
-  padding: 8px 14px; border-radius: 12px; font-family: inherit;
+  padding: 5px 14px; border-radius: 12px; font-family: inherit;
   min-width: 80px; transition: background 0.15s;
 }
 .ctrl-btn:active { background: rgba(0,0,0,0.06); }
@@ -269,7 +269,11 @@ html, body {
 
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 
-.history-day { padding: 10px 18px 4px; font-size: 0.75rem; font-weight: 600; color: #1a73e8; letter-spacing: 0.04em; }
+.history-day {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 18px 4px; font-size: 0.75rem; font-weight: 600; color: #1a73e8; letter-spacing: 0.04em;
+}
+.history-day .replay-btn { flex-shrink: 0; }
 
 .toast {
   position: fixed;
