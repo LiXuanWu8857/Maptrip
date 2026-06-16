@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.25';
+const APP_VERSION  = '1.1.26';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -35,6 +35,11 @@ const TILE_LAYERS = {
 };
 let currentTile = 'road';
 
+// Live Activity 插件的安全存取 helper
+function liveAct() {
+  return isNative() ? window.Capacitor?.Plugins?.LiveActivity : null;
+}
+
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0 })
          .setView([25.033, 121.565], 15);
@@ -52,6 +57,16 @@ function initMap() {
   map.on('dragstart', () => {
     if (autoFollow) setAutoFollow(false);
   });
+
+  // 監聽 Live Activity 按鈕點擊（鎖屏的「開始行程」/「結束行程」開 App 後觸發）
+  if (isNative()) {
+    window.Capacitor?.Plugins?.App?.addListener('appUrlOpen', data => {
+      if (data?.url === 'maptrip://start' && !activeTrip) startTrip();
+      if (data?.url === 'maptrip://end'   && activeTrip)  endTrip();
+    });
+    // 顯示閒置狀態的 Live Activity（鎖屏的「開始行程」按鈕）
+    liveAct()?.initActivity();
+  }
 
   loadTodayFromStorage();
   startGpsWatch();
@@ -298,6 +313,7 @@ async function beginRecording() {
   timerTick = setInterval(refreshRecBanner, 1000);
   map.panTo([currentPos.lat, currentPos.lng]);
   toast('行程開始！');
+  liveAct()?.startTrip();
 
   // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
   await requestWakeLock();
@@ -324,6 +340,7 @@ document.addEventListener('visibilitychange', () => {
 function endTrip() {
   if (!activeTrip) return;
   clearInterval(timerTick);  timerTick = null;
+  liveAct()?.endTrip();
   clearTimeout(stoppedTimer); stoppedTimer = null;
   hideArrivalBanner();
 
@@ -505,8 +522,11 @@ function updateTopBar() {
 
 function refreshRecBanner() {
   if (!activeTrip) return;
-  document.getElementById('rec-time').textContent = fmtDur(Date.now() - activeTrip.startTime);
-  document.getElementById('rec-dist').textContent = fmtDist(calcTotalDist(activeTrip.coords));
+  const elapsed = Date.now() - activeTrip.startTime;
+  const dist    = calcTotalDist(activeTrip.coords);
+  document.getElementById('rec-time').textContent = fmtDur(elapsed);
+  document.getElementById('rec-dist').textContent = fmtDist(dist);
+  liveAct()?.updateTrip({ elapsed: Math.floor(elapsed / 1000), distance: Math.round(dist) });
 }
 
 function toggleTripList() {
