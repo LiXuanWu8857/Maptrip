@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.37';
+const APP_VERSION  = '1.1.38';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -43,19 +43,34 @@ function liveAct() {
   return isNative() ? window.Capacitor?.Plugins?.LiveActivity : null;
 }
 
+// WKWebView 安全區位移時，底部列可能被推到可視範圍外（home indicator 區）→ 點不到。
+// 用 visualViewport 量測，若底部超出就用 transform 往上拉回；正常時不動作。
+function ensureBottomBarVisible() {
+  const bar = document.getElementById('bottom-bar');
+  if (!bar) return;
+  bar.style.transform = '';   // 先還原再量測，避免累加
+  const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const overflow = bar.getBoundingClientRect().bottom - vh;
+  if (overflow > 1) bar.style.transform = `translateY(${-Math.ceil(overflow)}px)`;
+}
+
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0 })
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
 
-  // WKWebView 首次載入時容器尺寸常還沒就緒，地圖會變灰/卡住，需重算尺寸。
-  // 多次延遲呼叫 + 監聽旋轉/縮放，避免「第一次開要按重置才能用」。
-  const fixMapSize = () => map.invalidateSize();
-  setTimeout(fixMapSize, 100);
-  setTimeout(fixMapSize, 500);
-  setTimeout(fixMapSize, 1200);
-  window.addEventListener('resize', fixMapSize);
-  window.addEventListener('orientationchange', () => setTimeout(fixMapSize, 250));
+  // WKWebView 首次載入時：容器尺寸常還沒就緒（地圖變灰），且安全區位移會把
+  // 底部按鈕推到畫面外（home indicator 區）→ 點不到。fixLayout 同時處理兩者。
+  const fixLayout = () => { map.invalidateSize(); ensureBottomBarVisible(); };
+  setTimeout(fixLayout, 100);
+  setTimeout(fixLayout, 500);
+  setTimeout(fixLayout, 1200);
+  window.addEventListener('resize', fixLayout);
+  window.addEventListener('orientationchange', () => setTimeout(fixLayout, 250));
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', ensureBottomBarVisible);
+    window.visualViewport.addEventListener('scroll', ensureBottomBarVisible);
+  }
 
   document.getElementById('tile-toggle').addEventListener('click', () => {
     map.removeLayer(TILE_LAYERS[currentTile]);
@@ -92,7 +107,7 @@ function initMap() {
       setInterval(widgetHeartbeat, 30000);
       // 回到前景時：重算地圖尺寸、重新顯示/刷新方塊，並補做鎖屏指令
       window.Capacitor?.Plugins?.App?.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) { fixMapSize(); la.initActivity(); consumePendingWidgetCmd(); }
+        if (isActive) { fixLayout(); la.initActivity(); consumePendingWidgetCmd(); }
       });
     }
   }
