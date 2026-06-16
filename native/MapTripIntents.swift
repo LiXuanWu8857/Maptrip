@@ -8,13 +8,25 @@ extension Notification.Name {
     static let mapTripCommand = Notification.Name("MapTripCommand")
 }
 
-// 開始行程：在 App 背景執行（不開啟 App），因為背景定位讓 JS 持續執行
+// 鎖屏指令的暫存 key：LiveActivityIntent 的 perform() 會在「主 App 程序」內執行，
+// 所以這裡寫進 UserDefaults.standard，App（含 LiveActivityPlugin）讀得到，
+// 且即使 App 被完全關閉、冷啟動也不會遺失。
+let kMapTripPendingCommand = "MapTripPendingCommand"
+
+private func dispatchCommand(_ action: String) {
+    // 1) 暫存指令：保證冷啟動 / JS 還沒就緒時不會漏掉
+    UserDefaults.standard.set(action, forKey: kMapTripPendingCommand)
+    // 2) 即時廣播：App 已在背景執行時，JS 立刻收到
+    NotificationCenter.default.post(name: .mapTripCommand, object: nil,
+                                    userInfo: ["action": action])
+}
+
+// 開始行程：不開啟 App，在背景執行（背景定位讓 App 程序持續存活）
 @available(iOS 17.0, *)
 struct MapTripStartIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "開始行程"
     func perform() async throws -> some IntentResult {
-        NotificationCenter.default.post(name: .mapTripCommand, object: nil,
-                                        userInfo: ["action": "start"])
+        dispatchCommand("start")
         return .result()
     }
 }
@@ -25,8 +37,7 @@ struct MapTripEndIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "結束行程"
     static var openAppWhenRun: Bool = true
     func perform() async throws -> some IntentResult {
-        NotificationCenter.default.post(name: .mapTripCommand, object: nil,
-                                        userInfo: ["action": "end"])
+        dispatchCommand("end")
         return .result()
     }
 }

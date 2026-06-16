@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.34';
+const APP_VERSION  = '1.1.35';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -18,6 +18,8 @@ let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, lastKnownPos = null;
+let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
+let lastHeartbeat = 0;           // 上次替鎖屏方塊「續命」的時間戳
 
 const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
@@ -63,18 +65,26 @@ function initMap() {
   if (isNative()) {
     // 後援：舊版 Link 按鈕會開 App 再觸發
     window.Capacitor?.Plugins?.App?.addListener('appUrlOpen', data => {
-      if (data?.url === 'maptrip://start' && !activeTrip) startTrip();
+      if (data?.url === 'maptrip://start') widgetStart();
       if (data?.url === 'maptrip://end'   && activeTrip)  endTrip();
     });
     const la = liveAct();
     if (la) {
       // App Intent 按鈕：在背景直接收到指令，不跳轉到 App
       la.addListener?.('liveActivityCommand', ({ action }) => {
-        if (action === 'start' && !activeTrip) startTrip();
+        if (action === 'start') widgetStart();
         if (action === 'end'   && activeTrip)  endTrip();
       });
       // 顯示閒置狀態的方塊（鎖屏「開始行程」按鈕）
       la.initActivity();
+      // 開機補做：App 曾被關閉時按下的鎖屏指令，會被原生端暫存，這裡補處理一次
+      consumePendingWidgetCmd();
+      // 前景續命計時器（背景由 onGpsUpdate 觸發）
+      setInterval(widgetHeartbeat, 30000);
+      // 回到前景時：重新顯示/刷新方塊，並補做鎖屏指令
+      window.Capacitor?.Plugins?.App?.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) { la.initActivity(); consumePendingWidgetCmd(); }
+      });
     }
   }
 
@@ -177,6 +187,15 @@ function onGpsUpdate(pos) {
   lastKnownPos = { lat, lng, t: Date.now() };
   currentPos = { lat, lng };
   setGpsBadge(acc <= MIN_ACCURACY_M ? 'on' : 'warn', `📍 ±${Math.round(acc)} m`);
+
+  // 鎖屏在 GPS 定位前就按了開始：現在拿到第一筆定位，補開始行程
+  if (pendingWidgetStart && !activeTrip) {
+    pendingWidgetStart = false;
+    beginRecording();
+  }
+
+  // 背景續命：背景 GPS 回呼會持續觸發，藉此刷新鎖屏方塊的 staleDate
+  if (isNative()) widgetHeartbeat();
 
   if (!myDotMarker) {
     const icon = L.divIcon({
@@ -301,6 +320,34 @@ function startTrip() {
   if (activeTrip)  { toast('行程進行中，請先按「已抵達」'); return; }
   if (!currentPos) { toast('等待 GPS 訊號中...'); return; }
   beginRecording();
+}
+
+// 鎖屏 Widget 觸發的開始：背景被喚醒時 GPS 常還沒定位，
+// 若還沒鎖定就排隊，等下一筆 GPS 進來自動開始（見 onGpsUpdate）。
+function widgetStart() {
+  if (activeTrip) return;
+  if (currentPos) { beginRecording(); }
+  else { pendingWidgetStart = true; toast('定位中，行程即將開始…'); }
+}
+
+// 開機時補做鎖屏暫存指令（原生端用 UserDefaults 暫存，跨 App 重啟仍在）
+function consumePendingWidgetCmd() {
+  const la = liveAct();
+  const p = la?.consumePendingCommand?.();   // 舊版原生外掛沒有此方法時為 undefined
+  if (!p || typeof p.then !== 'function') return;
+  p.then(res => {
+    if (res?.action === 'start') widgetStart();
+    if (res?.action === 'end' && activeTrip) endTrip();
+  }).catch(() => {});
+}
+
+// 替鎖屏方塊「續命」：刷新原生端的 staleDate。App 一被完全關閉就停止呼叫，
+// 方塊過期後自動消失。節流到至少 25 秒一次，避免過於頻繁被 iOS 限流。
+function widgetHeartbeat() {
+  const now = Date.now();
+  if (now - lastHeartbeat < 25000) return;
+  lastHeartbeat = now;
+  liveAct()?.heartbeat?.();
 }
 
 function setAutoFollow(on) {

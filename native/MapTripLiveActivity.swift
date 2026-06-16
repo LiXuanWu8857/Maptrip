@@ -86,7 +86,12 @@ struct MapTripLockScreen: View {
 struct MapTripLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: MapTripAttributes.self) { context in
-            MapTripLockScreen(state: context.state)
+            // 內容過期（App 已完全關閉、無人續命）→ 收成空白，鎖屏方塊自然消失
+            if context.isStale {
+                EmptyView()
+            } else {
+                MapTripLockScreen(state: context.state)
+            }
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {

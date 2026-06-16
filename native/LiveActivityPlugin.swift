@@ -16,11 +16,21 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "initActivity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startTrip",    returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateTrip",   returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "endTrip",      returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "endTrip",      returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "heartbeat",    returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "consumePendingCommand", returnType: CAPPluginReturnPromise)
     ]
+
+    // 方塊過期時間：App 活著時持續往後推；App 一死沒人推，過期後鎖屏畫面收成空白
+    private let staleWindow: TimeInterval = 90
 
     // 用 Any? 儲存，避免 @available 標記汙染整個 class
     private var currentActivity: Any?
+
+    // 最後一次的狀態，供 heartbeat 重新推送（刷新 staleDate 用）
+    private var lastIsRecording = false
+    private var lastElapsed = 0
+    private var lastDistance = 0
 
     // 插件載入時：監聽鎖屏按鈕的指令、以及 App 終止事件
     override public func load() {
@@ -35,6 +45,8 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     // 收到鎖屏 App Intent 指令 → 轉給 JS（JS 因背景定位仍在執行）
     @objc private func onMapTripCommand(_ note: Notification) {
         let action = (note.userInfo?["action"] as? String) ?? ""
+        // 已即時處理，清掉暫存避免下次開機重複觸發
+        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
         DispatchQueue.main.async {
             self.notifyListeners("liveActivityCommand", data: ["action": action])
         }
@@ -83,7 +95,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let elapsed  = call.getInt("elapsed")  ?? 0
         let distance = call.getInt("distance") ?? 0
         Task {
-            await self.pushUpdate(elapsed: elapsed, distance: distance)
+            await self.upsertActivity(isRecording: true, elapsed: elapsed, distance: distance)
             call.resolve()
         }
     }
@@ -97,18 +109,41 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// 由 JS 定期呼叫（前景計時器 + 背景 GPS 回呼）：重推最後狀態以刷新 staleDate，
+    /// 讓方塊在 App 活著時持續續命；App 一死即停止續命，過期後自動消失。
+    @objc func heartbeat(_ call: CAPPluginCall) {
+        guard #available(iOS 16.2, *) else { call.resolve(); return }
+        Task {
+            await self.upsertActivity(isRecording: lastIsRecording,
+                                      elapsed: lastElapsed, distance: lastDistance)
+            call.resolve()
+        }
+    }
+
+    /// 開機補做：App 曾被完全關閉時按下的鎖屏指令，存在 UserDefaults，這裡取出並清除
+    @objc func consumePendingCommand(_ call: CAPPluginCall) {
+        let cmd = UserDefaults.standard.string(forKey: kMapTripPendingCommand) ?? ""
+        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
+        call.resolve(["action": cmd])
+    }
+
     // MARK: - 私有實作
 
-    /// 回傳 nil 表示成功，否則回傳錯誤字串（供診斷用）
+    /// 建立或更新 Live Activity；每次都帶新的 staleDate。回傳 nil 表示成功。
     @available(iOS 16.2, *)
     @discardableResult
     private func upsertActivity(isRecording: Bool, elapsed: Int, distance: Int) async -> String? {
+        lastIsRecording = isRecording
+        lastElapsed = elapsed
+        lastDistance = distance
+
         let state = MapTripAttributes.ContentState(
             isRecording: isRecording,
             elapsedSeconds: elapsed,
             distanceMeters: distance
         )
-        let content = ActivityContent(state: state, staleDate: nil)
+        let content = ActivityContent(state: state,
+                                      staleDate: Date().addingTimeInterval(staleWindow))
 
         if let act = currentActivity as? Activity<MapTripAttributes> {
             await act.update(content)
@@ -130,17 +165,5 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
                 return error.localizedDescription
             }
         }
-    }
-
-    @available(iOS 16.2, *)
-    private func pushUpdate(elapsed: Int, distance: Int) async {
-        guard let act = currentActivity as? Activity<MapTripAttributes> else { return }
-        let state = MapTripAttributes.ContentState(
-            isRecording: true,
-            elapsedSeconds: elapsed,
-            distanceMeters: distance
-        )
-        let content = ActivityContent(state: state, staleDate: nil)
-        await act.update(content)
     }
 }
