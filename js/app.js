@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.26';
+const APP_VERSION  = '1.1.27';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -65,7 +65,14 @@ function initMap() {
       if (data?.url === 'maptrip://end'   && activeTrip)  endTrip();
     });
     // 顯示閒置狀態的 Live Activity（鎖屏的「開始行程」按鈕）
-    liveAct()?.initActivity();
+    const la = window.Capacitor?.Plugins?.LiveActivity;
+    if (!la) {
+      setTimeout(() => toast('⚠ 診斷：LiveActivity 插件未註冊'), 2500);
+    } else {
+      la.initActivity()
+        .then(r => setTimeout(() => toast('診斷：initActivity 回傳 ' + JSON.stringify(r)), 2500))
+        .catch(e => setTimeout(() => toast('診斷：initActivity 錯誤 ' + (e?.message || e)), 2500));
+    }
   }
 
   loadTodayFromStorage();

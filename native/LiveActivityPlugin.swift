@@ -14,10 +14,18 @@ public class LiveActivityPlugin: CAPPlugin {
 
     /// App 啟動時呼叫：顯示閒置狀態的 Live Activity（「開始行程」按鈕）
     @objc func initActivity(_ call: CAPPluginCall) {
-        guard #available(iOS 16.2, *) else { call.resolve(); return }
+        guard #available(iOS 16.2, *) else {
+            call.resolve(["enabled": false, "started": false, "error": "iOS < 16.2"])
+            return
+        }
+        let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
         Task {
-            await self.upsertActivity(isRecording: false, elapsed: 0, distance: 0)
-            call.resolve()
+            let err = await self.upsertActivity(isRecording: false, elapsed: 0, distance: 0)
+            call.resolve([
+                "enabled": enabled,
+                "started": err == nil,
+                "error": err ?? ""
+            ])
         }
     }
 
@@ -52,8 +60,10 @@ public class LiveActivityPlugin: CAPPlugin {
 
     // MARK: - 私有實作
 
+    /// 回傳 nil 表示成功，否則回傳錯誤字串（供診斷用）
     @available(iOS 16.2, *)
-    private func upsertActivity(isRecording: Bool, elapsed: Int, distance: Int) async {
+    @discardableResult
+    private func upsertActivity(isRecording: Bool, elapsed: Int, distance: Int) async -> String? {
         let state = MapTripAttributes.ContentState(
             isRecording: isRecording,
             elapsedSeconds: elapsed,
@@ -63,7 +73,11 @@ public class LiveActivityPlugin: CAPPlugin {
 
         if let act = currentActivity as? Activity<MapTripAttributes> {
             await act.update(content)
+            return nil
         } else {
+            guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+                return "Live Activities 未啟用"
+            }
             do {
                 let act = try Activity.request(
                     attributes: MapTripAttributes(),
@@ -71,8 +85,10 @@ public class LiveActivityPlugin: CAPPlugin {
                     pushType: nil
                 )
                 currentActivity = act
+                return nil
             } catch {
                 print("[LiveActivity] request failed: \(error.localizedDescription)")
+                return error.localizedDescription
             }
         }
     }
