@@ -19,6 +19,38 @@ private func fmtDist(_ m: Int) -> String {
         : "\(m) m"
 }
 
+// MARK: - 互動按鈕（iOS 17+ 用 App Intent 背景執行；舊版退回開 App 的 Link）
+
+@ViewBuilder
+private func startButton(fullWidth: Bool = false) -> some View {
+    let label = Label("開始行程", systemImage: "play.fill")
+        .font(.callout.bold())
+        .padding(.vertical, 8)
+        .padding(.horizontal, fullWidth ? 0 : 14)
+        .frame(maxWidth: fullWidth ? .infinity : nil)
+        .background(Color.blue).foregroundStyle(.white).clipShape(Capsule())
+    if #available(iOS 17.0, *) {
+        Button(intent: MapTripStartIntent()) { label }.buttonStyle(.plain)
+    } else {
+        Link(destination: URL(string: "maptrip://start")!) { label }
+    }
+}
+
+@ViewBuilder
+private func endButton(fullWidth: Bool = false) -> some View {
+    let label = Label("結束行程", systemImage: "checkmark.circle.fill")
+        .font(.callout.bold())
+        .padding(.vertical, 8)
+        .padding(.horizontal, fullWidth ? 0 : 14)
+        .frame(maxWidth: fullWidth ? .infinity : nil)
+        .background(Color.red).foregroundStyle(.white).clipShape(Capsule())
+    if #available(iOS 17.0, *) {
+        Button(intent: MapTripEndIntent()) { label }.buttonStyle(.plain)
+    } else {
+        Link(destination: URL(string: "maptrip://end")!) { label }
+    }
+}
+
 // MARK: - 鎖屏 Banner 畫面
 
 struct MapTripLockScreen: View {
@@ -27,7 +59,6 @@ struct MapTripLockScreen: View {
     var body: some View {
         HStack(spacing: 16) {
             if state.isRecording {
-                // 行程記錄中：左側顯示時間里程，右側顯示結束按鈕
                 VStack(alignment: .leading, spacing: 2) {
                     Label("記錄中", systemImage: "record.circle.fill")
                         .font(.caption).foregroundStyle(.red)
@@ -38,27 +69,11 @@ struct MapTripLockScreen: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Link(destination: URL(string: "maptrip://end")!) {
-                    Label("結束行程", systemImage: "checkmark.circle.fill")
-                        .font(.callout.bold())
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Color.red)
-                        .foregroundStyle(.white)
-                        .clipShape(Capsule())
-                }
+                endButton()
             } else {
-                // 閒置：顯示開始行程按鈕
-                Label("Maptrip", systemImage: "car.fill")
-                    .font(.headline)
+                Label("Maptrip", systemImage: "car.fill").font(.headline)
                 Spacer()
-                Link(destination: URL(string: "maptrip://start")!) {
-                    Label("開始行程", systemImage: "play.fill")
-                        .font(.callout.bold())
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Color.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(Capsule())
-                }
+                startButton()
             }
         }
         .padding()
@@ -74,7 +89,6 @@ struct MapTripLiveActivity: Widget {
             MapTripLockScreen(state: context.state)
         } dynamicIsland: { context in
             DynamicIsland {
-                // 展開狀態（長按動態島）
                 DynamicIslandExpandedRegion(.leading) {
                     if context.state.isRecording {
                         Label(fmtTime(context.state.elapsedSeconds),
@@ -88,45 +102,27 @@ struct MapTripLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     if context.state.isRecording {
-                        Text(fmtDist(context.state.distanceMeters))
-                            .font(.headline)
+                        Text(fmtDist(context.state.distanceMeters)).font(.headline)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     if context.state.isRecording {
-                        Link(destination: URL(string: "maptrip://end")!) {
-                            Label("結束行程", systemImage: "checkmark.circle.fill")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(Color.red)
-                                .foregroundStyle(.white)
-                                .clipShape(Capsule())
-                        }
+                        endButton(fullWidth: true)
                     } else {
-                        Link(destination: URL(string: "maptrip://start")!) {
-                            Label("開始行程", systemImage: "play.fill")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(Color.blue)
-                                .foregroundStyle(.white)
-                                .clipShape(Capsule())
-                        }
+                        startButton(fullWidth: true)
                     }
                 }
             } compactLeading: {
-                // 動態島壓縮左側
                 Image(systemName: context.state.isRecording
                       ? "record.circle.fill" : "car.fill")
                     .foregroundStyle(context.state.isRecording ? .red : .blue)
             } compactTrailing: {
-                // 動態島壓縮右側：記錄中顯示計時器
                 if context.state.isRecording {
                     Text(fmtTime(context.state.elapsedSeconds))
                         .font(.system(.caption2, design: .monospaced))
                         .monospacedDigit()
                 }
             } minimal: {
-                // 動態島最小狀態（和另一個 App 共存時）
                 Image(systemName: context.state.isRecording
                       ? "record.circle.fill" : "car.fill")
                     .foregroundStyle(context.state.isRecording ? .red : .blue)

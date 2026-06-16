@@ -2,6 +2,7 @@
 // Capacitor 6：用 CAPBridgedPlugin 協定自我註冊，不需要 .m 檔
 
 import Foundation
+import UIKit
 import Capacitor
 import ActivityKit
 
@@ -20,6 +21,33 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // 用 Any? 儲存，避免 @available 標記汙染整個 class
     private var currentActivity: Any?
+
+    // 插件載入時：監聽鎖屏按鈕的指令、以及 App 終止事件
+    override public func load() {
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onMapTripCommand(_:)),
+            name: .mapTripCommand, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onWillTerminate),
+            name: UIApplication.willTerminateNotification, object: nil)
+    }
+
+    // 收到鎖屏 App Intent 指令 → 轉給 JS（JS 因背景定位仍在執行）
+    @objc private func onMapTripCommand(_ note: Notification) {
+        let action = (note.userInfo?["action"] as? String) ?? ""
+        DispatchQueue.main.async {
+            self.notifyListeners("liveActivityCommand", data: ["action": action])
+        }
+    }
+
+    // App 被完全關閉時，結束 Live Activity，避免鎖屏方塊殘留
+    @objc private func onWillTerminate() {
+        guard #available(iOS 16.2, *),
+              let act = currentActivity as? Activity<MapTripAttributes> else { return }
+        let sem = DispatchSemaphore(value: 0)
+        Task { await act.end(nil, dismissalPolicy: .immediate); sem.signal() }
+        _ = sem.wait(timeout: .now() + 1.0)
+    }
 
     // MARK: - 公開 Plugin 方法
 

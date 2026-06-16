@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.30';
+const APP_VERSION  = '1.1.31';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -58,20 +58,22 @@ function initMap() {
     if (autoFollow) setAutoFollow(false);
   });
 
-  // 監聽 Live Activity 按鈕點擊（鎖屏的「開始行程」/「結束行程」開 App 後觸發）
+  // Live Activity（鎖屏方塊）整合
   if (isNative()) {
+    // 後援：舊版 Link 按鈕會開 App 再觸發
     window.Capacitor?.Plugins?.App?.addListener('appUrlOpen', data => {
       if (data?.url === 'maptrip://start' && !activeTrip) startTrip();
-      if (data?.url === 'maptrip://end'   && activeTrip)  endTrip();
+      if (data?.url === 'maptrip://end'   && activeTrip)  endTrip(true);
     });
-    // 顯示閒置狀態的 Live Activity（鎖屏的「開始行程」按鈕）
-    const la = window.Capacitor?.Plugins?.LiveActivity;
-    if (!la) {
-      setTimeout(() => toast('⚠ 診斷：LiveActivity 插件未註冊'), 2500);
-    } else {
-      la.initActivity()
-        .then(r => setTimeout(() => toast('診斷：initActivity 回傳 ' + JSON.stringify(r)), 2500))
-        .catch(e => setTimeout(() => toast('診斷：initActivity 錯誤 ' + (e?.message || e)), 2500));
+    const la = liveAct();
+    if (la) {
+      // App Intent 按鈕：在背景直接收到指令，不跳轉到 App
+      la.addListener?.('liveActivityCommand', ({ action }) => {
+        if (action === 'start' && !activeTrip) startTrip();
+        if (action === 'end'   && activeTrip)  endTrip(true);
+      });
+      // 顯示閒置狀態的方塊（鎖屏「開始行程」按鈕）
+      la.initActivity();
     }
   }
 
@@ -344,7 +346,8 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function endTrip() {
+// silent=true：從鎖屏 Live Activity 結束，不跳金額對話框（金額之後可在清單補填）
+function endTrip(silent = false) {
   if (!activeTrip) return;
   clearInterval(timerTick);  timerTick = null;
   liveAct()?.endTrip();
@@ -367,7 +370,15 @@ function endTrip() {
   // 釋放螢幕常亮鎖
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 
-  showFareDialog(trip);
+  if (silent) { saveTripBackground(trip); }
+  else        { showFareDialog(trip); }
+}
+
+// 背景結束：直接貼合道路並存檔（金額 0），不需 UI
+async function saveTripBackground(trip) {
+  trip.roadCoords = await snapToRoads(trip.coords);
+  saveTripFinal(trip);
+  toast('✓ 行程已結束，金額可稍後在清單補填');
 }
 
 function showFareDialog(trip) {
@@ -747,9 +758,15 @@ function startReplay() {
     zIndexOffset: 2000
   }).addTo(map);
 
-  map.setView([first.lat, first.lng], replayCloseZoom, { animate: false });
+  frameReplayTrip();
   updateReplayPanel();
   startReplayRAF();
+}
+
+// 將整段路線框進畫面：每趟只設定一次相機，避免逐影格縮放造成閃爍
+function frameReplayTrip() {
+  const bounds = L.latLngBounds(replayCoords.map(c => [c.lat, c.lng]));
+  map.fitBounds(bounds, { animate: false, paddingTopLeft: [30, 70], paddingBottomRight: [30, 220] });
 }
 
 function startReplayRAF() {
@@ -779,6 +796,7 @@ function replayFrame(ts) {
   replayRAF = requestAnimationFrame(replayFrame);
 }
 
+// 只移動小點，相機固定（每趟框一次）→ 完全不閃爍
 function renderReplayFrame() {
   const lastIdx = replayCoords.length - 1;
   const i = Math.min(Math.floor(replayProgress), lastIdx);
@@ -788,25 +806,6 @@ function renderReplayFrame() {
   const lat = a.lat + (b.lat - a.lat) * frac;
   const lng = a.lng + (b.lng - a.lng) * frac;
   replayDot.setLatLng([lat, lng]);
-
-  // 運鏡：前 30% 由近拉遠至可見整段，中段維持，後 30% 拉回跟隨
-  const p = lastIdx > 0 ? replayProgress / lastIdx : 1;
-  let zoom, cLat, cLng;
-  if (p < 0.3) {
-    const f = p / 0.3;
-    zoom = replayCloseZoom + (replayFitZoom - replayCloseZoom) * f;
-    cLat = lat + (replayTripCenter.lat - lat) * f;
-    cLng = lng + (replayTripCenter.lng - lng) * f;
-  } else if (p > 0.7) {
-    const f = (p - 0.7) / 0.3;
-    zoom = replayFitZoom + (replayCloseZoom - replayFitZoom) * f;
-    cLat = replayTripCenter.lat + (lat - replayTripCenter.lat) * f;
-    cLng = replayTripCenter.lng + (lng - replayTripCenter.lng) * f;
-  } else {
-    zoom = replayFitZoom;
-    cLat = replayTripCenter.lat; cLng = replayTripCenter.lng;
-  }
-  map.setView([cLat, cLng], Math.round(zoom * 100) / 100, { animate: false });
 }
 
 // 一趟結束：停留 2 秒，再沿紅線快速滑到下一趟起點
@@ -817,9 +816,14 @@ function endOfTripTransition() {
   if (replayTripIdx >= replaySet.length) { finishReplay(); return; }
   setupReplayTrip(replayTripIdx);
   updateReplayPanel();
+  const nextStart = replayCoords[0];
+  // 把「前一趟終點 → 下一趟起點」框進畫面，glide 期間相機不動 → 不閃
+  map.fitBounds(L.latLngBounds([[prevEnd.lat, prevEnd.lng], [nextStart.lat, nextStart.lng]]),
+    { animate: false, paddingTopLeft: [40, 80], paddingBottomRight: [40, 220] });
   replayPauseTimer = setTimeout(() => {
-    glideGap(prevEnd, replayCoords[0], () => {
+    glideGap(prevEnd, nextStart, () => {
       replayProgress = 0;
+      frameReplayTrip();
       startReplayRAF();
     });
   }, 2000);
@@ -838,15 +842,12 @@ function glideGap(from, to, onDone) {
     gi += dt * speed;
     if (gi >= lastIdx) {
       replayDot.setLatLng(pts[lastIdx]);
-      map.setView(pts[lastIdx], replayCloseZoom, { animate: false });
       onDone();
       return;
     }
     const idx = Math.floor(gi), frac = gi - idx;
     const a = pts[idx], b = pts[idx + 1];
-    const ll = [a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac];
-    replayDot.setLatLng(ll);
-    map.setView(ll, replayCloseZoom, { animate: false });
+    replayDot.setLatLng([a[0] + (b[0] - a[0]) * frac, a[1] + (b[1] - a[1]) * frac]);
     replayRAF = requestAnimationFrame(step);
   };
   replayRAF = requestAnimationFrame(step);
