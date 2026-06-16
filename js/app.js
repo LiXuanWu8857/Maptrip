@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.38';
+const APP_VERSION  = '1.1.39';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1119,6 +1119,41 @@ function checkForUpdate() {
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
+// ===== 診斷框（暫時）：把版本與實際版面數值印在畫面上，方便截圖定位問題 =====
+function showDiag() {
+  let box = document.getElementById('diag-box');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'diag-box';
+    box.style.cssText = 'position:fixed;top:50%;left:8px;right:8px;transform:translateY(-50%);' +
+      'z-index:99999;background:rgba(0,0,0,0.82);color:#0f0;font:12px/1.5 monospace;' +
+      'padding:10px;border-radius:8px;pointer-events:none;white-space:pre-wrap;';
+    document.body.appendChild(box);
+  }
+  const cs = getComputedStyle(document.documentElement);
+  const tb = document.getElementById('top-bar')?.getBoundingClientRect();
+  const bb = document.getElementById('bottom-bar')?.getBoundingClientRect();
+  const vv = window.visualViewport;
+  const safeTop = cs.getPropertyValue('--sat') || 'n/a';
+  box.textContent =
+    `APP_VERSION = ${APP_VERSION}\n` +
+    `native=${isNative()}\n` +
+    `innerH=${window.innerHeight}  screenH=${screen.height}\n` +
+    `visualVP h=${vv ? Math.round(vv.height) : 'n/a'} top=${vv ? Math.round(vv.offsetTop) : 'n/a'}\n` +
+    `safe-top(env)=${getEnvInset('top')}  safe-bot(env)=${getEnvInset('bottom')}\n` +
+    `top-bar  : top=${tb ? Math.round(tb.top) : '?'} bottom=${tb ? Math.round(tb.bottom) : '?'}\n` +
+    `bottom-bar: top=${bb ? Math.round(bb.top) : '?'} bottom=${bb ? Math.round(bb.bottom) : '?'}\n` +
+    `(bottom-bar 應該 <= innerH，超出代表被推出畫面)`;
+}
+function getEnvInset(side) {
+  const probe = document.createElement('div');
+  probe.style.cssText = `position:fixed;${side}:0;height:env(safe-area-inset-${side});width:0;`;
+  document.body.appendChild(probe);
+  const h = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Math.round(h);
+}
+
 function boot() {
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
@@ -1127,6 +1162,9 @@ function boot() {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
+  // 診斷：載入後與 1.5 秒各印一次（觀察首次 vs 稍後的差異）
+  setTimeout(showDiag, 200);
+  setTimeout(showDiag, 1500);
 
   // iOS WKWebView：同時綁定 input + change，確保拖曳和放手都能更新速度
   const slider = document.getElementById('speed-slider');
