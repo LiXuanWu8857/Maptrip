@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.31';
+const APP_VERSION  = '1.1.32';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -63,14 +63,14 @@ function initMap() {
     // 後援：舊版 Link 按鈕會開 App 再觸發
     window.Capacitor?.Plugins?.App?.addListener('appUrlOpen', data => {
       if (data?.url === 'maptrip://start' && !activeTrip) startTrip();
-      if (data?.url === 'maptrip://end'   && activeTrip)  endTrip(true);
+      if (data?.url === 'maptrip://end'   && activeTrip)  endTrip();
     });
     const la = liveAct();
     if (la) {
       // App Intent 按鈕：在背景直接收到指令，不跳轉到 App
       la.addListener?.('liveActivityCommand', ({ action }) => {
         if (action === 'start' && !activeTrip) startTrip();
-        if (action === 'end'   && activeTrip)  endTrip(true);
+        if (action === 'end'   && activeTrip)  endTrip();
       });
       // 顯示閒置狀態的方塊（鎖屏「開始行程」按鈕）
       la.initActivity();
@@ -346,8 +346,7 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// silent=true：從鎖屏 Live Activity 結束，不跳金額對話框（金額之後可在清單補填）
-function endTrip(silent = false) {
+function endTrip() {
   if (!activeTrip) return;
   clearInterval(timerTick);  timerTick = null;
   liveAct()?.endTrip();
@@ -370,8 +369,7 @@ function endTrip(silent = false) {
   // 釋放螢幕常亮鎖
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 
-  if (silent) { saveTripBackground(trip); }
-  else        { showFareDialog(trip); }
+  showFareDialog(trip);
 }
 
 // 背景結束：直接貼合道路並存檔（金額 0），不需 UI
@@ -796,7 +794,6 @@ function replayFrame(ts) {
   replayRAF = requestAnimationFrame(replayFrame);
 }
 
-// 只移動小點，相機固定（每趟框一次）→ 完全不閃爍
 function renderReplayFrame() {
   const lastIdx = replayCoords.length - 1;
   const i = Math.min(Math.floor(replayProgress), lastIdx);
@@ -806,6 +803,7 @@ function renderReplayFrame() {
   const lat = a.lat + (b.lat - a.lat) * frac;
   const lng = a.lng + (b.lng - a.lng) * frac;
   replayDot.setLatLng([lat, lng]);
+  map.panTo([lat, lng], { animate: false });
 }
 
 // 一趟結束：停留 2 秒，再沿紅線快速滑到下一趟起點
@@ -1009,4 +1007,11 @@ window.addEventListener('load', () => {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
+
+  // iOS WKWebView：同時綁定 input + change，確保拖曳和放手都能更新速度
+  const slider = document.getElementById('speed-slider');
+  if (slider) {
+    slider.addEventListener('input',  e => onSpeedSlider(e.target.value));
+    slider.addEventListener('change', e => onSpeedSlider(e.target.value));
+  }
 });

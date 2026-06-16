@@ -8,8 +8,7 @@ extension Notification.Name {
     static let mapTripCommand = Notification.Name("MapTripCommand")
 }
 
-// LiveActivityIntent：按下鎖屏按鈕時在「App 程序」內背景執行，不會跳轉開 App。
-// 因為 App 啟動後有背景定位讓程序持續存活，這裡發出的通知能被執行中的 JS 收到。
+// 開始行程：在 App 背景執行（不開啟 App），因為背景定位讓 JS 持續執行
 @available(iOS 17.0, *)
 struct MapTripStartIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "開始行程"
@@ -20,9 +19,11 @@ struct MapTripStartIntent: LiveActivityIntent {
     }
 }
 
+// 結束行程：先把 App 帶到前景，再廣播指令，讓使用者能輸入金額
 @available(iOS 17.0, *)
 struct MapTripEndIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "結束行程"
+    static var openAppWhenRun: Bool = true
     func perform() async throws -> some IntentResult {
         NotificationCenter.default.post(name: .mapTripCommand, object: nil,
                                         userInfo: ["action": "end"])
