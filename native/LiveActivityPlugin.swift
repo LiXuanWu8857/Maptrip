@@ -1,11 +1,22 @@
 // ⚠️ 此檔案只加入「主 App target（App）」，不要加入 Widget Extension
+// Capacitor 6：用 CAPBridgedPlugin 協定自我註冊，不需要 .m 檔
 
 import Foundation
 import Capacitor
 import ActivityKit
 
 @objc(LiveActivityPlugin)
-public class LiveActivityPlugin: CAPPlugin {
+public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
+
+    // CAPBridgedPlugin 必要屬性：向 Capacitor 註冊外掛名稱與方法
+    public let identifier = "LiveActivityPlugin"
+    public let jsName = "LiveActivity"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "initActivity", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startTrip",    returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateTrip",   returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "endTrip",      returnType: CAPPluginReturnPromise)
+    ]
 
     // 用 Any? 儲存，避免 @available 標記汙染整個 class
     private var currentActivity: Any?
