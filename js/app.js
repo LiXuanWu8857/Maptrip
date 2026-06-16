@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.33';
+const APP_VERSION  = '1.1.34';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -13,6 +13,7 @@ const AUTO_START_DELAY_MS  = 4000;  // 行駛滿 4 秒才跳提示
 let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
+let soloLayers = [];
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let activeSnapPending = false;
@@ -571,7 +572,7 @@ function renderTripSheet() {
     ${totalFare ? `<span class="day-fare">NT$ ${totalFare.toLocaleString()}</span>` : ''}
   </div>`;
   body.innerHTML = summary + todayTrips.map((t, i) => `
-    <div class="trip-row" onclick="focusTrip(${i}); closeSheet()">
+    <div class="trip-row" onclick="showSoloTrip(todayTrips[${i}],'第${i+1}趟'); closeSheet()">
       <div class="trip-num">${i + 1}</div>
       <div class="trip-meta">
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
@@ -623,11 +624,47 @@ function editFare(e, idx) {
   skipBtn.onclick = close;
 }
 
-function focusTrip(idx) {
-  const trip = todayTrips[idx];
+function showSoloTrip(trip, label) {
   if (!trip?.coords?.length) return;
-  const bounds = L.latLngBounds(trip.coords.map(c => [c.lat, c.lng]));
-  map.fitBounds(bounds, { paddingTopLeft: [16, 60], paddingBottomRight: [16, 90] });
+  exitSoloMode();
+  clearReplayTempLayers();
+
+  // 淡化今日所有路線 layer
+  allMapLayers.forEach(l => {
+    if (l.setStyle) l.setStyle({ opacity: 0.12 });
+    else if (l.setOpacity) l.setOpacity(0.15);
+  });
+
+  // 畫選中行程的路線（較粗、較亮）
+  const coords = (trip.roadCoords || trip.coords).map(c => [c.lat, c.lng]);
+  soloLayers.push(
+    L.polyline(coords, { color: '#1A73E8', weight: 7, opacity: 1 }).addTo(map),
+    L.marker(coords[0],     { icon: makeDotIcon('#34A853') }).addTo(map),
+    L.marker(coords.at(-1), { icon: makeDotIcon('#EA4335') }).addTo(map)
+  );
+  map.fitBounds(L.latLngBounds(coords), { paddingTopLeft: [16, 60], paddingBottomRight: [16, 110] });
+
+  document.getElementById('solo-info').textContent =
+    `${label}　${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
+  document.getElementById('solo-bar').style.display = 'flex';
+}
+
+function showHistoryTrip(day, idx) {
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const trip = raw[day]?.[idx];
+  if (!trip) return;
+  closeHistory();
+  showSoloTrip(trip, `${day} 第${idx + 1}趟`);
+}
+
+function exitSoloMode() {
+  soloLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
+  soloLayers = [];
+  allMapLayers.forEach(l => {
+    if (l.setStyle) l.setStyle({ opacity: 0.85 });
+    else if (l.setOpacity) l.setOpacity(1);
+  });
+  document.getElementById('solo-bar').style.display = 'none';
 }
 
 function deleteTodayTrip(e, idx) {
@@ -643,6 +680,7 @@ function deleteTodayTrip(e, idx) {
 function confirmClearDay() {
   if (!todayTrips.length) { toast('今日無行程可清除'); return; }
   if (!confirm(`確定清除今日全部 ${todayTrips.length} 趟行程？`)) return;
+  exitSoloMode();
   allMapLayers.forEach(l => map.removeLayer(l));
   allMapLayers = []; todayTrips = [];
   saveTodayToStorage(); updateTopBar(); closeSheet();
@@ -664,12 +702,13 @@ function renderHistorySheet() {
     const fareStr = totalFare ? `　NT$ ${totalFare.toLocaleString()}` : '';
     const isOpen = dayIdx === 0;
     const rows = trips.map((t, i) => `
-      <div class="trip-row">
+      <div class="trip-row" onclick="showHistoryTrip('${day}',${i})">
         <div class="trip-num">${i + 1}</div>
         <div class="trip-meta">
           <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
           <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}</div>
         </div>
+        <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
       </div>`).join('');
     return `<div class="history-day" onclick="toggleDay('${day}')">
         <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
