@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.39';</script>
+<script>window.INDEX_VERSION = '1.1.40';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -21,7 +21,8 @@
   position: fixed !important;
   bottom: 0 !important;
   left: 0 !important; right: 0 !important;
-  padding-bottom: 0 !important;
+  /* 加上 home indicator 安全區下邊距，按鈕才不會壓在白線手勢區、點不到 */
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   background: rgba(255,255,255,0.95) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
@@ -90,10 +91,12 @@
 <!-- Tile Toggle -->
 <button id="tile-toggle">🛰 衛星</button>
 
-<!-- Solo Trip Bar -->
+<!-- Solo Trip Bar：左右滑或按箭頭切換趟次 -->
 <div id="solo-bar" style="display:none">
+  <button id="solo-prev" class="solo-arrow" onclick="soloPrev()">‹</button>
   <span id="solo-info"></span>
-  <button onclick="exitSoloMode()">✕ 全部</button>
+  <button id="solo-next" class="solo-arrow" onclick="soloNext()">›</button>
+  <button id="solo-exit" onclick="exitSoloMode()">✕ 全部</button>
 </div>
 
 <!-- Recording Banner -->

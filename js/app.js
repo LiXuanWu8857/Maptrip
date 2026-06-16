@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.39';
+const APP_VERSION  = '1.1.40';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -14,6 +14,7 @@ let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 let soloLayers = [];
+let soloSet = [], soloIdx = 0, soloLabelFn = null;  // 單趟顯示：可左右切換的趟次集合
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let activeSnapPending = false;
@@ -84,6 +85,9 @@ function initMap() {
   map.on('dragstart', () => {
     if (autoFollow) setAutoFollow(false);
   });
+
+  // 單趟顯示列：左右滑切換趟次（往左滑＝下一趟，往右滑＝上一趟）
+  setupSoloSwipe();
 
   // Live Activity（鎖屏方塊）整合
   if (isNative()) {
@@ -643,7 +647,7 @@ function renderTripSheet() {
     ${totalFare ? `<span class="day-fare">NT$ ${totalFare.toLocaleString()}</span>` : ''}
   </div>`;
   body.innerHTML = summary + todayTrips.map((t, i) => `
-    <div class="trip-row" onclick="showSoloTrip(todayTrips[${i}],'第${i+1}趟'); closeSheet()">
+    <div class="trip-row" onclick="showSoloTripFromToday(${i}); closeSheet()">
       <div class="trip-num">${i + 1}</div>
       <div class="trip-meta">
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
@@ -695,12 +699,40 @@ function editFare(e, idx) {
   skipBtn.onclick = close;
 }
 
-function showSoloTrip(trip, label) {
+// 從今日清單點某趟 → 進入可左右切換的單趟顯示
+function showSoloTripFromToday(idx) {
+  openSoloTrip(todayTrips, idx, i => `第 ${i + 1} 趟`);
+}
+
+// 從歷史某日點某趟 → 進入可左右切換的單趟顯示（限定在那一天的趟次內切換）
+function showHistoryTrip(day, idx) {
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  if (!raw[day]?.length) return;
+  closeHistory();
+  openSoloTrip(raw[day], idx, i => `${day} 第 ${i + 1} 趟`);
+}
+
+// 設定要顯示的趟次集合與起始索引，然後渲染
+function openSoloTrip(set, idx, labelFn) {
+  if (!set?.length) return;
+  soloSet = set;
+  soloIdx = Math.max(0, Math.min(idx, set.length - 1));
+  soloLabelFn = labelFn;
+  renderSoloTrip();
+  document.getElementById('solo-bar').style.display = 'flex';
+}
+
+// 渲染目前 soloIdx 指向的那一趟（清掉前一趟的圖層、淡化其他路線）
+function renderSoloTrip() {
+  const trip = soloSet[soloIdx];
   if (!trip?.coords?.length) return;
-  exitSoloMode();
+
+  // 清掉上一趟的單趟圖層
+  soloLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
+  soloLayers = [];
   clearReplayTempLayers();
 
-  // 淡化今日所有路線 layer
+  // 淡化今日所有路線 layer（只在今日清單情境下有 allMapLayers）
   allMapLayers.forEach(l => {
     if (l.setStyle) l.setStyle({ opacity: 0.12 });
     else if (l.setOpacity) l.setOpacity(0.15);
@@ -715,22 +747,45 @@ function showSoloTrip(trip, label) {
   );
   map.fitBounds(L.latLngBounds(coords), { paddingTopLeft: [16, 60], paddingBottomRight: [16, 110] });
 
+  const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
   document.getElementById('solo-info').textContent =
     `${label}　${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
-  document.getElementById('solo-bar').style.display = 'flex';
+
+  // 首尾趟把箭頭變淡（沒有上一趟/下一趟）
+  const prevBtn = document.getElementById('solo-prev');
+  const nextBtn = document.getElementById('solo-next');
+  if (prevBtn) prevBtn.style.opacity = soloIdx > 0 ? '1' : '0.25';
+  if (nextBtn) nextBtn.style.opacity = soloIdx < soloSet.length - 1 ? '1' : '0.25';
 }
 
-function showHistoryTrip(day, idx) {
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-  const trip = raw[day]?.[idx];
-  if (!trip) return;
-  closeHistory();
-  showSoloTrip(trip, `${day} 第${idx + 1}趟`);
+// 上一趟 / 下一趟（左右滑或按箭頭）
+function soloPrev() { if (soloIdx > 0)                  { soloIdx--; renderSoloTrip(); } }
+function soloNext() { if (soloIdx < soloSet.length - 1) { soloIdx++; renderSoloTrip(); } }
+
+// 在單趟資訊列上偵測水平滑動，切換趟次
+function setupSoloSwipe() {
+  const bar = document.getElementById('solo-bar');
+  if (!bar) return;
+  let x0 = null, y0 = null;
+  bar.addEventListener('touchstart', e => {
+    const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY;
+  }, { passive: true });
+  bar.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    x0 = y0 = null;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) soloNext();   // 往左滑 → 下一趟
+      else        soloPrev();   // 往右滑 → 上一趟
+    }
+  }, { passive: true });
 }
 
 function exitSoloMode() {
   soloLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
   soloLayers = [];
+  soloSet = []; soloIdx = 0; soloLabelFn = null;
   allMapLayers.forEach(l => {
     if (l.setStyle) l.setStyle({ opacity: 0.85 });
     else if (l.setOpacity) l.setOpacity(1);
@@ -1162,9 +1217,9 @@ function boot() {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
-  // 診斷：載入後與 1.5 秒各印一次（觀察首次 vs 稍後的差異）
+  // 診斷：持續更新，方便任何時刻截圖都反映當下數值
   setTimeout(showDiag, 200);
-  setTimeout(showDiag, 1500);
+  setInterval(showDiag, 700);
 
   // iOS WKWebView：同時綁定 input + change，確保拖曳和放手都能更新速度
   const slider = document.getElementById('speed-slider');

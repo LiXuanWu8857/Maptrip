@@ -153,13 +153,17 @@ html, body {
   box-shadow: 0 4px 16px rgba(0,0,0,0.25);
   animation: slideUp 0.25s ease;
 }
-#solo-info { flex: 1; line-height: 1.4; }
+#solo-info { flex: 1; line-height: 1.4; text-align: center; }
 #solo-bar button {
   background: rgba(255,255,255,0.15); border: none; color: #fff;
   border-radius: 8px; padding: 7px 12px; font-size: 0.82rem; font-weight: 600;
   font-family: inherit; cursor: pointer; white-space: nowrap; flex-shrink: 0;
 }
 #solo-bar button:active { background: rgba(255,255,255,0.25); }
+.solo-arrow {
+  font-size: 1.3rem !important; line-height: 1; padding: 4px 10px !important;
+  font-weight: 400 !important;
+}
 
 #rec-banner {
   position: fixed; bottom: calc(88px + env(safe-area-inset-bottom, 0px)); left: 12px; right: 12px;
@@ -196,7 +200,7 @@ html, body {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: rgba(255,255,255,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid rgba(0,0,0,0.08);
-  padding-bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   z-index: 20;
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
