@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.36';
+const APP_VERSION  = '1.1.37';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1104,7 +1104,7 @@ function checkForUpdate() {
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
-window.addEventListener('load', () => {
+function boot() {
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
   if ('serviceWorker' in navigator) {
@@ -1119,4 +1119,12 @@ window.addEventListener('load', () => {
     slider.addEventListener('input',  e => onSpeedSlider(e.target.value));
     slider.addEventListener('change', e => onSpeedSlider(e.target.value));
   }
-});
+}
+
+// app.js 由 index.html 的 loader 動態載入，可能在 window load 之後才進來，
+// 那時 'load' 事件已過、不會再觸發，因此要依 readyState 判斷是否立即啟動。
+if (document.readyState === 'complete') {
+  boot();
+} else {
+  window.addEventListener('load', boot);
+}
