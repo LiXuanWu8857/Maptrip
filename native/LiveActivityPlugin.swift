@@ -163,26 +163,44 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// 開機補做：App 曾被完全關閉時按下的鎖屏指令，存在 UserDefaults，這裡取出並清除。
-    /// 只認 2 分鐘內的指令，避免卡住的舊指令在很久後正常開 App 時誤觸發行程。
+    /// 開機/回前景補做：讀「標準」與「App Group」兩個 store，回報每一個的內容，
+    /// 一次測出 perform() 有沒有跑、跑在哪個 process、哪個 store 真的同步得到。
     @objc func consumePendingCommand(_ call: CAPPluginCall) {
-        // 讀主程序的 UserDefaults.standard：AppDelegate 收到 maptrip:// 後寫在這裡。
-        // 不用 App Group suite —— 免費帳號那個 store 與主程序不同步（之前 raw="" 的主因）。
-        let defaults = UserDefaults.standard
-        let cmd = defaults.string(forKey: kMapTripPendingCommand) ?? ""
-        let ts = defaults.double(forKey: kMapTripPendingCommandTime)
         let now = Date().timeIntervalSince1970
-        let fresh = ts > 0 && (now - ts) < 120
-        // 只有「真的拿到新鮮指令」時才清除，避免時序競賽下把還沒被讀到的指令清掉
-        if fresh && !cmd.isEmpty {
-            defaults.removeObject(forKey: kMapTripPendingCommand)
-            defaults.removeObject(forKey: kMapTripPendingCommandTime)
+        let std = UserDefaults.standard
+        let grp = UserDefaults(suiteName: kAppGroup)
+
+        let stdCmd  = std.string(forKey: kMapTripPendingCommand) ?? ""
+        let stdTs   = std.double(forKey: kMapTripPendingCommandTime)
+        let stdProc = std.string(forKey: kMapTripPerformProcess) ?? ""
+
+        let grpCmd  = grp?.string(forKey: kMapTripPendingCommand) ?? ""
+        let grpTs   = grp?.double(forKey: kMapTripPendingCommandTime) ?? 0
+        let grpProc = grp?.string(forKey: kMapTripPerformProcess) ?? ""
+
+        // 選一個「新鮮（2 分鐘內）且非空」的指令來執行，App Group 優先
+        var action = ""
+        if grpTs > 0 && (now - grpTs) < 120 && !grpCmd.isEmpty {
+            action = grpCmd
+            grp?.removeObject(forKey: kMapTripPendingCommand)
+            grp?.removeObject(forKey: kMapTripPendingCommandTime)
+        } else if stdTs > 0 && (now - stdTs) < 120 && !stdCmd.isEmpty {
+            action = stdCmd
+            std.removeObject(forKey: kMapTripPendingCommand)
+            std.removeObject(forKey: kMapTripPendingCommandTime)
         }
-        // raw / age 為診斷用：raw 空＝根本沒寫入（跨行程問題）；age 很大＝被新鮮度擋掉
+
         call.resolve([
-            "action": fresh ? cmd : "",
-            "raw": cmd,
-            "age": ts > 0 ? Int(now - ts) : -1
+            "action": action,
+            // 完整診斷：哪個 store 有資料、perform() 跑在哪個 process、主程序又是哪個
+            "stdRaw":  stdCmd,
+            "stdAge":  stdTs > 0 ? Int(now - stdTs) : -1,
+            "stdProc": stdProc,
+            "grpRaw":  grpCmd,
+            "grpAge":  grpTs > 0 ? Int(now - grpTs) : -1,
+            "grpProc": grpProc,
+            "grpNil":  grp == nil,
+            "appProc": ProcessInfo.processInfo.processName
         ])
     }
 

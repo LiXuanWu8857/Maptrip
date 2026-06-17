@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.46';
+const APP_VERSION  = '1.1.47';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -385,9 +385,12 @@ function consumePendingWidgetCmd() {
   const p = la?.consumePendingCommand?.();
   if (!p || typeof p.then !== 'function') { dbg('consume: no method'); return Promise.resolve(false); }
   return p.then(res => {
-    // raw 空＝原生端 UserDefaults 根本沒這筆（跨行程問題）；age 很大＝被新鮮度擋掉
-    dbg('consume action=' + JSON.stringify(res?.action)
-        + ' raw=' + JSON.stringify(res?.raw) + ' age=' + res?.age);
+    // 完整診斷：std=標準 UserDefaults，grp=App Group；proc=perform() 跑在哪個 process
+    dbg('consume act=' + JSON.stringify(res?.action)
+        + ' | std raw=' + JSON.stringify(res?.stdRaw) + ' age=' + res?.stdAge + ' proc=' + res?.stdProc
+        + ' | grp raw=' + JSON.stringify(res?.grpRaw) + ' age=' + res?.grpAge + ' proc=' + res?.grpProc
+        + ' grpNil=' + res?.grpNil
+        + ' | app=' + res?.appProc);
     if (res?.action === 'start') { widgetStart(); return true; }
     if (res?.action === 'end' && activeTrip) { endTrip(); return true; }
     return false;

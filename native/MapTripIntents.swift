@@ -8,27 +8,43 @@ extension Notification.Name {
     static let mapTripUrl     = Notification.Name("MapTripUrl")
 }
 
+let kAppGroup                  = "group.com.maptrip.app"
 let kMapTripPendingCommand     = "MapTripPendingCommand"
 let kMapTripPendingCommandTime = "MapTripPendingCommandTime"
+let kMapTripPerformProcess     = "MapTripPerformProcess"   // 診斷：perform() 跑在哪個 process
 
-// Darwin 跨行程通知名稱（不需要 App Group；系統全域，widget extension → main app 直達）
 private let kDarwinStart = "com.maptrip.widget.start"
 private let kDarwinEnd   = "com.maptrip.widget.end"
 
+// 診斷版：perform() 同時往「四個地方」寫/送，App 啟動時逐一回報哪個有效。
 private func dispatchCommand(_ action: String) {
-    // 1) Darwin 跨行程通知（主路徑：無論 perform() 在哪個 process 執行都能送到 main app）
+    let now  = Date().timeIntervalSince1970
+    let proc = ProcessInfo.processInfo.processName   // 判斷 perform() 在 widget 還是 app 程序
+
+    // 1) 標準 UserDefaults（只有 perform() 在「主 App 程序」執行時，主程序才讀得到）
+    let std = UserDefaults.standard
+    std.set(action, forKey: kMapTripPendingCommand)
+    std.set(now,    forKey: kMapTripPendingCommandTime)
+    std.set(proc,   forKey: kMapTripPerformProcess)
+
+    // 2) App Group 共享容器（若免費帳號真的能用，主程序就讀得到 —— 這次要驗證清楚）
+    if let grp = UserDefaults(suiteName: kAppGroup) {
+        grp.set(action, forKey: kMapTripPendingCommand)
+        grp.set(now,    forKey: kMapTripPendingCommandTime)
+        grp.set(proc,   forKey: kMapTripPerformProcess)
+    }
+
+    // 3) Darwin 跨行程通知（App 還活著時即時送達）
     let darwinName = (action == "end") ? kDarwinEnd : kDarwinStart
     CFNotificationCenterPostNotification(
         CFNotificationCenterGetDarwinNotifyCenter(),
         CFNotificationName(darwinName as CFString),
         nil, nil, true
     )
-    // 2) 同行程廣播（若 perform() 恰好在 main app process 執行也能即時收到）
+
+    // 4) 同行程廣播（perform() 恰在主程序時即時送達）
     NotificationCenter.default.post(name: .mapTripCommand, object: nil,
                                     userInfo: ["action": action])
-    // 3) UserDefaults 備份（冷啟動補做；僅在 perform() 於主程序執行時有效）
-    UserDefaults.standard.set(action, forKey: kMapTripPendingCommand)
-    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: kMapTripPendingCommandTime)
 }
 
 @available(iOS 17.0, *)
