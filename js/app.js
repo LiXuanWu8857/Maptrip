@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.55';
+const APP_VERSION  = '1.1.56';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -768,14 +768,31 @@ function showHistoryTrip(day, idx) {
     `${dayKeyToLabel(day)}　第 ${i + 1} 趟 / 共 ${raw[day].length} 趟`);
 }
 
+// 動態量測 UI 元素實際位置，回傳 fitBounds padding（確保路線不被頂列/底列遮住）
+function fitMapToRoute(coords, bottomElId, opts = {}) {
+  if (!coords?.length) return;
+  const topEl  = document.getElementById('top-bar');
+  const botEl  = bottomElId ? document.getElementById(bottomElId) : null;
+  const topPad = (topEl  ? topEl.getBoundingClientRect().bottom   : 48) + 8;
+  const botR   = botEl   ? botEl.getBoundingClientRect() : null;
+  const botPad = (botR && botR.top > 10)
+    ? (window.innerHeight - botR.top + 8)
+    : (opts.botFallback ?? 80);
+  map.fitBounds(L.latLngBounds(coords),
+    { animate: opts.animate ?? true,
+      paddingTopLeft:     [24, topPad],
+      paddingBottomRight: [24, botPad] });
+}
+
 // 設定要顯示的趟次集合與起始索引，然後渲染
 function openSoloTrip(set, idx, labelFn) {
   if (!set?.length) return;
   soloSet = set;
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
-  renderSoloTrip();
+  // 先顯示 solo-bar，讓瀏覽器先算好 layout，fitBounds 才能量到正確高度
   document.getElementById('solo-bar').style.display = 'flex';
+  renderSoloTrip();
 }
 
 // 渲染目前 soloIdx 指向的那一趟（清掉前一趟的圖層、淡化其他路線）
@@ -801,9 +818,7 @@ function renderSoloTrip() {
     L.marker(coords[0],     { icon: makeDotIcon('#34A853') }).addTo(map),
     L.marker(coords.at(-1), { icon: makeDotIcon('#EA4335') }).addTo(map)
   );
-  // 多留邊距讓整條路線完整可見（上避開頂列、下避開資訊列，左右也留白）
-  map.fitBounds(L.latLngBounds(coords),
-    { paddingTopLeft: [40, 100], paddingBottomRight: [40, 160] });
+  fitMapToRoute(coords, 'solo-bar');
 
   const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
   const info  = `${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
@@ -998,8 +1013,8 @@ function startReplay() {
 
 // 將整段路線框進畫面：每趟只設定一次相機，避免逐影格縮放造成閃爍
 function frameReplayTrip() {
-  const bounds = L.latLngBounds(replayCoords.map(c => [c.lat, c.lng]));
-  map.fitBounds(bounds, { animate: false, paddingTopLeft: [30, 70], paddingBottomRight: [30, 220] });
+  fitMapToRoute(replayCoords.map(c => [c.lat, c.lng]), 'replay-panel',
+    { animate: false, botFallback: 160 });
 }
 
 function startReplayRAF() {
@@ -1051,8 +1066,8 @@ function endOfTripTransition() {
   updateReplayPanel();
   const nextStart = replayCoords[0];
   // 把「前一趟終點 → 下一趟起點」框進畫面，glide 期間相機不動 → 不閃
-  map.fitBounds(L.latLngBounds([[prevEnd.lat, prevEnd.lng], [nextStart.lat, nextStart.lng]]),
-    { animate: false, paddingTopLeft: [40, 80], paddingBottomRight: [40, 220] });
+  fitMapToRoute([[prevEnd.lat, prevEnd.lng], [nextStart.lat, nextStart.lng]], 'replay-panel',
+    { animate: false, botFallback: 160 });
   replayPauseTimer = setTimeout(() => {
     glideGap(prevEnd, nextStart, () => {
       replayProgress = 0;
@@ -1180,7 +1195,7 @@ function loadTodayFromStorage() {
   });
   const allCoords = saved.flatMap(t => t.coords.map(c => [c.lat, c.lng]));
   if (allCoords.length) {
-    map.fitBounds(L.latLngBounds(allCoords), { paddingTopLeft: [16, 60], paddingBottomRight: [16, 90] });
+    fitMapToRoute(allCoords, 'bottom-bar');
   }
   updateTopBar();
 }
