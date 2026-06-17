@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.58';
+const APP_VERSION  = '1.1.59';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1295,6 +1295,44 @@ function checkForUpdate() {
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
+// 底部版面量測探針（查清楚後移除）
+function probeBottomLayout() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+  const safeBot = probe.getBoundingClientRect().height;
+  probe.remove();
+
+  const rect = id => {
+    const el = document.getElementById(id);
+    if (!el) return id + '=∅';
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return `${id}: top=${r.top.toFixed(0)} bot=${r.bottom.toFixed(0)} h=${r.height.toFixed(0)} pb=${cs.paddingBottom}`;
+  };
+  const btnEl = document.querySelector('.ctrl-btn');
+  const btnR  = btnEl ? btnEl.getBoundingClientRect() : null;
+  const vh = window.innerHeight;
+
+  let box = document.getElementById('probe-bot-box');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'probe-bot-box';
+    box.style.cssText = 'position:fixed;left:4px;right:4px;bottom:0;z-index:2147483647;'
+      + 'background:rgba(0,80,180,0.92);color:#fff;font:10px/1.35 monospace;'
+      + 'padding:4px 6px;white-space:pre-wrap;border-radius:6px 6px 0 0';
+    box.onclick = () => box.remove();
+    document.body.appendChild(box);
+  }
+  box.textContent =
+    `APP=${APP_VERSION}  vh=${vh}\n`
+    + `safe-area-inset-bottom(實量)=${safeBot.toFixed(1)}px\n`
+    + rect('bottom-bar') + '\n'
+    + rect('bottom-buttons') + '\n'
+    + (btnR ? `ctrl-btn: top=${btnR.top.toFixed(0)} bot=${btnR.bottom.toFixed(0)} h=${btnR.height.toFixed(0)}` : 'ctrl-btn=∅') + '\n'
+    + '(點此關閉)';
+}
+
 function boot() {
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
@@ -1303,6 +1341,9 @@ function boot() {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
+
+  // 底部版面探針
+  setTimeout(probeBottomLayout, 800);
 
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
