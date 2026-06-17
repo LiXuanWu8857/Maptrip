@@ -19,31 +19,38 @@ private func fmtDist(_ m: Int) -> String {
         : "\(m) m"
 }
 
-// MARK: - 按鈕外觀（純視覺 Label，不包 Link/Button）
-// 點擊由整個方塊的 .widgetURL() 處理：鎖屏 Live Activity 會把整塊當成一個點擊區，
-// Link 在這裡常收不到 tap，故改用 widgetURL —— 點任何地方都帶 maptrip:// 開 App。
-
-private let startURL = URL(string: "maptrip://start")
-private let endURL   = URL(string: "maptrip://end")
+// MARK: - 互動按鈕
+// iOS 17+：Button(intent:) → perform() → Darwin 通知 → main app → JS（不需 App Group）
+// iOS 16：純視覺，僅靠整個方塊的 widgetURL 開 App（但 URL 不會被傳入，使用者要手動按 App 內的開始）
 
 @ViewBuilder
 private func startButton(fullWidth: Bool = false) -> some View {
-    Label("開始行程", systemImage: "play.fill")
+    let label = Label("開始行程", systemImage: "play.fill")
         .font(.callout.bold())
         .padding(.vertical, 8)
         .padding(.horizontal, fullWidth ? 0 : 14)
         .frame(maxWidth: fullWidth ? .infinity : nil)
         .background(Color.blue).foregroundStyle(.white).clipShape(Capsule())
+    if #available(iOS 17.0, *) {
+        Button(intent: MapTripStartIntent()) { label }
+    } else {
+        label
+    }
 }
 
 @ViewBuilder
 private func endButton(fullWidth: Bool = false) -> some View {
-    Label("結束行程", systemImage: "checkmark.circle.fill")
+    let label = Label("結束行程", systemImage: "checkmark.circle.fill")
         .font(.callout.bold())
         .padding(.vertical, 8)
         .padding(.horizontal, fullWidth ? 0 : 14)
         .frame(maxWidth: fullWidth ? .infinity : nil)
         .background(Color.red).foregroundStyle(.white).clipShape(Capsule())
+    if #available(iOS 17.0, *) {
+        Button(intent: MapTripEndIntent()) { label }
+    } else {
+        label
+    }
 }
 
 // MARK: - 鎖屏 Banner 畫面
@@ -73,8 +80,6 @@ struct MapTripLockScreen: View {
         }
         .padding()
         .activityBackgroundTint(Color(.systemBackground))
-        // 點整個方塊任何地方 → 帶對應 URL 開 App（記錄中→end、閒置→start）
-        .widgetURL(state.isRecording ? endURL : startURL)
     }
 }
 
@@ -129,8 +134,6 @@ struct MapTripLiveActivity: Widget {
                       ? "record.circle.fill" : "car.fill")
                     .foregroundStyle(context.state.isRecording ? .red : .blue)
             }
-            // 點 Dynamic Island（精簡/展開/最小）任何地方 → 帶對應 URL 開 App
-            .widgetURL(context.state.isRecording ? endURL : startURL)
         }
     }
 }

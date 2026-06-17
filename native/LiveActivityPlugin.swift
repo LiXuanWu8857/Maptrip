@@ -6,6 +6,20 @@ import UIKit
 import Capacitor
 import ActivityKit
 
+// Darwin 跨行程通知橋接：C 回呼無法捕獲 Swift 值，用模組層級全域轉接。
+// widget extension 的 perform() 發出 Darwin 通知 → 這裡接住 → notifyListeners 到 JS。
+private var _darwinPlugin: LiveActivityPlugin?
+private let _darwinStartCb: CFNotificationCallback = { _, _, _, _, _ in
+    DispatchQueue.main.async {
+        _darwinPlugin?.notifyListeners("liveActivityCommand", data: ["action": "start"])
+    }
+}
+private let _darwinEndCb: CFNotificationCallback = { _, _, _, _, _ in
+    DispatchQueue.main.async {
+        _darwinPlugin?.notifyListeners("liveActivityCommand", data: ["action": "end"])
+    }
+}
+
 @objc(LiveActivityPlugin)
 public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
@@ -33,24 +47,25 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private var lastElapsed = 0
     private var lastDistance = 0
 
-    // 插件載入時：監聽鎖屏按鈕的指令、URL scheme、以及 App 終止事件
+    // 插件載入時：掛 Darwin 跨行程監聽（widget→main app）和一般事件
     override public func load() {
+        // Darwin 通知：widget extension 的 Button(intent:) 觸發 perform()，
+        // 發出系統全域的 Darwin 通知，這裡接住後轉給 JS。
+        // 不需要 App Group；任何 process 都能收，app 在背景也能收（iOS 保證送達）。
+        _darwinPlugin = self
+        let darwin = CFNotificationCenterGetDarwinNotifyCenter()
+        CFNotificationCenterAddObserver(darwin, nil, _darwinStartCb,
+            "com.maptrip.widget.start" as CFString, nil, .deliverImmediately)
+        CFNotificationCenterAddObserver(darwin, nil, _darwinEndCb,
+            "com.maptrip.widget.end" as CFString, nil, .deliverImmediately)
+        // 同行程通知（若 perform() 在 main app process 執行時也發這個）
         NotificationCenter.default.addObserver(
             self, selector: #selector(onMapTripCommand(_:)),
             name: .mapTripCommand, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(onWillTerminate),
             name: UIApplication.willTerminateNotification, object: nil)
-        // Capacitor 的 ApplicationDelegateProxy 在 AppDelegate / SceneDelegate
-        // 處理完 URL 後會發這兩個 notification，這裡截取並轉給 JS，
-        // 讓 widget 按鈕的 maptrip:// URL 不依賴 appUrlOpen 也能可靠送達。
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(onCapacitorOpenURL(_:)),
-            name: NSNotification.Name("capacitorOpenURL"), object: nil)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(onCapacitorOpenURLContexts(_:)),
-            name: NSNotification.Name("capacitorOpenURLContexts"), object: nil)
-        // 自訂 notification：SceneDelegate / AppDelegate 若有貼，也走這條路
+        // AppDelegate 收到 maptrip:// URL 時的備援路徑（.widgetURL 無法送 URL，但仍保留）
         NotificationCenter.default.addObserver(
             self, selector: #selector(onMapTripUrlNotification(_:)),
             name: .mapTripUrl, object: nil)
@@ -66,27 +81,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    // Capacitor AppDelegate URL handler（application(_:open:options:)）
-    @objc private func onCapacitorOpenURL(_ note: Notification) {
-        guard let url = (note.userInfo?["url"] as? URL)?.absoluteString,
-              url.hasPrefix("maptrip://") else { return }
-        DispatchQueue.main.async {
-            self.notifyListeners("mapTripUrl", data: ["url": url])
-        }
-    }
-
-    // Capacitor SceneDelegate URL handler（scene(_:openURLContexts:)）
-    @objc private func onCapacitorOpenURLContexts(_ note: Notification) {
-        guard #available(iOS 13.0, *),
-              let contexts = note.userInfo?["URLContexts"] as? Set<UIOpenURLContext>,
-              let url = contexts.first?.url.absoluteString,
-              url.hasPrefix("maptrip://") else { return }
-        DispatchQueue.main.async {
-            self.notifyListeners("mapTripUrl", data: ["url": url])
-        }
-    }
-
-    // 自訂 notification 路徑（AppDelegate / SceneDelegate 貼 .mapTripUrl 時進這裡）
+    // AppDelegate 收到 maptrip:// 時的備援（目前 Live Activity 的 widgetURL 不會觸發，保留以備日後）
     @objc private func onMapTripUrlNotification(_ note: Notification) {
         guard let url = (note.userInfo?["url"] as? String),
               url.hasPrefix("maptrip://") else { return }
