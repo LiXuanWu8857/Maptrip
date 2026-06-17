@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.48';
+const APP_VERSION  = '1.1.49';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1106,8 +1106,12 @@ function finishReplay() {
 function updateReplayPanel() {
   if (replayTripIdx >= replaySet.length) return;
   const t = replaySet[replayTripIdx];
+  // 第一行：日期 + 第幾趟
+  const dateStr = new Date(t.startTime).toLocaleDateString('zh-TW',
+    { month: 'long', day: 'numeric', weekday: 'short' });
   document.getElementById('replay-trip-label').textContent =
-    `第 ${replayTripIdx + 1} 趟 / 共 ${replaySet.length} 趟`;
+    `${dateStr}　第 ${replayTripIdx + 1} 趟 / 共 ${replaySet.length} 趟`;
+  // 第二行：開始時間 → 結束時間 + 里程
   document.getElementById('replay-trip-info').textContent =
     `${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　${fmtDist(t.totalDist)}`;
 }
@@ -1203,8 +1207,33 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2400);
 }
 
-// 暫時診斷：在畫面左上角累積顯示流程訊息，方便排查鎖屏開始行程。穩定後移除。
+// 診斷訊息：預設隱藏，需要查修時把診斷模式打開（在「行程清單」點版本號 5 下，
+// 或 localStorage.maptrip_debug='1'）。dbg() 呼叫一直都在，開啟即顯示，不必改程式。
+function dbgEnabled() {
+  return TEST_MODE_ON || localStorage.getItem('maptrip_debug') === '1';
+}
+// 點版本號 5 下 → 切換診斷模式（不需重 build / 改網址即可重新開啟診斷框）
+let _verTapCount = 0, _verTapTimer = null;
+function onVersionTap() {
+  _verTapCount++;
+  clearTimeout(_verTapTimer);
+  _verTapTimer = setTimeout(() => { _verTapCount = 0; }, 1500);
+  if (_verTapCount < 5) return;
+  _verTapCount = 0;
+  const on = localStorage.getItem('maptrip_debug') === '1';
+  if (on) {
+    localStorage.removeItem('maptrip_debug');
+    document.getElementById('dbg-box')?.remove();
+    toast('診斷模式已關閉');
+  } else {
+    localStorage.setItem('maptrip_debug', '1');
+    toast('診斷模式已開啟');
+  }
+  const vl = document.getElementById('version-label');
+  if (vl) vl.textContent = 'v' + APP_VERSION + (dbgEnabled() ? ' · 診斷中' : '');
+}
 function dbg(msg) {
+  if (!dbgEnabled()) return;
   let box = document.getElementById('dbg-box');
   if (!box) {
     box = document.createElement('div');
@@ -1245,6 +1274,10 @@ function boot() {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
+
+  // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
+  const vl = document.getElementById('version-label');
+  if (vl) vl.textContent = 'v' + APP_VERSION + (dbgEnabled() ? ' · 診斷中' : '');
 
   // iOS WKWebView：同時綁定 input + change，確保拖曳和放手都能更新速度
   const slider = document.getElementById('speed-slider');
