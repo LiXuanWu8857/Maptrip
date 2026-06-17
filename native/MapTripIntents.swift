@@ -6,6 +6,7 @@ import Foundation
 
 extension Notification.Name {
     static let mapTripCommand = Notification.Name("MapTripCommand")
+    static let mapTripUrl     = Notification.Name("MapTripUrl")
 }
 
 // 鎖屏指令的暫存 key。⚠️ perform() 實際在「Widget Extension 程序」執行，

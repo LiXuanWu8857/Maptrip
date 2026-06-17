@@ -33,7 +33,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     private var lastElapsed = 0
     private var lastDistance = 0
 
-    // 插件載入時：監聽鎖屏按鈕的指令、以及 App 終止事件
+    // 插件載入時：監聽鎖屏按鈕的指令、URL scheme、以及 App 終止事件
     override public func load() {
         NotificationCenter.default.addObserver(
             self, selector: #selector(onMapTripCommand(_:)),
@@ -41,6 +41,19 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         NotificationCenter.default.addObserver(
             self, selector: #selector(onWillTerminate),
             name: UIApplication.willTerminateNotification, object: nil)
+        // Capacitor 的 ApplicationDelegateProxy 在 AppDelegate / SceneDelegate
+        // 處理完 URL 後會發這兩個 notification，這裡截取並轉給 JS，
+        // 讓 widget 按鈕的 maptrip:// URL 不依賴 appUrlOpen 也能可靠送達。
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onCapacitorOpenURL(_:)),
+            name: NSNotification.Name("capacitorOpenURL"), object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onCapacitorOpenURLContexts(_:)),
+            name: NSNotification.Name("capacitorOpenURLContexts"), object: nil)
+        // 自訂 notification：SceneDelegate / AppDelegate 若有貼，也走這條路
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onMapTripUrlNotification(_:)),
+            name: .mapTripUrl, object: nil)
     }
 
     // 收到鎖屏 App Intent 指令 → 立即轉給 JS（App 已在前景、JS 醒著時可即時反應）。
@@ -50,6 +63,35 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let action = (note.userInfo?["action"] as? String) ?? ""
         DispatchQueue.main.async {
             self.notifyListeners("liveActivityCommand", data: ["action": action])
+        }
+    }
+
+    // Capacitor AppDelegate URL handler（application(_:open:options:)）
+    @objc private func onCapacitorOpenURL(_ note: Notification) {
+        guard let url = (note.userInfo?["url"] as? URL)?.absoluteString,
+              url.hasPrefix("maptrip://") else { return }
+        DispatchQueue.main.async {
+            self.notifyListeners("mapTripUrl", data: ["url": url])
+        }
+    }
+
+    // Capacitor SceneDelegate URL handler（scene(_:openURLContexts:)）
+    @objc private func onCapacitorOpenURLContexts(_ note: Notification) {
+        guard #available(iOS 13.0, *),
+              let contexts = note.userInfo?["URLContexts"] as? Set<UIOpenURLContext>,
+              let url = contexts.first?.url.absoluteString,
+              url.hasPrefix("maptrip://") else { return }
+        DispatchQueue.main.async {
+            self.notifyListeners("mapTripUrl", data: ["url": url])
+        }
+    }
+
+    // 自訂 notification 路徑（AppDelegate / SceneDelegate 貼 .mapTripUrl 時進這裡）
+    @objc private func onMapTripUrlNotification(_ note: Notification) {
+        guard let url = (note.userInfo?["url"] as? String),
+              url.hasPrefix("maptrip://") else { return }
+        DispatchQueue.main.async {
+            self.notifyListeners("mapTripUrl", data: ["url": url])
         }
     }
 

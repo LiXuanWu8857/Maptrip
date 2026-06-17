@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.45';
+const APP_VERSION  = '1.1.46';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -92,16 +92,18 @@ function initMap() {
   // Live Activity（鎖屏方塊）整合
   if (isNative()) {
     const App = window.Capacitor?.Plugins?.App;
-    // 鎖屏 widget 的「開始/結束」按鈕用 maptrip:// URL 開 App，這裡接手觸發記錄。
-    // 背景喚醒走 appUrlOpen；冷啟動（App 被殺）URL 可能比監聽器早到，故 boot 時再查 getLaunchUrl。
-    App?.addListener('appUrlOpen', data => { dbg('appUrlOpen ' + data?.url); handleWidgetUrl(data?.url); });
-    App?.getLaunchUrl?.().then(res => {
-      if (res?.url) { dbg('launchUrl ' + res.url); handleWidgetUrl(res.url); }
-    }).catch(() => {});
     const la = liveAct();
     dbg('boot v' + APP_VERSION + ' la=' + (la ? 'ok' : 'NULL'));
     if (la) {
-      // App Intent 按鈕：在背景直接收到指令，不跳轉到 App
+      // 主要路徑：LiveActivityPlugin 直接截取 Capacitor URL notification → mapTripUrl 事件
+      la.addListener?.('mapTripUrl', ({ url }) => { dbg('mapTripUrl ' + url); handleWidgetUrl(url); });
+      // 備援路徑 A：Capacitor App plugin 的 appUrlOpen（若 AppDelegate/SceneDelegate 有轉發）
+      App?.addListener('appUrlOpen', data => { dbg('appUrlOpen ' + data?.url); handleWidgetUrl(data?.url); });
+      // 備援路徑 B：冷啟動 URL（被殺狀態時比 listener 早到）
+      App?.getLaunchUrl?.().then(res => {
+        if (res?.url) { dbg('launchUrl ' + res.url); handleWidgetUrl(res.url); }
+      }).catch(() => {});
+      // App Intent 按鈕（已停用，保留以防萬一）
       la.addListener?.('liveActivityCommand', ({ action }) => {
         dbg('event liveActivityCommand: ' + action);
         if (action === 'start') widgetStart();
@@ -115,7 +117,7 @@ function initMap() {
       // 即使前景時 GPS 沒更新，方塊也不會誤消失。
       setInterval(widgetHeartbeat, 3000);
       // 回到前景時：補做鎖屏指令；沒有指令且未記錄中才重建方塊（避免覆蓋記錄狀態）
-      window.Capacitor?.Plugins?.App?.addListener('appStateChange', ({ isActive }) => {
+      App?.addListener('appStateChange', ({ isActive }) => {
         dbg('appStateChange isActive=' + isActive);
         if (isActive) {
           fixLayout();
