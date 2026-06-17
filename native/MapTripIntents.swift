@@ -8,18 +8,20 @@ extension Notification.Name {
     static let mapTripCommand = Notification.Name("MapTripCommand")
 }
 
-// 鎖屏指令的暫存 key：LiveActivityIntent 的 perform() 會在「主 App 程序」內執行，
-// 所以這裡寫進 UserDefaults.standard，App（含 LiveActivityPlugin）讀得到，
-// 且即使 App 被完全關閉、冷啟動也不會遺失。
+// 鎖屏指令的暫存 key。⚠️ perform() 實際在「Widget Extension 程序」執行，
+// 它的 UserDefaults.standard 與主 App 不同步，所以必須用 App Group 共享容器，
+// 主 App（含 LiveActivityPlugin）才讀得到，且冷啟動也不會遺失。
+let kAppGroup = "group.com.maptrip.app"
 let kMapTripPendingCommand = "MapTripPendingCommand"
 // 指令時間戳：避免卡住的舊指令在很久後正常開 App 時被誤觸發
 let kMapTripPendingCommandTime = "MapTripPendingCommandTime"
 
 private func dispatchCommand(_ action: String) {
-    // 1) 暫存指令（含時間戳）：保證冷啟動 / JS 還沒就緒時不會漏掉
-    UserDefaults.standard.set(action, forKey: kMapTripPendingCommand)
-    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: kMapTripPendingCommandTime)
-    // 2) 即時廣播：App 已在背景執行時，JS 立刻收到
+    // 1) 寫進 App Group 共享容器（跨行程、冷啟動都讀得到）；取不到時退回 standard
+    let defaults = UserDefaults(suiteName: kAppGroup) ?? .standard
+    defaults.set(action, forKey: kMapTripPendingCommand)
+    defaults.set(Date().timeIntervalSince1970, forKey: kMapTripPendingCommandTime)
+    // 2) 即時廣播：App 已在背景執行時、同行程的 JS 立刻收到
     NotificationCenter.default.post(name: .mapTripCommand, object: nil,
                                     userInfo: ["action": action])
 }

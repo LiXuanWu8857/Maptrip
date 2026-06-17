@@ -128,14 +128,16 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     /// 開機補做：App 曾被完全關閉時按下的鎖屏指令，存在 UserDefaults，這裡取出並清除。
     /// 只認 2 分鐘內的指令，避免卡住的舊指令在很久後正常開 App 時誤觸發行程。
     @objc func consumePendingCommand(_ call: CAPPluginCall) {
-        let cmd = UserDefaults.standard.string(forKey: kMapTripPendingCommand) ?? ""
-        let ts = UserDefaults.standard.double(forKey: kMapTripPendingCommandTime)
+        // 從 App Group 共享容器讀（widget 的 perform() 寫在這裡）；取不到退回 standard
+        let defaults = UserDefaults(suiteName: kAppGroup) ?? .standard
+        let cmd = defaults.string(forKey: kMapTripPendingCommand) ?? ""
+        let ts = defaults.double(forKey: kMapTripPendingCommandTime)
         let now = Date().timeIntervalSince1970
         let fresh = ts > 0 && (now - ts) < 120
         // 只有「真的拿到新鮮指令」時才清除，避免時序競賽下把還沒被讀到的指令清掉
         if fresh && !cmd.isEmpty {
-            UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
-            UserDefaults.standard.removeObject(forKey: kMapTripPendingCommandTime)
+            defaults.removeObject(forKey: kMapTripPendingCommand)
+            defaults.removeObject(forKey: kMapTripPendingCommandTime)
         }
         // raw / age 為診斷用：raw 空＝根本沒寫入（跨行程問題）；age 很大＝被新鮮度擋掉
         call.resolve([
