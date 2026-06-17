@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.60';
+const APP_VERSION  = '1.1.61';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1193,7 +1193,6 @@ function loadTodayFromStorage() {
     todayTrips.push({ ...t });
     drawTripLine(t, i + 1);
   });
-  const allCoords = saved.flatMap(t => t.coords.map(c => [c.lat, c.lng]));
   updateTopBar();
 }
 
@@ -1291,65 +1290,6 @@ function checkForUpdate() {
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
-// 頂部 + 底部版面量測探針（查清楚後移除）
-function probeLayout() {
-  const mkProbe = (css) => {
-    const d = document.createElement('div');
-    d.style.cssText = css + ';visibility:hidden;pointer-events:none';
-    document.body.appendChild(d);
-    const h = d.getBoundingClientRect().height;
-    d.remove();
-    return h;
-  };
-  const safeTop = mkProbe('position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)');
-  const safeBot = mkProbe('position:fixed;bottom:0;left:0;width:1px;height:env(safe-area-inset-bottom,0px)');
-
-  const rect = id => {
-    const el = document.getElementById(id);
-    if (!el) return id + '=∅';
-    const r = el.getBoundingClientRect();
-    const cs = getComputedStyle(el);
-    return `${id}: top=${r.top.toFixed(0)} bot=${r.bottom.toFixed(0)} h=${r.height.toFixed(0)} pt=${cs.paddingTop} pb=${cs.paddingBottom}`;
-  };
-  const btnEl = document.querySelector('.ctrl-btn');
-  const btnR  = btnEl ? btnEl.getBoundingClientRect() : null;
-  const vh = window.innerHeight;
-
-  // 頂部探針（紅）
-  let tbox = document.getElementById('probe-top-box');
-  if (!tbox) {
-    tbox = document.createElement('div');
-    tbox.id = 'probe-top-box';
-    tbox.style.cssText = 'position:fixed;left:4px;right:4px;top:0;z-index:2147483647;'
-      + 'background:rgba(160,0,0,0.92);color:#fff;font:10px/1.35 monospace;'
-      + 'padding:4px 6px;white-space:pre-wrap;border-radius:0 0 6px 6px';
-    tbox.onclick = () => tbox.remove();
-    document.body.appendChild(tbox);
-  }
-  tbox.textContent =
-    `INDEX=${window.INDEX_VERSION} APP=${APP_VERSION}  vh=${vh}\n`
-    + `safe-top=${safeTop.toFixed(0)}px  safe-bot=${safeBot.toFixed(0)}px\n`
-    + rect('top-bar') + '\n'
-    + '(點此關閉)';
-
-  // 底部探針（藍）
-  let bbox = document.getElementById('probe-bot-box');
-  if (!bbox) {
-    bbox = document.createElement('div');
-    bbox.id = 'probe-bot-box';
-    bbox.style.cssText = 'position:fixed;left:4px;right:4px;bottom:0;z-index:2147483647;'
-      + 'background:rgba(0,80,180,0.92);color:#fff;font:10px/1.35 monospace;'
-      + 'padding:4px 6px;white-space:pre-wrap;border-radius:6px 6px 0 0';
-    bbox.onclick = () => bbox.remove();
-    document.body.appendChild(bbox);
-  }
-  bbox.textContent =
-    rect('bottom-bar') + '\n'
-    + rect('bottom-buttons') + '\n'
-    + (btnR ? `ctrl-btn: top=${btnR.top.toFixed(0)} bot=${btnR.bottom.toFixed(0)} h=${btnR.height.toFixed(0)}` : 'ctrl-btn=∅') + '\n'
-    + '(點此關閉)';
-}
-
 function boot() {
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
@@ -1358,9 +1298,6 @@ function boot() {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
-
-  // 版面探針（頂+底）
-  setTimeout(probeLayout, 800);
 
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
