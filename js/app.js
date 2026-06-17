@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.43';
+const APP_VERSION  = '1.1.44';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -91,11 +91,13 @@ function initMap() {
 
   // Live Activity（鎖屏方塊）整合
   if (isNative()) {
-    // 後援：舊版 Link 按鈕會開 App 再觸發
-    window.Capacitor?.Plugins?.App?.addListener('appUrlOpen', data => {
-      if (data?.url === 'maptrip://start') widgetStart();
-      if (data?.url === 'maptrip://end'   && activeTrip)  endTrip();
-    });
+    const App = window.Capacitor?.Plugins?.App;
+    // 鎖屏 widget 的「開始/結束」按鈕用 maptrip:// URL 開 App，這裡接手觸發記錄。
+    // 背景喚醒走 appUrlOpen；冷啟動（App 被殺）URL 可能比監聽器早到，故 boot 時再查 getLaunchUrl。
+    App?.addListener('appUrlOpen', data => { dbg('appUrlOpen ' + data?.url); handleWidgetUrl(data?.url); });
+    App?.getLaunchUrl?.().then(res => {
+      if (res?.url) { dbg('launchUrl ' + res.url); handleWidgetUrl(res.url); }
+    }).catch(() => {});
     const la = liveAct();
     dbg('boot v' + APP_VERSION + ' la=' + (la ? 'ok' : 'NULL'));
     if (la) {
@@ -356,6 +358,13 @@ function startTrip() {
   if (activeTrip)  { toast('行程進行中，請先按「已抵達」'); return; }
   if (!currentPos) { toast('等待 GPS 訊號中...'); return; }
   beginRecording();
+}
+
+// 鎖屏 widget 的 maptrip:// URL 路由（背景喚醒 appUrlOpen + 冷啟動 getLaunchUrl 共用）
+function handleWidgetUrl(url) {
+  if (!url) return;
+  if (url.indexOf('maptrip://start') === 0) widgetStart();
+  else if (url.indexOf('maptrip://end') === 0 && activeTrip) endTrip();
 }
 
 // 鎖屏 Widget 觸發的開始：背景被喚醒時 GPS 常還沒定位，

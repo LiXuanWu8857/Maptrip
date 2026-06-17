@@ -19,7 +19,8 @@ private func fmtDist(_ m: Int) -> String {
         : "\(m) m"
 }
 
-// MARK: - 互動按鈕（iOS 17+ 用 App Intent 背景執行；舊版退回開 App 的 Link）
+// MARK: - 互動按鈕（用 URL scheme 開 App 觸發 JS；免費帳號無法用 App Group，
+// 故不走 AppIntent + 共享 UserDefaults，改用 maptrip:// 由 App 的 appUrlOpen 接手）
 
 @ViewBuilder
 private func startButton(fullWidth: Bool = false) -> some View {
@@ -29,11 +30,7 @@ private func startButton(fullWidth: Bool = false) -> some View {
         .padding(.horizontal, fullWidth ? 0 : 14)
         .frame(maxWidth: fullWidth ? .infinity : nil)
         .background(Color.blue).foregroundStyle(.white).clipShape(Capsule())
-    if #available(iOS 17.0, *) {
-        Button(intent: MapTripStartIntent()) { label }.buttonStyle(.plain)
-    } else {
-        Link(destination: URL(string: "maptrip://start")!) { label }
-    }
+    Link(destination: URL(string: "maptrip://start")!) { label }
 }
 
 @ViewBuilder
@@ -44,11 +41,7 @@ private func endButton(fullWidth: Bool = false) -> some View {
         .padding(.horizontal, fullWidth ? 0 : 14)
         .frame(maxWidth: fullWidth ? .infinity : nil)
         .background(Color.red).foregroundStyle(.white).clipShape(Capsule())
-    if #available(iOS 17.0, *) {
-        Button(intent: MapTripEndIntent()) { label }.buttonStyle(.plain)
-    } else {
-        Link(destination: URL(string: "maptrip://end")!) { label }
-    }
+    Link(destination: URL(string: "maptrip://end")!) { label }
 }
 
 // MARK: - 鎖屏 Banner 畫面
