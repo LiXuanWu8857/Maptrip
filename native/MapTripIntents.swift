@@ -25,6 +25,7 @@ private func dispatchCommand(_ action: String) {
 @available(iOS 17.0, *)
 struct MapTripStartIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "開始行程"
+    static var openAppWhenRun: Bool = false
     func perform() async throws -> some IntentResult {
         dispatchCommand("start")
         return .result()
