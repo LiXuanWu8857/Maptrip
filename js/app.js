@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.47';
+const APP_VERSION  = '1.1.48';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -407,14 +407,20 @@ function consumePendingWidgetCmdRetry(tries = 6, gapMs = 600) {
   });
 }
 
-// 替鎖屏方塊「續命」：刷新原生端的 staleDate。App 一被完全關閉就停止呼叫，
-// 替方塊續命：刷新 staleDate。節流到至少每 2 秒一次（過期時間設 6 秒，
+// 替鎖屏方塊「續命」：刷新原生端的 staleDate。節流到至少每 2 秒一次（過期時間設 6 秒，
 // 續命須明顯比它快，App 活著時方塊才不會誤消失）。
+// 記錄中時同時更新 elapsed + distance，讓 widget 在背景也能即時顯示行程資訊。
 function widgetHeartbeat() {
   const now = Date.now();
   if (now - lastHeartbeat < 2000) return;
   lastHeartbeat = now;
-  liveAct()?.heartbeat?.();
+  if (activeTrip) {
+    const elapsed  = Math.floor((now - activeTrip.startTime) / 1000);
+    const distance = Math.round(calcTotalDist(activeTrip.coords));
+    liveAct()?.updateTrip({ elapsed, distance });
+  } else {
+    liveAct()?.heartbeat?.();
+  }
 }
 
 function setAutoFollow(on) {
