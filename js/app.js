@@ -103,15 +103,20 @@ function initMap() {
         if (action === 'start') widgetStart();
         if (action === 'end'   && activeTrip)  endTrip();
       });
-      // 顯示閒置狀態的方塊（鎖屏「開始行程」按鈕）
-      la.initActivity();
-      // 開機補做：App 曾被關閉時按下的鎖屏指令，會被原生端暫存，這裡補處理一次
-      consumePendingWidgetCmd();
+      // initActivity 先完成（非同步），再補做鎖屏暫存指令。
+      // 不能同時呼叫：initActivity 會非同步建立閒置方塊，若此時 consumePendingWidgetCmd
+      // 同步呼叫 startTrip 設為「記錄中」，initActivity 的 Task 跑完後會把方塊蓋回閒置。
+      la.initActivity().then(() => consumePendingWidgetCmd());
       // 前景續命計時器（背景由 onGpsUpdate 觸發）
       setInterval(widgetHeartbeat, 30000);
-      // 回到前景時：重算地圖尺寸、重新顯示/刷新方塊，並補做鎖屏指令
+      // 回到前景時：補做鎖屏指令；沒有指令且未記錄中才重建方塊（避免覆蓋記錄狀態）
       window.Capacitor?.Plugins?.App?.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) { fixLayout(); la.initActivity(); consumePendingWidgetCmd(); }
+        if (isActive) {
+          fixLayout();
+          consumePendingWidgetCmd().then(didAct => {
+            if (!didAct && !activeTrip) la.initActivity();
+          });
+        }
       });
     }
   }
@@ -358,15 +363,16 @@ function widgetStart() {
   else { pendingWidgetStart = true; toast('定位中，行程即將開始…'); }
 }
 
-// 開機時補做鎖屏暫存指令（原生端用 UserDefaults 暫存，跨 App 重啟仍在）
+// 補做鎖屏暫存指令；回傳 Promise<bool>，true 表示真的執行了指令（start 或 end）
 function consumePendingWidgetCmd() {
   const la = liveAct();
-  const p = la?.consumePendingCommand?.();   // 舊版原生外掛沒有此方法時為 undefined
-  if (!p || typeof p.then !== 'function') return;
-  p.then(res => {
-    if (res?.action === 'start') widgetStart();
-    if (res?.action === 'end' && activeTrip) endTrip();
-  }).catch(() => {});
+  const p = la?.consumePendingCommand?.();
+  if (!p || typeof p.then !== 'function') return Promise.resolve(false);
+  return p.then(res => {
+    if (res?.action === 'start') { widgetStart(); return true; }
+    if (res?.action === 'end' && activeTrip) { endTrip(); return true; }
+    return false;
+  }).catch(() => false);
 }
 
 // 替鎖屏方塊「續命」：刷新原生端的 staleDate。App 一被完全關閉就停止呼叫，
