@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.56';
+const APP_VERSION  = '1.1.57';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1195,7 +1195,7 @@ function loadTodayFromStorage() {
   });
   const allCoords = saved.flatMap(t => t.coords.map(c => [c.lat, c.lng]));
   if (allCoords.length) {
-    fitMapToRoute(allCoords, 'bottom-bar');
+    fitMapToRoute(allCoords, 'bottom-bar', { animate: false });
   }
   updateTopBar();
 }

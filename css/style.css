@@ -199,9 +199,9 @@ html, body {
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
 #bottom-buttons {
-  height: 54px;
-  display: flex; align-items: center; justify-content: space-around;
-  padding: 0 12px 2px;
+  height: 42px;
+  display: flex; align-items: flex-end; justify-content: space-around;
+  padding: 0 12px 6px;
 }
 
 .ctrl-btn {
