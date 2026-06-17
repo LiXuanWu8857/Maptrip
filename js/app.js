@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.42';
+const APP_VERSION  = '1.1.43';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -108,7 +108,7 @@ function initMap() {
       // initActivity 先完成（非同步），再補做鎖屏暫存指令。
       // 不能同時呼叫：initActivity 會非同步建立閒置方塊，若此時 consumePendingWidgetCmd
       // 同步呼叫 startTrip 設為「記錄中」，initActivity 的 Task 跑完後會把方塊蓋回閒置。
-      la.initActivity().then(() => { dbg('initActivity done → consume'); consumePendingWidgetCmd(); });
+      la.initActivity().then(() => { dbg('initActivity done → consume'); consumePendingWidgetCmdRetry(); });
       // 前景續命計時器（背景由 onGpsUpdate 觸發）
       setInterval(widgetHeartbeat, 30000);
       // 回到前景時：補做鎖屏指令；沒有指令且未記錄中才重建方塊（避免覆蓋記錄狀態）
@@ -373,11 +373,23 @@ function consumePendingWidgetCmd() {
   const p = la?.consumePendingCommand?.();
   if (!p || typeof p.then !== 'function') { dbg('consume: no method'); return Promise.resolve(false); }
   return p.then(res => {
-    dbg('consume action=' + JSON.stringify(res?.action));
+    // raw 空＝原生端 UserDefaults 根本沒這筆（跨行程問題）；age 很大＝被新鮮度擋掉
+    dbg('consume action=' + JSON.stringify(res?.action)
+        + ' raw=' + JSON.stringify(res?.raw) + ' age=' + res?.age);
     if (res?.action === 'start') { widgetStart(); return true; }
     if (res?.action === 'end' && activeTrip) { endTrip(); return true; }
     return false;
   }).catch(e => { dbg('consume err ' + e); return false; });
+}
+
+// 冷啟動補做：perform() 可能比 JS boot 晚執行（時序競賽），所以重試數次。
+// 任一次成功（執行了指令）就停止；全部落空才放棄。
+function consumePendingWidgetCmdRetry(tries = 6, gapMs = 600) {
+  return consumePendingWidgetCmd().then(didAct => {
+    if (didAct || tries <= 1) return didAct;
+    return new Promise(r => setTimeout(r, gapMs))
+      .then(() => consumePendingWidgetCmdRetry(tries - 1, gapMs));
+  });
 }
 
 // 替鎖屏方塊「續命」：刷新原生端的 staleDate。App 一被完全關閉就停止呼叫，

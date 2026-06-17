@@ -130,10 +130,19 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func consumePendingCommand(_ call: CAPPluginCall) {
         let cmd = UserDefaults.standard.string(forKey: kMapTripPendingCommand) ?? ""
         let ts = UserDefaults.standard.double(forKey: kMapTripPendingCommandTime)
-        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
-        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommandTime)
-        let fresh = ts > 0 && (Date().timeIntervalSince1970 - ts) < 120
-        call.resolve(["action": fresh ? cmd : ""])
+        let now = Date().timeIntervalSince1970
+        let fresh = ts > 0 && (now - ts) < 120
+        // 只有「真的拿到新鮮指令」時才清除，避免時序競賽下把還沒被讀到的指令清掉
+        if fresh && !cmd.isEmpty {
+            UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
+            UserDefaults.standard.removeObject(forKey: kMapTripPendingCommandTime)
+        }
+        // raw / age 為診斷用：raw 空＝根本沒寫入（跨行程問題）；age 很大＝被新鮮度擋掉
+        call.resolve([
+            "action": fresh ? cmd : "",
+            "raw": cmd,
+            "age": ts > 0 ? Int(now - ts) : -1
+        ])
     }
 
     // MARK: - 私有實作
