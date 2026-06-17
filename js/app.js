@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.49';
+const APP_VERSION  = '1.1.50';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -744,9 +744,19 @@ function editFare(e, idx) {
   skipBtn.onclick = close;
 }
 
+// 把 "2026-06-17" 格式的 dayKey 轉成「6月17日 週三」
+function dayKeyToLabel(dayKey) {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('zh-TW',
+    { month: 'long', day: 'numeric', weekday: 'short' });
+}
+
 // 從今日清單點某趟 → 進入可左右切換的單趟顯示
 function showSoloTripFromToday(idx) {
-  openSoloTrip(todayTrips, idx, i => `第 ${i + 1} 趟`);
+  const dateLabel = new Date().toLocaleDateString('zh-TW',
+    { month: 'long', day: 'numeric', weekday: 'short' });
+  openSoloTrip(todayTrips, idx, i =>
+    `${dateLabel}　第 ${i + 1} 趟 / 共 ${todayTrips.length} 趟`);
 }
 
 // 從歷史某日點某趟 → 進入可左右切換的單趟顯示（限定在那一天的趟次內切換）
@@ -754,7 +764,8 @@ function showHistoryTrip(day, idx) {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   if (!raw[day]?.length) return;
   closeHistory();
-  openSoloTrip(raw[day], idx, i => `${day} 第 ${i + 1} 趟`);
+  openSoloTrip(raw[day], idx, i =>
+    `${dayKeyToLabel(day)}　第 ${i + 1} 趟 / 共 ${raw[day].length} 趟`);
 }
 
 // 設定要顯示的趟次集合與起始索引，然後渲染
@@ -795,8 +806,10 @@ function renderSoloTrip() {
     { paddingTopLeft: [40, 100], paddingBottomRight: [40, 160] });
 
   const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
-  document.getElementById('solo-info').textContent =
-    `${label}　${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
+  const info  = `${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
+  // 兩行顯示：第一行日期+趟次，第二行時間+里程
+  document.getElementById('solo-info').innerHTML =
+    `<div class="solo-line1">${label}</div><div class="solo-line2">${info}</div>`;
 
   // 首尾趟把箭頭變淡（沒有上一趟/下一趟）
   const prevBtn = document.getElementById('solo-prev');
@@ -1106,12 +1119,12 @@ function finishReplay() {
 function updateReplayPanel() {
   if (replayTripIdx >= replaySet.length) return;
   const t = replaySet[replayTripIdx];
-  // 第一行：日期 + 第幾趟
   const dateStr = new Date(t.startTime).toLocaleDateString('zh-TW',
     { month: 'long', day: 'numeric', weekday: 'short' });
+  // 第一行：日期 + 第幾趟 / 共幾趟
   document.getElementById('replay-trip-label').textContent =
     `${dateStr}　第 ${replayTripIdx + 1} 趟 / 共 ${replaySet.length} 趟`;
-  // 第二行：開始時間 → 結束時間 + 里程
+  // 第二行：開始 → 結束時間 + 里程
   document.getElementById('replay-trip-info').textContent =
     `${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　${fmtDist(t.totalDist)}`;
 }

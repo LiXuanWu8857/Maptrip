@@ -154,6 +154,8 @@ html, body {
   animation: slideUp 0.25s ease;
 }
 #solo-info { flex: 1; line-height: 1.4; text-align: center; }
+.solo-line1 { font-size: 0.75rem; opacity: 0.75; margin-bottom: 1px; }
+.solo-line2 { font-size: 0.85rem; font-weight: 600; }
 #solo-bar button {
   background: rgba(255,255,255,0.15); border: none; color: #fff;
   border-radius: 8px; padding: 7px 12px; font-size: 0.82rem; font-weight: 600;
