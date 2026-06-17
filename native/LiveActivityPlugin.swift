@@ -171,8 +171,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     /// 開機補做：App 曾被完全關閉時按下的鎖屏指令，存在 UserDefaults，這裡取出並清除。
     /// 只認 2 分鐘內的指令，避免卡住的舊指令在很久後正常開 App 時誤觸發行程。
     @objc func consumePendingCommand(_ call: CAPPluginCall) {
-        // 從 App Group 共享容器讀（widget 的 perform() 寫在這裡）；取不到退回 standard
-        let defaults = UserDefaults(suiteName: kAppGroup) ?? .standard
+        // 讀主程序的 UserDefaults.standard：AppDelegate 收到 maptrip:// 後寫在這裡。
+        // 不用 App Group suite —— 免費帳號那個 store 與主程序不同步（之前 raw="" 的主因）。
+        let defaults = UserDefaults.standard
         let cmd = defaults.string(forKey: kMapTripPendingCommand) ?? ""
         let ts = defaults.double(forKey: kMapTripPendingCommandTime)
         let now = Date().timeIntervalSince1970
