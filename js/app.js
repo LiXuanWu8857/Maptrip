@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.44';
+const APP_VERSION  = '1.1.45';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -111,8 +111,9 @@ function initMap() {
       // 不能同時呼叫：initActivity 會非同步建立閒置方塊，若此時 consumePendingWidgetCmd
       // 同步呼叫 startTrip 設為「記錄中」，initActivity 的 Task 跑完後會把方塊蓋回閒置。
       la.initActivity().then(() => { dbg('initActivity done → consume'); consumePendingWidgetCmdRetry(); });
-      // 前景續命計時器（背景由 onGpsUpdate 觸發）
-      setInterval(widgetHeartbeat, 30000);
+      // 前景續命計時器（背景由 onGpsUpdate 觸發）。設 3 秒，配合 6 秒過期時間，
+      // 即使前景時 GPS 沒更新，方塊也不會誤消失。
+      setInterval(widgetHeartbeat, 3000);
       // 回到前景時：補做鎖屏指令；沒有指令且未記錄中才重建方塊（避免覆蓋記錄狀態）
       window.Capacitor?.Plugins?.App?.addListener('appStateChange', ({ isActive }) => {
         dbg('appStateChange isActive=' + isActive);
@@ -402,10 +403,11 @@ function consumePendingWidgetCmdRetry(tries = 6, gapMs = 600) {
 }
 
 // 替鎖屏方塊「續命」：刷新原生端的 staleDate。App 一被完全關閉就停止呼叫，
-// 方塊過期後自動消失。節流到至少 25 秒一次，避免過於頻繁被 iOS 限流。
+// 替方塊續命：刷新 staleDate。節流到至少每 2 秒一次（過期時間設 6 秒，
+// 續命須明顯比它快，App 活著時方塊才不會誤消失）。
 function widgetHeartbeat() {
   const now = Date.now();
-  if (now - lastHeartbeat < 25000) return;
+  if (now - lastHeartbeat < 2000) return;
   lastHeartbeat = now;
   liveAct()?.heartbeat?.();
 }

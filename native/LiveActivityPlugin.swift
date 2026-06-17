@@ -21,8 +21,9 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "consumePendingCommand", returnType: CAPPluginReturnPromise)
     ]
 
-    // 方塊過期時間：App 活著時持續往後推；App 一死沒人推，過期後鎖屏畫面收成空白
-    private let staleWindow: TimeInterval = 30
+    // 方塊過期時間：App 活著時 GPS 回呼持續往後推；App 一死沒人推，過期後鎖屏畫面收成空白。
+    // 設短一點讓「殺掉 App → 方塊消失」更快；需搭配 JS 端每 2-3 秒續命一次，避免存活時誤消失。
+    private let staleWindow: TimeInterval = 6
 
     // 用 Any? 儲存，避免 @available 標記汙染整個 class
     private var currentActivity: Any?
