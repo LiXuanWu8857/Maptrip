@@ -22,7 +22,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     // 方塊過期時間：App 活著時持續往後推；App 一死沒人推，過期後鎖屏畫面收成空白
-    private let staleWindow: TimeInterval = 90
+    private let staleWindow: TimeInterval = 30
 
     // 用 Any? 儲存，避免 @available 標記汙染整個 class
     private var currentActivity: Any?
@@ -64,6 +64,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - 公開 Plugin 方法
 
     /// App 啟動時呼叫：顯示閒置狀態的 Live Activity（「開始行程」按鈕）
+    /// 每次都先清除所有舊方塊，確保鎖屏顯示的是這次 build 的版本（含最新 AppIntent 按鈕）
     @objc func initActivity(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else {
             call.resolve(["enabled": false, "started": false, "error": "iOS < 16.2"])
@@ -71,6 +72,10 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
         Task {
+            for old in Activity<MapTripAttributes>.activities {
+                await old.end(nil, dismissalPolicy: .immediate)
+            }
+            currentActivity = nil
             let err = await self.upsertActivity(isRecording: false, elapsed: 0, distance: 0)
             call.resolve([
                 "enabled": enabled,
