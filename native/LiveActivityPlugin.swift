@@ -47,6 +47,7 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         let action = (note.userInfo?["action"] as? String) ?? ""
         // 已即時處理，清掉暫存避免下次開機重複觸發
         UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
+        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommandTime)
         DispatchQueue.main.async {
             self.notifyListeners("liveActivityCommand", data: ["action": action])
         }
@@ -125,11 +126,15 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// 開機補做：App 曾被完全關閉時按下的鎖屏指令，存在 UserDefaults，這裡取出並清除
+    /// 開機補做：App 曾被完全關閉時按下的鎖屏指令，存在 UserDefaults，這裡取出並清除。
+    /// 只認 2 分鐘內的指令，避免卡住的舊指令在很久後正常開 App 時誤觸發行程。
     @objc func consumePendingCommand(_ call: CAPPluginCall) {
         let cmd = UserDefaults.standard.string(forKey: kMapTripPendingCommand) ?? ""
+        let ts = UserDefaults.standard.double(forKey: kMapTripPendingCommandTime)
         UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
-        call.resolve(["action": cmd])
+        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommandTime)
+        let fresh = ts > 0 && (Date().timeIntervalSince1970 - ts) < 120
+        call.resolve(["action": fresh ? cmd : ""])
     }
 
     // MARK: - 私有實作
