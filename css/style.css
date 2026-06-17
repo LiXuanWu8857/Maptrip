@@ -216,7 +216,7 @@ html, body {
 #locate-btn.follow-active .ctrl-icon { color: #1a73e8; }
 #locate-btn.follow-active .ctrl-label { color: #1a73e8; }
 
-.ctrl-icon { font-size: 1.3rem; }
+.ctrl-icon { font-size: 1.3rem; line-height: 1; }
 .ctrl-label { font-size: 0.75rem; color: #3c4043; }
 #start-btn .ctrl-label { color: #1a73e8; }
 
