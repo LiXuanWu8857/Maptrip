@@ -23,16 +23,14 @@ html, body {
 #top-bar {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: calc(env(safe-area-inset-top, 0px) + 48px);
-  padding-top: env(safe-area-inset-top, 0px);
+  height: 48px;
   background: rgba(255,255,255,0.9);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-left: 16px;
-  padding-right: 16px;
+  padding: 0 16px;
   z-index: 21;
   border-bottom: 1px solid rgba(0,0,0,0.08);
 }
@@ -56,7 +54,7 @@ html, body {
 .icon-btn:active { opacity: 0.7; }
 
 #gps-badge {
-  position: fixed; top: calc(56px + env(safe-area-inset-top, 0px)); right: 12px;
+  position: fixed; top: 56px; right: 12px;
   font-size: 0.7rem; padding: 4px 10px; border-radius: 20px;
   z-index: 15; backdrop-filter: blur(8px); pointer-events: none; transition: all 0.3s;
 }
@@ -77,7 +75,7 @@ html, body {
   z-index: 25;
   transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-#autostart-banner.show { top: calc(56px + env(safe-area-inset-top, 0px)); }
+#autostart-banner.show { top: 56px; }
 #autostart-info {
   display: flex; align-items: center; gap: 8px;
   font-size: 0.88rem; font-weight: 500; color: #202124;
@@ -108,7 +106,7 @@ html, body {
   z-index: 25;
   transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-#arrival-banner.show { top: calc(56px + env(safe-area-inset-top, 0px)); }
+#arrival-banner.show { top: 56px; }
 #arrival-info {
   display: flex; align-items: center; gap: 8px;
   font-size: 0.88rem; font-weight: 500; color: #202124;
@@ -129,7 +127,7 @@ html, body {
 #arrival-confirm:active { opacity: 0.85; }
 
 #tile-toggle {
-  position: fixed; top: calc(56px + env(safe-area-inset-top, 0px)); left: 12px;
+  position: fixed; top: 56px; left: 12px;
   background: rgba(255,255,255,0.9); backdrop-filter: blur(8px);
   border: 1px solid rgba(0,0,0,0.12); color: #202124;
   border-radius: 20px; padding: 4px 12px; font-size: 0.72rem;
@@ -373,7 +371,7 @@ html, body {
 #gmaps-confirm:active { opacity: 0.85; }
 
 #map-error {
-  position: fixed; top: calc(56px + env(safe-area-inset-top, 0px)); left: 12px; right: 12px;
+  position: fixed; top: 56px; left: 12px; right: 12px;
   background: rgba(234,67,53,0.08); border: 1px solid rgba(234,67,53,0.3);
   color: #c5221f; border-radius: 10px; padding: 10px 14px;
   font-size: 0.8rem; z-index: 20; text-align: center;
