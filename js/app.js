@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.41';
+const APP_VERSION  = '1.1.42';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -97,20 +97,23 @@ function initMap() {
       if (data?.url === 'maptrip://end'   && activeTrip)  endTrip();
     });
     const la = liveAct();
+    dbg('boot v' + APP_VERSION + ' la=' + (la ? 'ok' : 'NULL'));
     if (la) {
       // App Intent 按鈕：在背景直接收到指令，不跳轉到 App
       la.addListener?.('liveActivityCommand', ({ action }) => {
+        dbg('event liveActivityCommand: ' + action);
         if (action === 'start') widgetStart();
         if (action === 'end'   && activeTrip)  endTrip();
       });
       // initActivity 先完成（非同步），再補做鎖屏暫存指令。
       // 不能同時呼叫：initActivity 會非同步建立閒置方塊，若此時 consumePendingWidgetCmd
       // 同步呼叫 startTrip 設為「記錄中」，initActivity 的 Task 跑完後會把方塊蓋回閒置。
-      la.initActivity().then(() => consumePendingWidgetCmd());
+      la.initActivity().then(() => { dbg('initActivity done → consume'); consumePendingWidgetCmd(); });
       // 前景續命計時器（背景由 onGpsUpdate 觸發）
       setInterval(widgetHeartbeat, 30000);
       // 回到前景時：補做鎖屏指令；沒有指令且未記錄中才重建方塊（避免覆蓋記錄狀態）
       window.Capacitor?.Plugins?.App?.addListener('appStateChange', ({ isActive }) => {
+        dbg('appStateChange isActive=' + isActive);
         if (isActive) {
           fixLayout();
           consumePendingWidgetCmd().then(didAct => {
@@ -358,6 +361,7 @@ function startTrip() {
 // 鎖屏 Widget 觸發的開始：背景被喚醒時 GPS 常還沒定位，
 // 若還沒鎖定就排隊，等下一筆 GPS 進來自動開始（見 onGpsUpdate）。
 function widgetStart() {
+  dbg('widgetStart active=' + !!activeTrip + ' pos=' + !!currentPos);
   if (activeTrip) return;
   if (currentPos) { beginRecording(); }
   else { pendingWidgetStart = true; toast('定位中，行程即將開始…'); }
@@ -367,12 +371,13 @@ function widgetStart() {
 function consumePendingWidgetCmd() {
   const la = liveAct();
   const p = la?.consumePendingCommand?.();
-  if (!p || typeof p.then !== 'function') return Promise.resolve(false);
+  if (!p || typeof p.then !== 'function') { dbg('consume: no method'); return Promise.resolve(false); }
   return p.then(res => {
+    dbg('consume action=' + JSON.stringify(res?.action));
     if (res?.action === 'start') { widgetStart(); return true; }
     if (res?.action === 'end' && activeTrip) { endTrip(); return true; }
     return false;
-  }).catch(() => false);
+  }).catch(e => { dbg('consume err ' + e); return false; });
 }
 
 // 替鎖屏方塊「續命」：刷新原生端的 staleDate。App 一被完全關閉就停止呼叫，
@@ -1162,6 +1167,22 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// 暫時診斷：在畫面左上角累積顯示流程訊息，方便排查鎖屏開始行程。穩定後移除。
+function dbg(msg) {
+  let box = document.getElementById('dbg-box');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'dbg-box';
+    box.style.cssText = 'position:fixed;top:60px;left:8px;right:8px;z-index:99999;'
+      + 'background:rgba(0,0,0,0.82);color:#0f0;font:11px/1.4 monospace;'
+      + 'padding:6px 8px;border-radius:6px;max-height:40vh;overflow:auto;white-space:pre-wrap';
+    box.onclick = () => box.remove();
+    document.body.appendChild(box);
+  }
+  const t = new Date().toLocaleTimeString();
+  box.textContent += `[${t}] ${msg}\n`;
 }
 
 // ===== 版本更新偵測 =====
