@@ -42,12 +42,11 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             name: UIApplication.willTerminateNotification, object: nil)
     }
 
-    // 收到鎖屏 App Intent 指令 → 轉給 JS（JS 因背景定位仍在執行）
+    // 收到鎖屏 App Intent 指令 → 立即轉給 JS（App 已在前景、JS 醒著時可即時反應）。
+    // 注意：這裡「不清除」暫存指令。App 從背景被喚醒時 JS 還在睡、收不到這個即時通知，
+    // 必須留著讓「回到前景」時的 consumePendingCommand 可靠地補做（由它負責清除）。
     @objc private func onMapTripCommand(_ note: Notification) {
         let action = (note.userInfo?["action"] as? String) ?? ""
-        // 已即時處理，清掉暫存避免下次開機重複觸發
-        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommand)
-        UserDefaults.standard.removeObject(forKey: kMapTripPendingCommandTime)
         DispatchQueue.main.async {
             self.notifyListeners("liveActivityCommand", data: ["action": action])
         }
