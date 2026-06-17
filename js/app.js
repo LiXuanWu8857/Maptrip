@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.57';
+const APP_VERSION  = '1.1.58';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1194,7 +1194,8 @@ function loadTodayFromStorage() {
     drawTripLine(t, i + 1);
   });
   const allCoords = saved.flatMap(t => t.coords.map(c => [c.lat, c.lng]));
-  if (allCoords.length) {
+  if (allCoords.length && !sessionStorage.getItem('mapFitted')) {
+    sessionStorage.setItem('mapFitted', '1');
     fitMapToRoute(allCoords, 'bottom-bar', { animate: false });
   }
   updateTopBar();
