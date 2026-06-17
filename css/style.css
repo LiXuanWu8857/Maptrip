@@ -18,21 +18,21 @@ html, body {
   z-index: 0;
 }
 
+/* 安全區(動態島)不填色：讓地圖透出來，避免日期上方出現白色空白。
+   頂列只佔安全區下方的 48px，像 Google/Apple 地圖那樣地圖滿版到頂。 */
 #top-safe { display: none; }
 
 #top-bar {
   position: fixed;
-  top: 0; left: 0; right: 0;
-  height: calc(env(safe-area-inset-top, 0px) + 48px);
-  padding-top: env(safe-area-inset-top, 0px);
+  top: env(safe-area-inset-top, 0px); left: 0; right: 0;
+  height: 48px;
   background: rgba(255,255,255,0.9);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-left: 16px;
-  padding-right: 16px;
+  padding: 0 16px;
   z-index: 21;
   border-bottom: 1px solid rgba(0,0,0,0.08);
 }

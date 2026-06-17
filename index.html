@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.52';</script>
+<script>window.INDEX_VERSION = '1.1.53';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -22,13 +22,13 @@
 #top-safe { display: none !important; }
 #top-bar {
   position: fixed !important;
-  top: 0 !important; left: 0 !important; right: 0 !important;
-  height: calc(env(safe-area-inset-top, 0px) + 48px) !important;
-  padding-top: env(safe-area-inset-top, 0px) !important;
+  top: env(safe-area-inset-top, 0px) !important;
+  left: 0 !important; right: 0 !important;
+  height: 48px !important;
   background: rgba(255,255,255,0.9) !important;
   display: flex !important; align-items: center !important;
   justify-content: space-between !important;
-  padding-left: 16px !important; padding-right: 16px !important;
+  padding: 0 16px !important;
   z-index: 21 !important;
 }
 #map { position: fixed !important; inset: 0 !important; z-index: 0 !important; background: #e8e4de !important; }

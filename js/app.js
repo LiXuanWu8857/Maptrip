@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.52';
+const APP_VERSION  = '1.1.53';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1279,61 +1279,6 @@ function checkForUpdate() {
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
-// ===== 版面診斷探針：科學量測上方空白的真正來源 =====
-// 強制顯示（不需開診斷模式），直接把實際像素量測值打在畫面上。
-// 查清楚空白成因後即可移除。
-function probeTopLayout() {
-  // 1) 量 safe-area-inset-top 的「實際」像素值
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;'
-    + 'height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none';
-  document.body.appendChild(probe);
-  const safeTop = probe.getBoundingClientRect().height;
-  probe.remove();
-
-  const rect = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return id + '=∅';
-    const cs = getComputedStyle(el);
-    const r = el.getBoundingClientRect();
-    return `${id}: disp=${cs.display} top=${r.top.toFixed(0)} h=${r.height.toFixed(0)} z=${cs.zIndex}`;
-  };
-  const bodyCS = getComputedStyle(document.body);
-  const htmlCS = getComputedStyle(document.documentElement);
-
-  let box = document.getElementById('probe-box');
-  if (!box) {
-    box = document.createElement('div');
-    box.id = 'probe-box';
-    box.style.cssText = 'position:fixed;left:4px;right:4px;top:0;z-index:2147483647;'
-      + 'background:rgba(180,0,0,0.92);color:#fff;font:10px/1.35 monospace;'
-      + 'padding:4px 6px;white-space:pre-wrap;border-radius:0 0 6px 6px';
-    box.onclick = () => box.remove();
-    document.body.appendChild(box);
-  }
-  box.textContent =
-    `INDEX=${window.INDEX_VERSION} APP=${APP_VERSION}\n`
-    + `safe-area-inset-top(實量)=${safeTop.toFixed(1)}px\n`
-    + `window.innerH=${window.innerHeight} screen.h=${screen.height}\n`
-    + `vv.offTop=${window.visualViewport ? window.visualViewport.offsetTop.toFixed(0) : '∅'} `
-    + `vv.h=${window.visualViewport ? window.visualViewport.height.toFixed(0) : '∅'}\n`
-    + `html: margin=${htmlCS.margin} pad=${htmlCS.padding}\n`
-    + `body: margin=${bodyCS.margin} pad=${bodyCS.padding}\n`
-    + rect('top-safe') + '\n'
-    + rect('top-bar') + '\n'
-    + rect('map') + '\n'
-    + '(點此關閉)';
-
-  // 在實際元素上畫亮色外框，肉眼確認空白屬於誰
-  const outline = (id, color) => {
-    const el = document.getElementById(id);
-    if (el) el.style.outline = '2px solid ' + color;
-  };
-  outline('top-safe', '#0ff');   // 青：安全區填充
-  outline('top-bar',  '#0f0');   // 綠：頂列
-  outline('map',      '#ff0');   // 黃：地圖
-}
-
 function boot() {
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
@@ -1342,10 +1287,6 @@ function boot() {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
-
-  // 版面診斷探針：WKWebView 載入後尺寸會多次變動，量測幾次抓穩定值
-  setTimeout(probeTopLayout, 300);
-  setTimeout(probeTopLayout, 1500);
 
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
