@@ -2,6 +2,15 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
+<!-- 冷啟動自動 reload 一次：確保 WKWebView viewport 穩定在 reload 狀態，
+     讓 reload-fix CSS（top:0）正確消除動態島下方多餘間距。
+     sessionStorage 旗標確保每個 session 只 reload 一次，不會無限迴圈。 -->
+<script>
+if (!sessionStorage.getItem('booted')) {
+  sessionStorage.setItem('booted', '1');
+  location.reload();
+}
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -10,7 +19,7 @@
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.69';</script>
+<script>window.INDEX_VERSION = '1.1.70';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
