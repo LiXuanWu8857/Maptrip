@@ -48,8 +48,7 @@ html, body {
 
 .icon-btn {
   background: rgba(0,0,0,0.06); border: none; color: #202124;
-  width: clamp(36px, 9.2vw, 46px); height: clamp(36px, 9.2vw, 46px);
-  border-radius: 9px; font-size: clamp(1.1rem, 4.5vw, 1.4rem);
+  width: 36px; height: 36px; border-radius: 9px; font-size: 1.1rem;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .icon-btn:active { opacity: 0.7; }
@@ -224,7 +223,7 @@ html, body {
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
 #bottom-buttons {
-  height: calc(clamp(47px, 11.75vw, 58px) + env(safe-area-inset-bottom, 0px));
+  height: calc(47px + env(safe-area-inset-bottom, 0px));
   display: flex; align-items: center; justify-content: space-around;
   padding: 0 12px;
 }
@@ -233,15 +232,15 @@ html, body {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   background: none; border: none; color: #202124; cursor: pointer;
   padding: 2px 14px; border-radius: 12px; font-family: inherit;
-  min-width: clamp(80px, 20.5vw, 104px); transition: background 0.15s;
+  min-width: 80px; transition: background 0.15s;
 }
 .ctrl-btn:active { background: rgba(0,0,0,0.06); }
 
 #locate-btn.follow-active .ctrl-icon { color: #1a73e8; }
 #locate-btn.follow-active .ctrl-label { color: #1a73e8; }
 
-.ctrl-icon { font-size: clamp(1.3rem, 5.3vw, 1.7rem); line-height: 1; }
-.ctrl-label { font-size: clamp(0.75rem, 3.05vw, 0.92rem); color: #3c4043; }
+.ctrl-icon { font-size: 1.3rem; line-height: 1; }
+.ctrl-label { font-size: 0.75rem; color: #3c4043; }
 #start-btn .ctrl-label { color: #1a73e8; }
 #start-btn.recording .ctrl-icon { color: #c5221f; }
 #start-btn.recording .ctrl-label { color: #c5221f; }
@@ -665,6 +664,13 @@ html, body {
   #update-bar button:first-of-type { background: #6ab4ff; }
 
   #sheet-overlay { background: rgba(0,0,0,0.5); }
+}
+
+/* ===== Android 底部導覽列補丁 ===== */
+/* env(safe-area-inset-bottom) 在部分 Android WebView 回傳 0，
+   改用 JS 注入 platform-android 類別後，以固定安全值補足空間 */
+.platform-android #bottom-buttons {
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
 }
 
 /* ===== 平板 / 大螢幕最佳化 ===== */

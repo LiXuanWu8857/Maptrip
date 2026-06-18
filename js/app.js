@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.96';
+const APP_VERSION  = '1.1.97';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1576,6 +1576,7 @@ function boot() {
     if (navType !== 'reload') localStorage.removeItem('maptrip_debug');
   } catch (e) {}
 
+  document.body.classList.add('platform-' + nativePlatform());
   initMap();
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
