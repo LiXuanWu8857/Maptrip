@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.91';
+const APP_VERSION  = '1.1.92';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -695,6 +695,24 @@ function refreshRecBanner() {
   document.getElementById('rec-time').textContent = fmtDur(elapsed);
   document.getElementById('rec-dist').textContent = fmtDist(dist);
   liveAct()?.updateTrip({ elapsed: Math.floor(elapsed / 1000), distance: Math.round(dist) });
+}
+
+function toggleTopMenu() {
+  const menu = document.getElementById('top-menu');
+  const isOpen = menu.style.display !== 'none';
+  if (isOpen) { closeTopMenu(); } else {
+    menu.style.display = 'block';
+    document.getElementById('menu-overlay').style.display = 'block';
+  }
+}
+function closeTopMenu() {
+  document.getElementById('top-menu').style.display = 'none';
+  document.getElementById('menu-overlay').style.display = 'none';
+}
+function topMenuSelect(which) {
+  closeTopMenu();
+  if (which === 'today') toggleTripList();
+  else showHistory();
 }
 
 function toggleTripList() {
