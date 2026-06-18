@@ -665,3 +665,37 @@ html, body {
 
   #sheet-overlay { background: rgba(0,0,0,0.5); }
 }
+
+/* ===== 平板 / 大螢幕最佳化 ===== */
+@media (min-width: 560px) {
+  /* 底列按鈕置中，避免按鈕散得太開 */
+  #bottom-buttons {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* 行程 / 歷史 sheet 置中 */
+  #trip-sheet, #history-sheet {
+    left: max(0px, calc(50% - 280px));
+    right: max(0px, calc(50% - 280px));
+  }
+
+  /* 金額輸入 dialog 置中 */
+  #fare-dialog {
+    left: max(0px, calc(50% - 240px));
+    right: max(0px, calc(50% - 240px));
+  }
+
+  /* 回放面板置中 */
+  #replay-panel {
+    left: max(0px, calc(50% - 280px));
+    right: max(0px, calc(50% - 280px));
+  }
+
+  /* 浮動橫幅置中（錄製中、回放、更新提示、到達提示） */
+  #rec-banner, #solo-bar, #update-bar,
+  #arrival-banner, #autostart-banner {
+    left: max(12px, calc(50% - 260px));
+    right: max(12px, calc(50% - 260px));
+  }
+}
