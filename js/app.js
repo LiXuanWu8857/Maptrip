@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.86';
+const APP_VERSION  = '1.1.87';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1038,6 +1038,7 @@ function openReplay() {
   replaySet = todayTrips;
   closeSheet();
   document.getElementById('replay-panel').classList.add('show');
+  window._syncSpeedScroll?.();
   startReplay();
 }
 
@@ -1060,6 +1061,7 @@ function replayDay(dayKey) {
         { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map));
   });
   document.getElementById('replay-panel').classList.add('show');
+  window._syncSpeedScroll?.();
   startReplay();
 }
 
@@ -1203,47 +1205,36 @@ function onSpeedSlider(v) {
 }
 
 function initSpeedSlider() {
-  const track = document.getElementById('speed-track');
-  const fill  = document.getElementById('speed-fill');
-  const thumb = document.getElementById('speed-thumb');
-  if (!track) return;
-
-  let sliderActive = false;
+  const fill    = document.getElementById('speed-fill');
+  const thumb   = document.getElementById('speed-thumb');
+  const hitarea = document.getElementById('speed-scroll-hitarea');
+  if (!hitarea) return;
 
   function applyRatio(ratio) {
     const v   = Math.round(1 + ratio * 9);
     const pct = (ratio * 100).toFixed(1) + '%';
-    fill.style.width  = pct;
-    thumb.style.left  = pct;
+    fill.style.width = pct;
+    thumb.style.left = pct;
     onSpeedSlider(v);
   }
 
-  function ratioFromX(clientX) {
-    const rect = track.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  }
-
-  // touchstart 在 track 本身：設旗標 + 立即更新位置（passive:true 確保不阻塞）
-  track.addEventListener('touchstart', e => {
-    sliderActive = true;
-    const t = e.touches[0] || e.changedTouches[0];
-    if (t) applyRatio(ratioFromX(t.clientX));
+  // scroll 由 iOS 原生處理，完全可靠，不需要 touchmove
+  hitarea.addEventListener('scroll', () => {
+    const max = hitarea.scrollWidth - hitarea.clientWidth;
+    if (max > 0) applyRatio(hitarea.scrollLeft / max);
   }, { passive: true });
 
-  // touchmove 掛在 document：WKWebView 對 fixed 面板內元素的 touchmove 會延遲/吃掉，
-  // 但 document 層級的 touchmove 不受這限制，只在 sliderActive 時才 preventDefault
-  document.addEventListener('touchmove', e => {
-    if (!sliderActive) return;
-    e.preventDefault();
-    const t = e.touches[0] || e.changedTouches[0];
-    if (t) applyRatio(ratioFromX(t.clientX));
-  }, { passive: false });
+  // 同步捲動位置到目前速度（在 replay panel 顯示後呼叫才能量到正確寬度）
+  function syncScroll() {
+    requestAnimationFrame(() => {
+      const max = hitarea.scrollWidth - hitarea.clientWidth;
+      if (max > 0) hitarea.scrollLeft = ((replaySpeed - 1) / 9) * max;
+    });
+  }
+  window._syncSpeedScroll = syncScroll;
 
-  document.addEventListener('touchend',    () => { sliderActive = false; }, { passive: true });
-  document.addEventListener('touchcancel', () => { sliderActive = false; }, { passive: true });
-
-  // 初始化到目前速度
   applyRatio((replaySpeed - 1) / 9);
+  syncScroll();
 }
 
 function stopReplay() {
@@ -1473,8 +1464,8 @@ function probeLayout() {
     document.getElementById('probe-slider-log')?.remove();
   };
 
-  // 速度滑桿即時 touch 診斷
-  const sliderEl = document.getElementById('speed-track');
+  // 速度滑桿 scroll 診斷
+  const hitareaEl = document.getElementById('speed-scroll-hitarea');
   let sliderLog = document.getElementById('probe-slider-log');
   if (!sliderLog) {
     sliderLog = document.createElement('div');
@@ -1484,26 +1475,20 @@ function probeLayout() {
       + 'border-radius:8px;padding:6px 10px;touch-action:none;pointer-events:none;';
     document.body.appendChild(sliderLog);
   }
-  function logSlider(type, e) {
-    const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
-    const rect = sliderEl ? sliderEl.getBoundingClientRect() : null;
-    const cx = t ? t.clientX.toFixed(1) : '?';
-    const cy = t ? t.clientY.toFixed(1) : '?';
-    const ratio = (t && rect) ? Math.max(0, Math.min(1, (t.clientX - rect.left) / rect.width)).toFixed(3) : '?';
-    sliderLog.innerHTML =
-      `<b style="color:#0f0">speed-track probe</b>\n` +
-      `event: <b>${type}</b>\n` +
-      `clientX/Y: ${cx}, ${cy}\n` +
-      `track rect: ${rect ? `l:${rect.left.toFixed(0)} r:${rect.right.toFixed(0)} t:${rect.top.toFixed(0)} b:${rect.bottom.toFixed(0)}` : 'null'}\n` +
-      `ratio→val: ${ratio} → ${rect ? Math.round(1 + parseFloat(ratio) * 9) : '?'}`;
-  }
-  if (sliderEl) {
-    ['touchstart','touchmove','touchend'].forEach(evName => {
-      sliderEl.addEventListener(evName, e => logSlider(evName, e), { passive: true });
-    });
-    sliderLog.innerHTML = '<b style="color:#0f0">speed-track probe</b>\n在速度滑桿上滑動即顯示事件';
+  if (hitareaEl) {
+    hitareaEl.addEventListener('scroll', () => {
+      const max = hitareaEl.scrollWidth - hitareaEl.clientWidth;
+      const ratio = max > 0 ? hitareaEl.scrollLeft / max : 0;
+      sliderLog.innerHTML =
+        `<b style="color:#0f0">speed-scroll probe</b>\n` +
+        `scroll event ✓\n` +
+        `scrollLeft: ${hitareaEl.scrollLeft.toFixed(1)}\n` +
+        `max: ${max.toFixed(1)}\n` +
+        `ratio→val: ${ratio.toFixed(3)} → ${Math.round(1 + ratio * 9)}`;
+    }, { passive: true });
+    sliderLog.innerHTML = '<b style="color:#0f0">speed-scroll probe</b>\n在速度滑桿上滑動即顯示';
   } else {
-    sliderLog.innerHTML = '<b style="color:#f66">speed-track 元素不存在！</b>';
+    sliderLog.innerHTML = '<b style="color:#f66">speed-scroll-hitarea 不存在！</b>';
   }
 
   // 拖曳支援

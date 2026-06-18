@@ -490,7 +490,6 @@ html, body {
 #speed-track {
   flex: 1; min-width: 0; height: 44px;
   position: relative; display: flex; align-items: center;
-  touch-action: none; cursor: pointer;
 }
 #speed-track-bg {
   position: absolute; left: 0; right: 0; height: 5px;
@@ -508,6 +507,15 @@ html, body {
   transform: translateX(-50%); left: 44%;
   pointer-events: none;
 }
+/* 透明橫向捲動層：讓 iOS 原生 scroll 處理拖曳，完全繞過 touchmove */
+#speed-scroll-hitarea {
+  position: absolute; inset: 0;
+  overflow-x: scroll; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+#speed-scroll-hitarea::-webkit-scrollbar { display: none; }
+#speed-scroll-content { width: 200%; height: 1px; pointer-events: none; }
 #replay-action-btns { display: flex; gap: 10px; flex-shrink: 0; }
 #replay-play-btn, #replay-restart-btn {
   width: 42px; height: 42px; border-radius: 50%; border: none;
