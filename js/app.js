@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.72';
+const APP_VERSION  = '1.1.73';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -773,10 +773,20 @@ function fitMapToRoute(coords, bottomElId, opts = {}) {
   if (!coords?.length) return;
   const topEl  = document.getElementById('top-bar');
   const botEl  = bottomElId ? document.getElementById(bottomElId) : null;
-  const topPad = (topEl  ? topEl.getBoundingClientRect().bottom   : 48) + 8;
+
+  // 量測 safe-area-inset-top（動態島高度），確保 topPad 不低於它
+  const safeTmp = document.createElement('div');
+  safeTmp.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);pointer-events:none;visibility:hidden';
+  document.body.appendChild(safeTmp);
+  const safeTop = safeTmp.getBoundingClientRect().height;
+  safeTmp.remove();
+
+  const topBarBottom = topEl ? topEl.getBoundingClientRect().bottom : 48;
+  const topPad = Math.max(topBarBottom, safeTop) + 20;  // 至少動態島下方 + 20px 緩衝
+
   const botR   = botEl   ? botEl.getBoundingClientRect() : null;
   const botPad = (botR && botR.top > 10)
-    ? (window.innerHeight - botR.top + 8)
+    ? (window.innerHeight - botR.top + 20)  // 緩衝從 8 → 20
     : (opts.botFallback ?? 80);
   map.fitBounds(L.latLngBounds(coords),
     { animate: opts.animate ?? true,
