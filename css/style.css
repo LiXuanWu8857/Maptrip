@@ -446,7 +446,7 @@ html, body {
 }
 
 /* ===== 回放面板 ===== */
-/* display:none/flex 取代 transform slide：WKWebView 的 transform 容器會讓 range slider 失效 */
+/* display:none/flex + opacity fade：完全不用 transform，消除 WKWebView range slider 失效 bug */
 #replay-panel {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: #fff; border-radius: 20px 20px 0 0;
@@ -458,7 +458,11 @@ html, body {
 }
 #replay-panel.show {
   display: flex; flex-direction: column;
-  animation: slideUp 0.25s ease both;
+  animation: replayFadeIn 0.2s ease;
+}
+@keyframes replayFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 #replay-header {
   display: flex; align-items: center; justify-content: space-between;

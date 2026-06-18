@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.71';
+const APP_VERSION  = '1.1.72';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -790,6 +790,11 @@ function openSoloTrip(set, idx, labelFn) {
   soloSet = set;
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
+  // 禁止地圖拖曳，改由整個地圖面左右滑切換趟次
+  map.dragging.disable();
+  map.touchZoom.disable();
+  document.getElementById('map').addEventListener('touchstart', _soloTouchStart, { passive: true });
+  document.getElementById('map').addEventListener('touchend',   _soloTouchEnd,   { passive: true });
   // 先顯示 solo-bar，讓瀏覽器先算好 layout，fitBounds 才能量到正確高度
   document.getElementById('solo-bar').style.display = 'flex';
   renderSoloTrip();
@@ -865,7 +870,27 @@ function exitSoloMode() {
     if (l.setStyle) l.setStyle({ opacity: 0.85 });
     else if (l.setOpacity) l.setOpacity(1);
   });
+  // 恢復地圖拖曳
+  map.dragging.enable();
+  map.touchZoom.enable();
+  document.getElementById('map').removeEventListener('touchstart', _soloTouchStart);
+  document.getElementById('map').removeEventListener('touchend',   _soloTouchEnd);
   document.getElementById('solo-bar').style.display = 'none';
+}
+
+// 地圖層級的水平滑動 → 切換單趟（solo mode 時才掛上）
+let _soloSwX = null, _soloSwY = null;
+function _soloTouchStart(e) {
+  const t = e.touches[0]; _soloSwX = t.clientX; _soloSwY = t.clientY;
+}
+function _soloTouchEnd(e) {
+  if (_soloSwX === null) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - _soloSwX, dy = t.clientY - _soloSwY;
+  _soloSwX = _soloSwY = null;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    if (dx < 0) soloNext(); else soloPrev();
+  }
 }
 
 function deleteTodayTrip(e, idx) {
