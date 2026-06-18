@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.80';
+const APP_VERSION  = '1.1.81';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -15,6 +15,7 @@ let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 let soloLayers = [];
 let soloSet = [], soloIdx = 0, soloLabelFn = null;  // 單趟顯示：可左右切換的趟次集合
+let soloFromHistory = false;  // 從歷史紀錄進入 solo 模式時為 true
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let activeSnapPending = false;
@@ -775,6 +776,7 @@ function dayKeyToLabel(dayKey) {
 
 // 從今日清單點某趟 → 進入可左右切換的單趟顯示
 function showSoloTripFromToday(idx) {
+  soloFromHistory = false;
   const dateLabel = new Date().toLocaleDateString('zh-TW',
     { month: 'long', day: 'numeric', weekday: 'short' });
   openSoloTrip(todayTrips, idx, i =>
@@ -785,6 +787,7 @@ function showSoloTripFromToday(idx) {
 function showHistoryTrip(day, idx) {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   if (!raw[day]?.length) return;
+  soloFromHistory = true;
   closeHistory();
   openSoloTrip(raw[day], idx, i =>
     `${dayKeyToLabel(day)}　第 ${i + 1} 趟 / 共 ${raw[day].length} 趟`);
@@ -859,9 +862,11 @@ function renderSoloTrip() {
 
   const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
   const info  = `${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
-  // 兩行顯示：第一行日期+趟次，第二行時間+里程
+  // 兩行顯示：第一行日期+趟次，第二行時間+里程；歷史模式多一行提示
   document.getElementById('solo-info').innerHTML =
-    `<div class="solo-line1">${label}</div><div class="solo-line2">${info}</div>`;
+    `<div class="solo-line1">${label}</div>` +
+    `<div class="solo-line2">${info}</div>` +
+    (soloFromHistory ? `<div class="solo-hint">按兩下離開歷史模式</div>` : '');
 
   // 首尾趟把箭頭變淡（沒有上一趟/下一趟）
   const prevBtn = document.getElementById('solo-prev');
@@ -897,7 +902,7 @@ function setupSoloSwipe() {
 function exitSoloMode() {
   soloLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
   soloLayers = [];
-  soloSet = []; soloIdx = 0; soloLabelFn = null;
+  soloSet = []; soloIdx = 0; soloLabelFn = null; soloFromHistory = false;
   allMapLayers.forEach(l => {
     if (l.setStyle) l.setStyle({ opacity: 0.85 });
     else if (l.setOpacity) l.setOpacity(1);
@@ -911,7 +916,7 @@ function exitSoloMode() {
 }
 
 // 地圖層級的水平滑動 → 切換單趟（solo mode 時才掛上）
-let _soloSwX = null, _soloSwY = null;
+let _soloSwX = null, _soloSwY = null, _soloLastTap = 0;
 function _soloTouchStart(e) {
   const t = e.touches[0]; _soloSwX = t.clientX; _soloSwY = t.clientY;
 }
@@ -921,7 +926,19 @@ function _soloTouchEnd(e) {
   const dx = t.clientX - _soloSwX, dy = t.clientY - _soloSwY;
   _soloSwX = _soloSwY = null;
   if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    _soloLastTap = 0;
     if (dx < 0) soloNext(); else soloPrev();
+    return;
+  }
+  // 點擊（移動量小）→ 偵測連點兩下
+  if (Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+    const now = Date.now();
+    if (now - _soloLastTap < 350) {
+      _soloLastTap = 0;
+      exitSoloMode();
+    } else {
+      _soloLastTap = now;
+    }
   }
 }
 
