@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.64';
+const APP_VERSION  = '1.1.65';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1290,62 +1290,6 @@ function checkForUpdate() {
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
-// ── 版面量測探針 ──────────────────────────────────────────────────────────────
-// 顯示單一浮動面板，列出所有關鍵 px 值；點任意位置關閉。
-// 確認數值正確後移除此函式和 setTimeout(probeLayout, 800)。
-function probeLayout() {
-  // 量 env() 安全區
-  const mkEnv = css => {
-    const d = document.createElement('div');
-    d.style.cssText = css + ';position:fixed;pointer-events:none;visibility:hidden';
-    document.body.appendChild(d);
-    const h = d.getBoundingClientRect().height;
-    d.remove(); return h;
-  };
-  const safeT = mkEnv('top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)');
-  const safeB = mkEnv('bottom:0;left:0;width:1px;height:env(safe-area-inset-bottom,0px)');
-  const vh    = window.innerHeight;
-  const vvh   = (window.visualViewport && window.visualViewport.height) || vh;
-
-  const r = id => {
-    const el = document.getElementById(id);
-    if (!el) return `${id}=∅`;
-    const b = el.getBoundingClientRect();
-    return `${id}  top=${b.top|0}  bot=${b.bottom|0}  h=${b.height|0}`;
-  };
-  const btn = document.querySelector('.ctrl-btn');
-  const br  = btn ? btn.getBoundingClientRect() : null;
-  const bh  = br ? `ctrl-btn  top=${br.top|0}  bot=${br.bottom|0}  h=${br.height|0}` : 'ctrl-btn=∅';
-
-  // 已存在就更新，否則新建
-  let box = document.getElementById('_probe_box');
-  if (!box) {
-    box = document.createElement('div');
-    box.id = '_probe_box';
-    box.style.cssText =
-      'position:fixed;top:60px;left:8px;right:8px;z-index:2147483647;'
-      + 'background:rgba(0,0,0,0.82);color:#0f0;font:11px/1.5 monospace;'
-      + 'padding:8px 10px;border-radius:10px;white-space:pre;'
-      + 'box-shadow:0 4px 20px rgba(0,0,0,0.5)';
-    box.onclick = () => box.remove();
-    document.body.appendChild(box);
-  }
-  box.textContent =
-    `v${APP_VERSION}   vh=${vh}  vvh=${vvh}\n`
-    + `safe-top=${safeT|0}px   safe-bot=${safeB|0}px\n`
-    + '─────────────────────────────\n'
-    + r('top-bar')       + '\n'
-    + '─────────────────────────────\n'
-    + r('bottom-bar')    + '\n'
-    + r('bottom-buttons')+ '\n'
-    + bh                  + '\n'
-    + r('rec-banner')    + '\n'
-    + r('solo-bar')      + '\n'
-    + '─────────────────────────────\n'
-    + '點此關閉';
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 function boot() {
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
@@ -1354,8 +1298,6 @@ function boot() {
   }
   initMap();
   setTimeout(checkForUpdate, 2000);
-  setTimeout(probeLayout, 900);   // ← 量好後移除此行
-
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
   if (vl) vl.textContent = 'v' + APP_VERSION + (dbgEnabled() ? ' · 診斷中' : '');
