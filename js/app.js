@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.83';
+const APP_VERSION  = '1.1.84';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1200,6 +1200,8 @@ function initSpeedSlider() {
   const thumb = document.getElementById('speed-thumb');
   if (!track) return;
 
+  let sliderActive = false;
+
   function applyRatio(ratio) {
     const v   = Math.round(1 + ratio * 9);
     const pct = (ratio * 100).toFixed(1) + '%';
@@ -1213,19 +1215,24 @@ function initSpeedSlider() {
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   }
 
-  // 用 Pointer Events + setPointerCapture：WKWebView 不會在 pointerdown 之後
-  // 插入捲動判斷延遲，setPointerCapture 確保 pointermove 永遠送達 track 元素
-  track.addEventListener('pointerdown', e => {
-    track.setPointerCapture(e.pointerId);
+  // touchstart 在 track 本身：設旗標 + 立即更新位置（passive:true 確保不阻塞）
+  track.addEventListener('touchstart', e => {
+    sliderActive = true;
+    const t = e.touches[0] || e.changedTouches[0];
+    if (t) applyRatio(ratioFromX(t.clientX));
+  }, { passive: true });
+
+  // touchmove 掛在 document：WKWebView 對 fixed 面板內元素的 touchmove 會延遲/吃掉，
+  // 但 document 層級的 touchmove 不受這限制，只在 sliderActive 時才 preventDefault
+  document.addEventListener('touchmove', e => {
+    if (!sliderActive) return;
     e.preventDefault();
-    applyRatio(ratioFromX(e.clientX));
+    const t = e.touches[0] || e.changedTouches[0];
+    if (t) applyRatio(ratioFromX(t.clientX));
   }, { passive: false });
 
-  track.addEventListener('pointermove', e => {
-    if (!(e.buttons & 1)) return;
-    e.preventDefault();
-    applyRatio(ratioFromX(e.clientX));
-  }, { passive: false });
+  document.addEventListener('touchend',    () => { sliderActive = false; }, { passive: true });
+  document.addEventListener('touchcancel', () => { sliderActive = false; }, { passive: true });
 
   // 初始化到目前速度
   applyRatio((replaySpeed - 1) / 9);
