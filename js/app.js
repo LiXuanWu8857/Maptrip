@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.89';
+const APP_VERSION  = '1.1.90';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1108,9 +1108,9 @@ function startReplay() {
 }
 
 // 將整段路線框進畫面：每趟只設定一次相機，避免逐影格縮放造成閃爍
-function frameReplayTrip() {
+function frameReplayTrip(animate = false) {
   fitMapToRoute(replayCoords.map(c => [c.lat, c.lng]), 'replay-panel',
-    { animate: false, botFallback: 160 });
+    { animate, botFallback: 160 });
 }
 
 function startReplayRAF() {
@@ -1164,7 +1164,7 @@ function endOfTripTransition() {
   replayPauseTimer = setTimeout(() => {
     glideGap(prevEnd, nextStart, () => {
       replayProgress = 0;
-      frameReplayTrip();
+      frameReplayTrip(true);
       startReplayRAF();
     });
   }, 2000);
