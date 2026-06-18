@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.76';
+const APP_VERSION  = '1.1.77';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -56,7 +56,8 @@ function ensureBottomBarVisible() {
 }
 
 function initMap() {
-  map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0 })
+  map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0,
+                       preferCanvas: true })
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
 
