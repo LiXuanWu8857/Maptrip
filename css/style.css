@@ -446,6 +446,7 @@ html, body {
 }
 
 /* ===== 回放面板 ===== */
+/* display:none/flex 取代 transform slide：WKWebView 的 transform 容器會讓 range slider 失效 */
 #replay-panel {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: #fff; border-radius: 20px 20px 0 0;
@@ -453,11 +454,12 @@ html, body {
   box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
   z-index: 31; padding: 0 18px 20px;
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0));
-  transform: translateY(110%);
-  transition: transform 0.35s cubic-bezier(0.34, 1.3, 0.64, 1);
+  display: none;
 }
-/* 顯示時移除 transform：iOS WKWebView 對「transform 容器內的 range 滑桿」有觸控失效的 bug */
-#replay-panel.show { transform: none; }
+#replay-panel.show {
+  display: flex; flex-direction: column;
+  animation: slideUp 0.25s ease both;
+}
 #replay-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 0 6px; font-size: 0.95rem; font-weight: 700; color: #202124;

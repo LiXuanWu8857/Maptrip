@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.70';
+const APP_VERSION  = '1.1.71';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1065,9 +1065,6 @@ function endOfTripTransition() {
   setupReplayTrip(replayTripIdx);
   updateReplayPanel();
   const nextStart = replayCoords[0];
-  // 把「前一趟終點 → 下一趟起點」框進畫面，glide 期間相機不動 → 不閃
-  fitMapToRoute([[prevEnd.lat, prevEnd.lng], [nextStart.lat, nextStart.lng]], 'replay-panel',
-    { animate: false, botFallback: 160 });
   replayPauseTimer = setTimeout(() => {
     glideGap(prevEnd, nextStart, () => {
       replayProgress = 0;
