@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.66';
+const APP_VERSION  = '1.1.67';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1248,10 +1248,12 @@ function onVersionTap() {
   if (on) {
     localStorage.removeItem('maptrip_debug');
     document.getElementById('dbg-box')?.remove();
+    document.getElementById('probe-panel')?.remove();
     toast('診斷模式已關閉');
   } else {
     localStorage.setItem('maptrip_debug', '1');
     toast('診斷模式已開啟');
+    setTimeout(probeLayout, 100);
   }
   const vl = document.getElementById('version-label');
   if (vl) vl.textContent = 'v' + APP_VERSION + (dbgEnabled() ? ' · 診斷中' : '');
@@ -1270,6 +1272,95 @@ function dbg(msg) {
   }
   const t = new Date().toLocaleTimeString();
   box.textContent += `[${t}] ${msg}\n`;
+}
+
+// ===== 可拖曳浮動量測面板 =====
+function probeLayout() {
+  document.getElementById('probe-panel')?.remove();
+
+  // 用暫時元素量測 safe-area
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed;top:0;left:0;width:1px;pointer-events:none;visibility:hidden';
+  document.body.appendChild(tmp);
+  tmp.style.height = 'env(safe-area-inset-top,0px)';
+  const safeTop = tmp.getBoundingClientRect().height;
+  tmp.style.height = 'env(safe-area-inset-bottom,0px)';
+  const safeBot = tmp.getBoundingClientRect().height;
+  tmp.remove();
+
+  const vh = window.visualViewport?.height || window.innerHeight;
+  const vw = window.visualViewport?.width || window.innerWidth;
+
+  function r(id) {
+    const el = document.getElementById(id);
+    if (!el) return 'N/A';
+    const rc = el.getBoundingClientRect();
+    return `t:${rc.top.toFixed(1)} b:${rc.bottom.toFixed(1)} h:${rc.height.toFixed(1)}`;
+  }
+  function rq(sel) {
+    const el = document.querySelector(sel);
+    if (!el) return 'N/A';
+    const rc = el.getBoundingClientRect();
+    return `t:${rc.top.toFixed(1)} b:${rc.bottom.toFixed(1)} h:${rc.height.toFixed(1)}`;
+  }
+
+  let navType = '?';
+  try { const n = performance.getEntriesByType('navigation'); navType = n.length ? n[0].type : 'N/A'; } catch(e) {}
+
+  const lines = [
+    `nav: ${navType}`,
+    `vh:${vh}  vw:${vw}`,
+    `safe↑:${safeTop}px  safe↓:${safeBot}px`,
+    `#top-bar  ${r('top-bar')}`,
+    `#bottom-bar ${r('bottom-bar')}`,
+    `#bottom-buttons ${r('bottom-buttons')}`,
+    `.ctrl-btn ${rq('.ctrl-btn')}`,
+  ];
+
+  const panel = document.createElement('div');
+  panel.id = 'probe-panel';
+  panel.style.cssText = 'position:fixed;top:80px;right:8px;z-index:999999;width:270px;'
+    + 'background:rgba(0,0,0,0.88);color:#0f0;font:10.5px/1.5 monospace;'
+    + 'border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.5);touch-action:none;user-select:none;';
+  panel.innerHTML =
+    '<div id="probe-handle" style="display:flex;align-items:center;justify-content:space-between;'
+    + 'padding:6px 10px 5px;background:rgba(255,255,255,0.1);border-radius:10px 10px 0 0;cursor:grab">'
+    + '<span style="font-weight:700;color:#fff;font-size:11px">📐 Probe</span>'
+    + '<div style="display:flex;gap:10px">'
+    + '<button id="probe-refresh" style="background:none;border:none;color:#0f0;font:13px monospace;cursor:pointer;padding:0" title="重新量測">↺</button>'
+    + '<button id="probe-close" style="background:none;border:none;color:#f66;font:13px monospace;cursor:pointer;padding:0" title="關閉">✕</button>'
+    + '</div></div>'
+    + '<div style="padding:6px 10px 8px;white-space:pre">' + lines.join('\n') + '</div>';
+  document.body.appendChild(panel);
+
+  document.getElementById('probe-refresh').onclick = probeLayout;
+  document.getElementById('probe-close').onclick = () => panel.remove();
+
+  // 拖曳支援
+  const handle = document.getElementById('probe-handle');
+  let dragging = false, sx, sy, ox, oy;
+  handle.addEventListener('pointerdown', e => {
+    dragging = true;
+    handle.style.cursor = 'grabbing';
+    sx = e.clientX; sy = e.clientY;
+    const rc = panel.getBoundingClientRect();
+    ox = rc.left; oy = rc.top;
+    panel.style.right = 'auto';
+    panel.style.left = ox + 'px';
+    panel.style.top  = oy + 'px';
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  handle.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const newL = Math.max(0, Math.min(ox + e.clientX - sx, vw - panel.offsetWidth));
+    const newT = Math.max(0, Math.min(oy + e.clientY - sy, vh - panel.offsetHeight));
+    panel.style.left = newL + 'px';
+    panel.style.top  = newT + 'px';
+    e.preventDefault();
+  });
+  handle.addEventListener('pointerup',    () => { dragging = false; handle.style.cursor = 'grab'; });
+  handle.addEventListener('pointercancel',() => { dragging = false; handle.style.cursor = 'grab'; });
 }
 
 // ===== 版本更新偵測 =====
@@ -1301,6 +1392,9 @@ function boot() {
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
   if (vl) vl.textContent = 'v' + APP_VERSION + (dbgEnabled() ? ' · 診斷中' : '');
+
+  // 診斷模式開著時（含重新整理後），自動顯示可拖曳量測面板
+  if (dbgEnabled()) setTimeout(probeLayout, 300);
 
   // iOS WKWebView：同時綁定 input + change，確保拖曳和放手都能更新速度
   const slider = document.getElementById('speed-slider');

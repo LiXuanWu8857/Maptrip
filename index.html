@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.66';</script>
+<script>window.INDEX_VERSION = '1.1.67';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -56,6 +56,33 @@
   #bottom-bar { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
 }
 </style>
+<!-- WKWebView reload fix：重新整理後 viewport 已下移 safe-area-inset-top px，
+     env(safe-area-inset-top) 仍回傳原值，造成 top-bar 雙重偏移。
+     偵測到 reload 時立即注入 top:0 覆寫，消除多餘間距。 -->
+<script>
+(function () {
+  try {
+    var navType = '';
+    var navEntries = performance.getEntriesByType('navigation');
+    if (navEntries.length) {
+      navType = navEntries[0].type;
+    } else if (performance.navigation) {
+      navType = performance.navigation.type === 1 ? 'reload' : 'navigate';
+    }
+    if (navType === 'reload') {
+      var s = document.createElement('style');
+      s.id = 'reload-fix';
+      s.textContent =
+        '#top-bar{top:0!important}' +
+        '#gps-badge{top:56px!important}' +
+        '#tile-toggle{top:56px!important}' +
+        '#autostart-banner.show{top:56px!important}' +
+        '#arrival-banner.show{top:56px!important}';
+      document.head.appendChild(s);
+    }
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 
