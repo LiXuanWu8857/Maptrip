@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.67';
+const APP_VERSION  = '1.1.68';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1387,6 +1387,13 @@ function boot() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  // 冷啟動（navigate）時，重置診斷旗標，避免殘留 localStorage 讓面板意外出現
+  try {
+    const navEntries = performance.getEntriesByType('navigation');
+    const navType = navEntries.length ? navEntries[0].type : '';
+    if (navType !== 'reload') localStorage.removeItem('maptrip_debug');
+  } catch (e) {}
+
   initMap();
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
