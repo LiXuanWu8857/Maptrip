@@ -482,7 +482,7 @@ html, body {
 #speed-slider {
   flex: 1; min-width: 0; height: 44px; -webkit-appearance: none; appearance: none;
   background: transparent; cursor: pointer;
-  touch-action: none;
+  touch-action: pan-x;
 }
 #speed-slider::-webkit-slider-runnable-track {
   height: 5px; border-radius: 3px; background: #dadce0;

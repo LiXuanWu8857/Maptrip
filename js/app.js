@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.73';
+const APP_VERSION  = '1.1.74';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -620,7 +620,7 @@ function drawTripLine(trip, idx) {
   line.on('click', () =>
     toast(`行程 ${idx}｜${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`));
   const startMk = L.marker(latlngs[0], { icon: makeNumberIcon(idx, '#34A853') }).addTo(map);
-  const endMk   = L.marker(latlngs.at(-1), { icon: makeDotIcon('#EA4335') }).addTo(map);
+  const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon() }).addTo(map);
   allMapLayers.push(line, startMk, endMk);
   trip._layers = [line, startMk, endMk];
 }
@@ -641,6 +641,27 @@ function makeDotIcon(color) {
   });
 }
 
+// 起點：綠色圓形＋「起」
+function makeStartIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<div style="width:22px;height:22px;border-radius:50%;background:#34A853;border:3px solid #fff;'
+        + 'box-shadow:0 1px 5px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
+        + '<span style="color:#fff;font-size:9px;font-weight:700;line-height:1;font-family:sans-serif">起</span></div>',
+    iconSize: [22, 22], iconAnchor: [11, 11]
+  });
+}
+
+// 終點：紅色圓角方形＋「終」
+function makeEndIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<div style="width:22px;height:22px;border-radius:5px;background:#EA4335;border:3px solid #fff;'
+        + 'box-shadow:0 1px 5px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
+        + '<span style="color:#fff;font-size:9px;font-weight:700;line-height:1;font-family:sans-serif">終</span></div>',
+    iconSize: [22, 22], iconAnchor: [11, 11]
+  });
+}
 
 
 function centerOnMe() {
@@ -830,8 +851,8 @@ function renderSoloTrip() {
   const coords = (trip.roadCoords || trip.coords).map(c => [c.lat, c.lng]);
   soloLayers.push(
     L.polyline(coords, { color: '#1A73E8', weight: 7, opacity: 1 }).addTo(map),
-    L.marker(coords[0],     { icon: makeDotIcon('#34A853') }).addTo(map),
-    L.marker(coords.at(-1), { icon: makeDotIcon('#EA4335') }).addTo(map)
+    L.marker(coords[0],     { icon: makeStartIcon() }).addTo(map),
+    L.marker(coords.at(-1), { icon: makeEndIcon()   }).addTo(map)
   );
   fitMapToRoute(coords, 'solo-bar');
 
