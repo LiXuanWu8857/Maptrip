@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.81';
+const APP_VERSION  = '1.1.82';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1196,23 +1196,23 @@ function initSpeedSlider() {
     onSpeedSlider(v);
   }
 
-  function ratioFromEvent(e) {
-    const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
-    if (!t) return null;
+  function ratioFromX(clientX) {
     const rect = track.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (t.clientX - rect.left) / rect.width));
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   }
 
-  track.addEventListener('touchstart', e => {
-    e.preventDefault(); e.stopPropagation();
-    const r = ratioFromEvent(e);
-    if (r !== null) applyRatio(r);
+  // 用 Pointer Events + setPointerCapture：WKWebView 不會在 pointerdown 之後
+  // 插入捲動判斷延遲，setPointerCapture 確保 pointermove 永遠送達 track 元素
+  track.addEventListener('pointerdown', e => {
+    track.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    applyRatio(ratioFromX(e.clientX));
   }, { passive: false });
 
-  track.addEventListener('touchmove', e => {
-    e.preventDefault(); e.stopPropagation();
-    const r = ratioFromEvent(e);
-    if (r !== null) applyRatio(r);
+  track.addEventListener('pointermove', e => {
+    if (!(e.buttons & 1)) return;
+    e.preventDefault();
+    applyRatio(ratioFromX(e.clientX));
   }, { passive: false });
 
   // 初始化到目前速度
