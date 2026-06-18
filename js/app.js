@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.74';
+const APP_VERSION  = '1.1.75';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1461,6 +1461,25 @@ function boot() {
   if (slider) {
     slider.addEventListener('input',  e => onSpeedSlider(e.target.value));
     slider.addEventListener('change', e => onSpeedSlider(e.target.value));
+    // WKWebView range input touchmove bug：原生 slider 吃不到 touchmove，
+    // 改用 JS 手動計算觸碰位置對應的值，{ passive: false } + preventDefault 阻止瀏覽器攔截
+    function sliderValueFromTouch(e) {
+      const touch = e.touches[0] || e.changedTouches[0];
+      const rect  = slider.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+      return Math.round(parseInt(slider.min) + ratio * (parseInt(slider.max) - parseInt(slider.min)));
+    }
+    slider.addEventListener('touchstart', e => {
+      e.stopPropagation();
+      const v = sliderValueFromTouch(e);
+      slider.value = v; onSpeedSlider(v);
+    }, { passive: false });
+    slider.addEventListener('touchmove', e => {
+      e.preventDefault(); e.stopPropagation();
+      const v = sliderValueFromTouch(e);
+      slider.value = v; onSpeedSlider(v);
+    }, { passive: false });
+    slider.addEventListener('touchend', e => { e.stopPropagation(); }, { passive: false });
   }
 }
 
