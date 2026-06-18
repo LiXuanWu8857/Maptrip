@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.82';
+const APP_VERSION  = '1.1.83';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -702,6 +702,11 @@ function closeSheet() {
   document.getElementById('sheet-overlay').style.display = 'none';
 }
 
+function closeActiveSheet() {
+  if (document.getElementById('history-sheet').style.display !== 'none') closeHistory();
+  else closeSheet();
+}
+
 function renderTripSheet() {
   const body = document.getElementById('sheet-body');
   if (!todayTrips.length) {
@@ -962,8 +967,15 @@ function confirmClearDay() {
   toast('今日行程已清除');
 }
 
-function showHistory() { renderHistorySheet(); document.getElementById('history-sheet').style.display = 'flex'; }
-function closeHistory() { document.getElementById('history-sheet').style.display = 'none'; }
+function showHistory() {
+  renderHistorySheet();
+  document.getElementById('history-sheet').style.display = 'flex';
+  document.getElementById('sheet-overlay').style.display = 'block';
+}
+function closeHistory() {
+  document.getElementById('history-sheet').style.display = 'none';
+  document.getElementById('sheet-overlay').style.display = 'none';
+}
 
 function renderHistorySheet() {
   const body = document.getElementById('history-body');
