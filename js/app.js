@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.79';
+const APP_VERSION  = '1.1.80';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1163,7 +1163,43 @@ function toggleReplayPause() {
 function onSpeedSlider(v) {
   replaySpeed = parseInt(v) || 1;
   document.getElementById('speed-value').textContent = `${replaySpeed}x`;
-  // rAF 迴圈會即時讀取 replaySpeed，不需重新排程
+}
+
+function initSpeedSlider() {
+  const track = document.getElementById('speed-track');
+  const fill  = document.getElementById('speed-fill');
+  const thumb = document.getElementById('speed-thumb');
+  if (!track) return;
+
+  function applyRatio(ratio) {
+    const v   = Math.round(1 + ratio * 9);
+    const pct = (ratio * 100).toFixed(1) + '%';
+    fill.style.width  = pct;
+    thumb.style.left  = pct;
+    onSpeedSlider(v);
+  }
+
+  function ratioFromEvent(e) {
+    const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
+    if (!t) return null;
+    const rect = track.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (t.clientX - rect.left) / rect.width));
+  }
+
+  track.addEventListener('touchstart', e => {
+    e.preventDefault(); e.stopPropagation();
+    const r = ratioFromEvent(e);
+    if (r !== null) applyRatio(r);
+  }, { passive: false });
+
+  track.addEventListener('touchmove', e => {
+    e.preventDefault(); e.stopPropagation();
+    const r = ratioFromEvent(e);
+    if (r !== null) applyRatio(r);
+  }, { passive: false });
+
+  // 初始化到目前速度
+  applyRatio((replaySpeed - 1) / 9);
 }
 
 function stopReplay() {
@@ -1394,7 +1430,7 @@ function probeLayout() {
   };
 
   // 速度滑桿即時 touch 診斷
-  const sliderEl = document.getElementById('speed-slider');
+  const sliderEl = document.getElementById('speed-track');
   let sliderLog = document.getElementById('probe-slider-log');
   if (!sliderLog) {
     sliderLog = document.createElement('div');
@@ -1411,19 +1447,19 @@ function probeLayout() {
     const cy = t ? t.clientY.toFixed(1) : '?';
     const ratio = (t && rect) ? Math.max(0, Math.min(1, (t.clientX - rect.left) / rect.width)).toFixed(3) : '?';
     sliderLog.innerHTML =
-      `<b style="color:#0f0">slider touch probe</b>\n` +
+      `<b style="color:#0f0">speed-track probe</b>\n` +
       `event: <b>${type}</b>\n` +
       `clientX/Y: ${cx}, ${cy}\n` +
-      `slider rect: ${rect ? `l:${rect.left.toFixed(0)} r:${rect.right.toFixed(0)} t:${rect.top.toFixed(0)} b:${rect.bottom.toFixed(0)}` : 'null'}\n` +
+      `track rect: ${rect ? `l:${rect.left.toFixed(0)} r:${rect.right.toFixed(0)} t:${rect.top.toFixed(0)} b:${rect.bottom.toFixed(0)}` : 'null'}\n` +
       `ratio→val: ${ratio} → ${rect ? Math.round(1 + parseFloat(ratio) * 9) : '?'}`;
   }
   if (sliderEl) {
     ['touchstart','touchmove','touchend'].forEach(evName => {
       sliderEl.addEventListener(evName, e => logSlider(evName, e), { passive: true });
     });
-    sliderLog.innerHTML = '<b style="color:#0f0">slider touch probe</b>\n在速度滑桿上滑動即顯示事件';
+    sliderLog.innerHTML = '<b style="color:#0f0">speed-track probe</b>\n在速度滑桿上滑動即顯示事件';
   } else {
-    sliderLog.innerHTML = '<b style="color:#f66">speed-slider 元素不存在！</b>';
+    sliderLog.innerHTML = '<b style="color:#f66">speed-track 元素不存在！</b>';
   }
 
   // 拖曳支援
@@ -1493,31 +1529,7 @@ function boot() {
   // 診斷模式開著時（含重新整理後），自動顯示可拖曳量測面板
   if (dbgEnabled()) setTimeout(probeLayout, 300);
 
-  // iOS WKWebView：同時綁定 input + change，確保拖曳和放手都能更新速度
-  const slider = document.getElementById('speed-slider');
-  if (slider) {
-    slider.addEventListener('input',  e => onSpeedSlider(e.target.value));
-    slider.addEventListener('change', e => onSpeedSlider(e.target.value));
-    // WKWebView range input touchmove bug：原生 slider 吃不到 touchmove，
-    // 改用 JS 手動計算觸碰位置對應的值，{ passive: false } + preventDefault 阻止瀏覽器攔截
-    function sliderValueFromTouch(e) {
-      const touch = e.touches[0] || e.changedTouches[0];
-      const rect  = slider.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-      return Math.round(parseInt(slider.min) + ratio * (parseInt(slider.max) - parseInt(slider.min)));
-    }
-    slider.addEventListener('touchstart', e => {
-      e.stopPropagation();
-      const v = sliderValueFromTouch(e);
-      slider.value = v; onSpeedSlider(v);
-    }, { passive: false });
-    slider.addEventListener('touchmove', e => {
-      e.preventDefault(); e.stopPropagation();
-      const v = sliderValueFromTouch(e);
-      slider.value = v; onSpeedSlider(v);
-    }, { passive: false });
-    slider.addEventListener('touchend', e => { e.stopPropagation(); }, { passive: false });
-  }
+  initSpeedSlider();
 }
 
 // app.js 由 index.html 的 loader 動態載入，可能在 window load 之後才進來，
