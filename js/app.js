@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.85';
+const APP_VERSION  = '1.1.86';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -668,7 +668,7 @@ function makeEndIcon() {
     className: '',
     html: '<div style="width:22px;height:22px;border-radius:50%;background:#EA4335;border:3px solid #fff;'
         + 'box-shadow:0 1px 5px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
-        + '<div style="width:8px;height:8px;background:#fff;border-radius:1px;"></div></div>',
+        + '<div style="width:8px;height:8px;background:#fff;border-radius:50%;"></div></div>',
     iconSize: [22, 22], iconAnchor: [11, 11]
   });
 }
