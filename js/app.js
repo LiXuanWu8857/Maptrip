@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.75';
+const APP_VERSION  = '1.1.76';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1387,7 +1387,43 @@ function probeLayout() {
   document.body.appendChild(panel);
 
   document.getElementById('probe-refresh').onclick = probeLayout;
-  document.getElementById('probe-close').onclick = () => panel.remove();
+  document.getElementById('probe-close').onclick = () => {
+    panel.remove();
+    document.getElementById('probe-slider-log')?.remove();
+  };
+
+  // 速度滑桿即時 touch 診斷
+  const sliderEl = document.getElementById('speed-slider');
+  let sliderLog = document.getElementById('probe-slider-log');
+  if (!sliderLog) {
+    sliderLog = document.createElement('div');
+    sliderLog.id = 'probe-slider-log';
+    sliderLog.style.cssText = 'position:fixed;bottom:170px;right:8px;z-index:999999;width:220px;'
+      + 'background:rgba(0,0,0,0.88);color:#ff0;font:10px/1.5 monospace;'
+      + 'border-radius:8px;padding:6px 10px;touch-action:none;pointer-events:none;';
+    document.body.appendChild(sliderLog);
+  }
+  function logSlider(type, e) {
+    const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
+    const rect = sliderEl ? sliderEl.getBoundingClientRect() : null;
+    const cx = t ? t.clientX.toFixed(1) : '?';
+    const cy = t ? t.clientY.toFixed(1) : '?';
+    const ratio = (t && rect) ? Math.max(0, Math.min(1, (t.clientX - rect.left) / rect.width)).toFixed(3) : '?';
+    sliderLog.innerHTML =
+      `<b style="color:#0f0">slider touch probe</b>\n` +
+      `event: <b>${type}</b>\n` +
+      `clientX/Y: ${cx}, ${cy}\n` +
+      `slider rect: ${rect ? `l:${rect.left.toFixed(0)} r:${rect.right.toFixed(0)} t:${rect.top.toFixed(0)} b:${rect.bottom.toFixed(0)}` : 'null'}\n` +
+      `ratio→val: ${ratio} → ${rect ? Math.round(1 + parseFloat(ratio) * 9) : '?'}`;
+  }
+  if (sliderEl) {
+    ['touchstart','touchmove','touchend'].forEach(evName => {
+      sliderEl.addEventListener(evName, e => logSlider(evName, e), { passive: true });
+    });
+    sliderLog.innerHTML = '<b style="color:#0f0">slider touch probe</b>\n在速度滑桿上滑動即顯示事件';
+  } else {
+    sliderLog.innerHTML = '<b style="color:#f66">speed-slider 元素不存在！</b>';
+  }
 
   // 拖曳支援
   const handle = document.getElementById('probe-handle');
