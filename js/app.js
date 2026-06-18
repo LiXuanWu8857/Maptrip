@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.93';
+const APP_VERSION  = '1.1.94';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -27,9 +27,14 @@ const TEST_MODE = TEST_MODE_ON;
 let simTick = 0, simTimer = null;
 let nativeWatcherId = null;
 
-// 是否跑在 Capacitor 原生殼裡（iOS App）
+// 是否跑在 Capacitor 原生殼裡（iOS 或 Android App）
 function isNative() {
   return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+}
+
+// 目前原生平台：'ios' / 'android' / 'web'
+function nativePlatform() {
+  return window.Capacitor?.getPlatform ? window.Capacitor.getPlatform() : 'web';
 }
 
 const TILE_LAYERS = {
@@ -40,9 +45,9 @@ const TILE_LAYERS = {
 };
 let currentTile = 'road';
 
-// Live Activity 插件的安全存取 helper
+// Live Activity 插件的安全存取 helper（iOS 專屬，Android / web 一律回傳 null）
 function liveAct() {
-  return isNative() ? window.Capacitor?.Plugins?.LiveActivity : null;
+  return nativePlatform() === 'ios' ? window.Capacitor?.Plugins?.LiveActivity : null;
 }
 
 // WKWebView 安全區位移時，底部列可能被推到可視範圍外（home indicator 區）→ 點不到。
