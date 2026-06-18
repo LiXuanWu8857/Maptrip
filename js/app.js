@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.87';
+const APP_VERSION  = '1.1.88';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1211,7 +1211,7 @@ function initSpeedSlider() {
   if (!hitarea) return;
 
   function applyRatio(ratio) {
-    const v   = Math.round(1 + ratio * 9);
+    const v   = Math.round(1 + ratio * 19);  // 1x–20x
     const pct = (ratio * 100).toFixed(1) + '%';
     fill.style.width = pct;
     thumb.style.left = pct;
@@ -1219,21 +1219,22 @@ function initSpeedSlider() {
   }
 
   // scroll 由 iOS 原生處理，完全可靠，不需要 touchmove
+  // 向右拖 = scrollLeft 減少（iOS 捲動慣例反向）→ 用 1-ratio 讓右邊 = 快
   hitarea.addEventListener('scroll', () => {
     const max = hitarea.scrollWidth - hitarea.clientWidth;
-    if (max > 0) applyRatio(hitarea.scrollLeft / max);
+    if (max > 0) applyRatio(1 - hitarea.scrollLeft / max);
   }, { passive: true });
 
   // 同步捲動位置到目前速度（在 replay panel 顯示後呼叫才能量到正確寬度）
   function syncScroll() {
     requestAnimationFrame(() => {
       const max = hitarea.scrollWidth - hitarea.clientWidth;
-      if (max > 0) hitarea.scrollLeft = ((replaySpeed - 1) / 9) * max;
+      if (max > 0) hitarea.scrollLeft = (1 - (replaySpeed - 1) / 19) * max;
     });
   }
   window._syncSpeedScroll = syncScroll;
 
-  applyRatio((replaySpeed - 1) / 9);
+  applyRatio((replaySpeed - 1) / 19);
   syncScroll();
 }
 
@@ -1478,13 +1479,13 @@ function probeLayout() {
   if (hitareaEl) {
     hitareaEl.addEventListener('scroll', () => {
       const max = hitareaEl.scrollWidth - hitareaEl.clientWidth;
-      const ratio = max > 0 ? hitareaEl.scrollLeft / max : 0;
+      const ratio = max > 0 ? 1 - hitareaEl.scrollLeft / max : 0;
       sliderLog.innerHTML =
         `<b style="color:#0f0">speed-scroll probe</b>\n` +
         `scroll event ✓\n` +
         `scrollLeft: ${hitareaEl.scrollLeft.toFixed(1)}\n` +
         `max: ${max.toFixed(1)}\n` +
-        `ratio→val: ${ratio.toFixed(3)} → ${Math.round(1 + ratio * 9)}`;
+        `ratio→val: ${ratio.toFixed(3)} → ${Math.round(1 + ratio * 19)}`;
     }, { passive: true });
     sliderLog.innerHTML = '<b style="color:#0f0">speed-scroll probe</b>\n在速度滑桿上滑動即顯示';
   } else {
