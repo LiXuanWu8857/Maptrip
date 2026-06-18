@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.92';
+const APP_VERSION  = '1.1.93';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -697,17 +697,20 @@ function refreshRecBanner() {
   liveAct()?.updateTrip({ elapsed: Math.floor(elapsed / 1000), distance: Math.round(dist) });
 }
 
+function _menuOutsideTouch(e) {
+  const menu = document.getElementById('top-menu');
+  if (menu && !menu.contains(e.target)) closeTopMenu();
+}
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
-  const isOpen = menu.style.display !== 'none';
-  if (isOpen) { closeTopMenu(); } else {
-    menu.style.display = 'block';
-    document.getElementById('menu-overlay').style.display = 'block';
-  }
+  if (menu.style.display !== 'none') { closeTopMenu(); return; }
+  menu.style.display = 'block';
+  // 延遲 100ms 避免開啟選單的那次 touch 立即又觸發關閉
+  setTimeout(() => document.addEventListener('touchstart', _menuOutsideTouch, { passive: true }), 100);
 }
 function closeTopMenu() {
   document.getElementById('top-menu').style.display = 'none';
-  document.getElementById('menu-overlay').style.display = 'none';
+  document.removeEventListener('touchstart', _menuOutsideTouch);
 }
 function topMenuSelect(which) {
   closeTopMenu();
