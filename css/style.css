@@ -212,13 +212,14 @@ html, body {
 }
 .ctrl-btn:active { background: rgba(0,0,0,0.06); }
 
-#start-btn:disabled { opacity: 0.35; pointer-events: none; }
 #locate-btn.follow-active .ctrl-icon { color: #1a73e8; }
 #locate-btn.follow-active .ctrl-label { color: #1a73e8; }
 
 .ctrl-icon { font-size: 1.3rem; line-height: 1; }
 .ctrl-label { font-size: 0.75rem; color: #3c4043; }
 #start-btn .ctrl-label { color: #1a73e8; }
+#start-btn.recording .ctrl-icon { color: #c5221f; }
+#start-btn.recording .ctrl-label { color: #c5221f; }
 
 #sheet-overlay {
   position: fixed; inset: 0; z-index: 30;
@@ -252,7 +253,13 @@ html, body {
 }
 .sheet-close { background: none; border: none; color: #9aa0a6; font-size: 1.1rem; cursor: pointer; padding: 4px 8px; }
 #sheet-body, #history-body { overflow-y: auto; flex: 1; padding-bottom: 12px; }
-.sheet-footer { padding: 10px 18px 14px; border-top: 1px solid rgba(0,0,0,0.06); flex-shrink: 0; }
+.sheet-footer { padding: 10px 18px 14px; border-top: 1px solid rgba(0,0,0,0.06); flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.history-nav-btn {
+  width: 100%; background: rgba(26,115,232,0.07); color: #1a73e8;
+  border: 1px solid rgba(26,115,232,0.2); border-radius: 10px;
+  padding: 10px; font-size: 0.85rem; font-family: inherit; cursor: pointer;
+}
+.history-nav-btn:active { opacity: 0.7; }
 
 .danger-btn {
   width: 100%; background: rgba(234,67,53,0.08); color: #c5221f;
@@ -574,6 +581,9 @@ html, body {
   .ctrl-btn { color: #e8eaed; }
   .ctrl-label { color: #9aa0a6; }
   #start-btn .ctrl-label { color: #6ab4ff; }
+  #start-btn.recording .ctrl-icon { color: #f28b82; }
+  #start-btn.recording .ctrl-label { color: #f28b82; }
+  .history-nav-btn { background: rgba(106,180,255,0.1); color: #6ab4ff; border-color: rgba(106,180,255,0.2); }
 
   #gps-badge { backdrop-filter: blur(8px); }
   .badge-off { background: rgba(30,30,30,0.85); color: #9aa0a6; border-color: rgba(255,255,255,0.1); }

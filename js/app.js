@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.84';
+const APP_VERSION  = '1.1.85';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -440,7 +440,11 @@ async function beginRecording() {
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
   activePolyline = L.polyline([[currentPos.lat, currentPos.lng]],
     { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
-  document.getElementById('start-btn').disabled = true;
+  const startBtn = document.getElementById('start-btn');
+  startBtn.onclick = endTrip;
+  startBtn.querySelector('.ctrl-icon').textContent = '⏹';
+  startBtn.querySelector('.ctrl-label').textContent = '結束行程';
+  startBtn.classList.add('recording');
   document.getElementById('rec-banner').style.display = 'flex';
   timerTick = setInterval(refreshRecBanner, 1000);
   map.panTo([currentPos.lat, currentPos.lng]);
@@ -486,7 +490,11 @@ function endTrip() {
   wasMoving = false; arrivalBannerShown = false;
   autoStartShown = false; // 行程結束後，下次出發可再次偵測
   setAutoFollow(false);
-  document.getElementById('start-btn').disabled = false;
+  const startBtn = document.getElementById('start-btn');
+  startBtn.onclick = startTrip;
+  startBtn.querySelector('.ctrl-icon').textContent = '▶';
+  startBtn.querySelector('.ctrl-label').textContent = '開始行程';
+  startBtn.classList.remove('recording');
   document.getElementById('rec-banner').style.display = 'none';
 
   // 釋放螢幕常亮鎖
