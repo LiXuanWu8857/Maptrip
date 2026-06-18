@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.68';
+const APP_VERSION  = '1.1.69';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -780,8 +780,8 @@ function fitMapToRoute(coords, bottomElId, opts = {}) {
     : (opts.botFallback ?? 80);
   map.fitBounds(L.latLngBounds(coords),
     { animate: opts.animate ?? true,
-      paddingTopLeft:     [24, topPad],
-      paddingBottomRight: [24, botPad] });
+      paddingTopLeft:     [56, topPad],
+      paddingBottomRight: [56, botPad] });
 }
 
 // 設定要顯示的趟次集合與起始索引，然後渲染
