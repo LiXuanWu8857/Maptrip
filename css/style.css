@@ -685,8 +685,8 @@ html, body {
    無法靠它補空間。改用固定 16px inset 把底列墊高，避開曲面邊角與手勢列。
    .platform-android 由 boot() 注入。 */
 .platform-android #bottom-buttons {
-  height: 63px;            /* 47px 按鈕 + 16px 底部安全間距 */
-  padding-bottom: 16px;
+  height: 55px;            /* 47px 按鈕 + 8px 底部安全間距，按鈕視覺置中 */
+  padding-bottom: 8px;
 }
 
 /* ===== 平板 / 大螢幕最佳化 ===== */
