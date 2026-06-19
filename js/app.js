@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.102';
+const APP_VERSION  = '1.1.103';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -702,25 +702,39 @@ function refreshRecBanner() {
   liveAct()?.updateTrip({ elapsed: Math.floor(elapsed / 1000), distance: Math.round(dist) });
 }
 
-function _menuOutsideTouch(e) {
+// WKWebView reload 後原生 hit-test 會偏移（點上面那項卻觸發下面那項）。
+// 改成自己用觸控座標(clientX/Y)跟各項目實際視覺位置(getBoundingClientRect)比對，
+// 繞過原生那層的偏移；點在選單外則關閉。
+function _menuTouchEnd(e) {
   const menu = document.getElementById('top-menu');
-  if (menu && !menu.contains(e.target)) closeTopMenu();
+  if (!menu || menu.style.display === 'none') return;
+  const t = e.changedTouches && e.changedTouches[0];
+  if (!t) return;
+  const x = t.clientX, y = t.clientY;
+  const btns = menu.querySelectorAll('button[data-menu]');
+  for (const b of btns) {
+    const r = b.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      e.preventDefault();
+      const which = b.getAttribute('data-menu');
+      closeTopMenu();
+      if (which === 'today') toggleTripList();
+      else showHistory();
+      return;
+    }
+  }
+  closeTopMenu();   // 點在選單外
 }
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
   if (menu.style.display !== 'none') { closeTopMenu(); return; }
   menu.style.display = 'block';
-  // 延遲 100ms 避免開啟選單的那次 touch 立即又觸發關閉
-  setTimeout(() => document.addEventListener('touchstart', _menuOutsideTouch, { passive: true }), 100);
+  // 延遲 100ms 避免開啟選單的那次 touch 立即又觸發
+  setTimeout(() => document.addEventListener('touchend', _menuTouchEnd, { passive: false }), 100);
 }
 function closeTopMenu() {
   document.getElementById('top-menu').style.display = 'none';
-  document.removeEventListener('touchstart', _menuOutsideTouch);
-}
-function topMenuSelect(which) {
-  closeTopMenu();
-  if (which === 'today') toggleTripList();
-  else showHistory();
+  document.removeEventListener('touchend', _menuTouchEnd, { passive: false });
 }
 
 function toggleTripList() {
