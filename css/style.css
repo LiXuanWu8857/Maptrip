@@ -10,6 +10,10 @@ html, body {
   overflow: hidden;
   background: #ffffff;
   color: #202124;
+  /* 關閉 Android WebView 文字自動放大（font boosting）：
+     否則文字會比 iPhone 大一截、爆版換行。鎖 100% 讓兩平台字級一致。 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 #map {
