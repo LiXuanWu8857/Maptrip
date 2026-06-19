@@ -49,6 +49,7 @@ public class FloatingWindowPlugin extends Plugin {
     private WindowManager.LayoutParams lp;
 
     private LinearLayout mainRow;
+    private LinearLayout textCol;
     private TextView titleText;
     private TextView subText;
     private Button actionBtn;
@@ -170,7 +171,7 @@ public class FloatingWindowPlugin extends Plugin {
         mainRow.setOrientation(LinearLayout.HORIZONTAL);
         mainRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout textCol = new LinearLayout(ctx);
+        textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
 
         titleText = new TextView(ctx);
@@ -322,8 +323,7 @@ public class FloatingWindowPlugin extends Plugin {
         mode = "idle";
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
-        titleText.setText("🚕 Maptrip");
-        subText.setText("點開始記錄行程");
+        textCol.setVisibility(View.GONE);   // 閒置只留「開始」按鈕，左邊文字隱藏
         actionBtn.setText("開始");
         setBtnColor(actionBtn, "#34A853");
     }
@@ -332,6 +332,7 @@ public class FloatingWindowPlugin extends Plugin {
         mode = "recording";
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
+        textCol.setVisibility(View.VISIBLE); // 記錄中才顯示時間 / 距離
         setText(elapsed, distance);
         actionBtn.setText("結束");
         setBtnColor(actionBtn, "#EA4335");
