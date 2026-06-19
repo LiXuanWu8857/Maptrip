@@ -56,6 +56,34 @@ npx cap sync android
   android:foregroundServiceType="location" />
 ```
 
+### 4.5 鎖定文字縮放（重要，否則字會跟系統字體放大）
+
+Android WebView 預設會跟著手機「設定 → 顯示 → 字體大小」放大網頁文字，
+導致版面爆大、換行（iPhone 不會這樣）。在 `MainActivity` 鎖死 100%，
+讓 App 字級固定、與 iPhone 一致。
+
+開啟 `android/app/src/main/java/com/maptrip/app/MainActivity.java`，
+整檔內容改成：
+
+```java
+package com.maptrip.app;
+
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    public void onStart() {
+        super.onStart();
+        // 鎖定網頁文字縮放為 100%，不跟隨系統字體大小（與 iPhone 一致）
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().getSettings().setTextZoom(100);
+        }
+    }
+}
+```
+
+改完按綠色 ▶ 重新 Run 一次即生效。此為一次性原生設定，之後改網頁不用再動。
+
 ### 5. 在手機上開啟開發者模式
 - 手機：設定 → 關於手機 → 連點「版本號碼」7 下 → 開啟「開發人員選項」
 - 開發人員選項裡 → 開啟「USB 偵錯」
