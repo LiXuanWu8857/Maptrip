@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.105';
+const APP_VERSION  = '1.1.106';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -705,12 +705,11 @@ function refreshRecBanner() {
 // WKWebView reload 後 CSS 位置已被 reload-fix 更新，但 compositor 仍用舊視覺座標，
 // 導致 touch clientY 與 getBoundingClientRect 之間差了 env(safe-area-inset-top)。
 // 用探針 div 量出這個 offset，補正後再對比按鈕 rect。
-function _menuTouchEnd(e) {
+function _menuHitBtn(e) {
   const menu = document.getElementById('top-menu');
-  if (!menu || menu.style.display === 'none') return;
+  if (!menu || menu.style.display === 'none') return null;
   const t = e.changedTouches && e.changedTouches[0];
-  if (!t) return;
-  e.preventDefault();
+  if (!t) return null;
   const x = t.clientX;
   let y = t.clientY;
   // 只在 iOS reload 狀態下修正：reload-fix 把固定元素往上移了 safe-area-inset-top，
@@ -722,13 +721,25 @@ function _menuTouchEnd(e) {
     y -= probe.getBoundingClientRect().top;
     document.body.removeChild(probe);
   }
-  let action = null;
+  let hit = null;
   menu.querySelectorAll('button[data-menu]').forEach(b => {
     const r = b.getBoundingClientRect();
-    if (y >= r.top && y <= r.bottom && x >= r.left && x <= r.right) {
-      action = b.getAttribute('data-menu');
-    }
+    if (y >= r.top && y <= r.bottom && x >= r.left && x <= r.right) hit = b;
   });
+  return hit;
+}
+// 手指按下：自己用修正後座標標記高亮（原生 :active 會亮錯按鈕）
+function _menuTouchStart(e) {
+  const hit = _menuHitBtn(e);
+  document.querySelectorAll('#top-menu button.pressed').forEach(b => b.classList.remove('pressed'));
+  if (hit) hit.classList.add('pressed');
+}
+function _menuTouchEnd(e) {
+  const menu = document.getElementById('top-menu');
+  if (!menu || menu.style.display === 'none') return;
+  e.preventDefault();
+  const hit = _menuHitBtn(e);
+  const action = hit ? hit.getAttribute('data-menu') : null;
   closeTopMenu();
   if (action === 'today') toggleTripList();
   else if (action === 'history') showHistory();
@@ -738,10 +749,16 @@ function toggleTopMenu() {
   if (menu.style.display !== 'none') { closeTopMenu(); return; }
   menu.style.display = 'block';
   // 延遲 100ms 避免開啟選單的那次 touch 立即又觸發
-  setTimeout(() => document.addEventListener('touchend', _menuTouchEnd, { passive: false }), 100);
+  setTimeout(() => {
+    document.addEventListener('touchstart', _menuTouchStart, { passive: true });
+    document.addEventListener('touchend', _menuTouchEnd, { passive: false });
+  }, 100);
 }
 function closeTopMenu() {
-  document.getElementById('top-menu').style.display = 'none';
+  const menu = document.getElementById('top-menu');
+  menu.style.display = 'none';
+  menu.querySelectorAll('button.pressed').forEach(b => b.classList.remove('pressed'));
+  document.removeEventListener('touchstart', _menuTouchStart, { passive: true });
   document.removeEventListener('touchend', _menuTouchEnd, { passive: false });
 }
 

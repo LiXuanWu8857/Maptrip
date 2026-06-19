@@ -77,9 +77,10 @@ html, body {
   background: none; border: none;
   font-size: 0.88rem; font-family: inherit; cursor: pointer;
   text-align: left; color: #202124;
+  -webkit-tap-highlight-color: transparent;
 }
 #top-menu button:not(:last-child) { border-bottom: 1px solid rgba(0,0,0,0.06); }
-#top-menu button:active { background: rgba(0,0,0,0.05); }
+#top-menu button.pressed { background: rgba(0,0,0,0.05); }
 
 #gps-badge {
   position: fixed; top: calc(env(safe-area-inset-top, 0px) + 56px); right: 12px;
@@ -618,7 +619,7 @@ html, body {
   #top-menu { background: #2a2a2a; box-shadow: 0 4px 24px rgba(0,0,0,0.5); }
   #top-menu button { color: #e8eaed; }
   #top-menu button:not(:last-child) { border-bottom-color: rgba(255,255,255,0.07); }
-  #top-menu button:active { background: rgba(255,255,255,0.07); }
+  #top-menu button.pressed { background: rgba(255,255,255,0.07); }
 
   /* 地圖磚片反色（只反底圖，不影響標記和折線） */
   .leaflet-tile-pane { filter: invert(92%) hue-rotate(180deg) brightness(0.88) saturate(0.9); }
