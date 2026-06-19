@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.107';
+const APP_VERSION  = '1.1.108';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -21,6 +21,7 @@ let autoFollow = false, wakeLock = null;
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, lastKnownPos = null;
 let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
+let pendingFareTrip = null;      // 由浮窗結束、等待數字鍵盤輸入車資的那趟
 let lastHeartbeat = 0;           // 上次替鎖屏方塊「續命」的時間戳
 
 const TEST_MODE = TEST_MODE_ON;
@@ -66,8 +67,9 @@ async function ensureFloatPermission() {
     if (granted) return;
     if (localStorage.getItem('maptrip_float_asked')) return;
     localStorage.setItem('maptrip_float_asked', '1');
-    const ok = confirm('要開啟「浮動視窗」嗎？\n\n開啟後，記錄行程時會浮一張小卡片在導航等其他 App 上方，' +
-                       '顯示時間與里程，可直接按「結束」。\n\n按確定前往設定，開啟「顯示在其他應用程式上層」。');
+    const ok = confirm('要開啟「浮動視窗」嗎？\n\n開啟後會浮一張小卡片在導航等其他 App 上方，' +
+                       '可直接開始/結束行程、輸入車資，卡片也能拖到任意位置。\n\n' +
+                       '按確定前往設定，開啟「顯示在其他應用程式上層」。');
     if (ok) fw.requestPermission();
   } catch (_) {}
 }
@@ -163,8 +165,19 @@ function initMap() {
       dbg('boot v' + APP_VERSION + ' fw=ok');
       fw.addListener?.('floatCommand', ({ action }) => {
         dbg('floatCommand ' + action);
-        if (action === 'end' && activeTrip) endTrip();
-        // action === 'open' 由原生端自行把 App 帶到前景，JS 不用額外處理
+        if (action === 'start' && !activeTrip) startTrip();
+        if (action === 'end' && activeTrip) endTrip(true);
+      });
+      // 浮窗數字鍵盤輸入的車資 → 存到剛結束的那趟
+      fw.addListener?.('floatFare', ({ value }) => {
+        dbg('floatFare ' + value);
+        saveFloatFare(value || 0);
+      });
+      // 常駐顯示：有授權就先顯示閒置卡片（沒授權靜默略過）
+      ensureFloatPermission().then(() => { if (!activeTrip) fw.showIdle().catch(() => {}); });
+      // 回前景時重試（例如剛去設定開完權限）：未記錄中才補顯示閒置卡片
+      App?.addListener('appStateChange', ({ isActive }) => {
+        if (isActive && !activeTrip) fw.showIdle().catch(() => {});
       });
       // 記錄中時把時間/距離推給浮窗（widgetHeartbeat 內含 floatWin().update）
       setInterval(widgetHeartbeat, 3000);
@@ -482,7 +495,7 @@ async function beginRecording() {
   activePolyline = L.polyline([[currentPos.lat, currentPos.lng]],
     { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
   const startBtn = document.getElementById('start-btn');
-  startBtn.onclick = endTrip;
+  startBtn.onclick = () => endTrip();   // 不傳參數：走 App 內車資對話框
   startBtn.querySelector('.ctrl-icon').textContent = '⏹';
   startBtn.querySelector('.ctrl-label').textContent = '結束行程';
   startBtn.classList.add('recording');
@@ -491,9 +504,8 @@ async function beginRecording() {
   map.panTo([currentPos.lat, currentPos.lng]);
   toast('行程開始！');
   liveAct()?.startTrip();
-  // Android 浮動視窗：第一次引導授權；有授權才顯示（沒授權靜默略過，不打擾）
-  ensureFloatPermission();
-  floatWin()?.show({ elapsed: 0, distance: 0 }).catch(() => {});
+  // Android 浮動視窗切到「記錄中」狀態
+  floatWin()?.showRecording({ elapsed: 0, distance: 0 }).catch(() => {});
 
   // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
   await requestWakeLock();
@@ -517,11 +529,11 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function endTrip() {
+// fromFloat=true：由浮動視窗的「結束」鈕觸發 → 車資改用浮窗數字鍵盤輸入
+function endTrip(fromFloat) {
   if (!activeTrip) return;
   clearInterval(timerTick);  timerTick = null;
   liveAct()?.endTrip();
-  floatWin()?.hide().catch(() => {});
   clearTimeout(stoppedTimer); stoppedTimer = null;
   hideArrivalBanner();
 
@@ -545,7 +557,24 @@ function endTrip() {
   // 釋放螢幕常亮鎖
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 
-  showFareDialog(trip);
+  if (fromFloat) {
+    // 由浮窗結束：記住這趟，叫出浮窗數字鍵盤輸入車資（見 saveFloatFare）
+    pendingFareTrip = trip;
+    floatWin()?.promptFare().catch(() => {});
+  } else {
+    floatWin()?.showIdle().catch(() => {});
+    showFareDialog(trip);
+  }
+}
+
+// 浮窗數字鍵盤按「確定/略過」後：把車資存到剛結束的那趟，並貼合路線存檔
+async function saveFloatFare(fare) {
+  const trip = pendingFareTrip;
+  pendingFareTrip = null;
+  if (!trip) return;
+  trip.fare = fare;
+  trip.roadCoords = await snapToRoads(trip.coords);
+  saveTripFinal(trip);
 }
 
 // 背景結束：直接貼合道路並存檔（金額 0），不需 UI
