@@ -667,10 +667,12 @@ html, body {
 }
 
 /* ===== Android 底部導覽列補丁 ===== */
-/* env(safe-area-inset-bottom) 在部分 Android WebView 回傳 0，
-   改用 JS 注入 platform-android 類別後，以固定安全值補足空間 */
+/* 實測：Android WebView 的 env(safe-area-inset-bottom) 一律回傳 0，
+   無法靠它補空間。改用固定 16px inset 把底列墊高，避開曲面邊角與手勢列。
+   .platform-android 由 boot() 注入。 */
 .platform-android #bottom-buttons {
-  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+  height: 63px;            /* 47px 按鈕 + 16px 底部安全間距 */
+  padding-bottom: 16px;
 }
 
 /* ===== 平板 / 大螢幕最佳化 ===== */
