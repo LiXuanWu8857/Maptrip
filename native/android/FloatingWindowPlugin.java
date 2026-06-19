@@ -170,6 +170,8 @@ public class FloatingWindowPlugin extends Plugin {
         mainRow = new LinearLayout(ctx);
         mainRow.setOrientation(LinearLayout.HORIZONTAL);
         mainRow.setGravity(Gravity.CENTER_VERTICAL);
+        mainRow.setLayoutParams(new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -216,7 +218,7 @@ public class FloatingWindowPlugin extends Plugin {
             : WindowManager.LayoutParams.TYPE_PHONE;
 
         lp = new WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(200),
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -326,7 +328,11 @@ public class FloatingWindowPlugin extends Plugin {
         mode = "idle";
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
+        mainRow.setGravity(Gravity.CENTER);
         textCol.setVisibility(View.GONE);   // 閒置只留 Start 按鈕，左邊文字隱藏
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        actionBtn.setLayoutParams(btnLp);
         actionBtn.setText("Start");
         setBtnColor(actionBtn, "#34A853");
     }
@@ -335,7 +341,12 @@ public class FloatingWindowPlugin extends Plugin {
         mode = "recording";
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
+        mainRow.setGravity(Gravity.CENTER_VERTICAL);
         textCol.setVisibility(View.VISIBLE); // 記錄中才顯示時間 / 距離
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnLp.leftMargin = dp(12);
+        actionBtn.setLayoutParams(btnLp);
         setText(elapsed, distance);
         actionBtn.setText("End");
         setBtnColor(actionBtn, "#EA4335");
