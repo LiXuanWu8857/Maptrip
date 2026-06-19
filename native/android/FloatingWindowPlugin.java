@@ -187,9 +187,10 @@ public class FloatingWindowPlugin extends Plugin {
 
         actionBtn = new Button(ctx);
         actionBtn.setTextColor(Color.WHITE);
-        actionBtn.setTextSize(14);
+        actionBtn.setTextSize(15);
         actionBtn.setAllCaps(false);
-        actionBtn.setPadding(dp(16), dp(6), dp(16), dp(6));
+        actionBtn.setGravity(Gravity.CENTER);
+        actionBtn.setPadding(dp(20), dp(8), dp(20), dp(8));
         LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         aLp.leftMargin = dp(12);
@@ -280,6 +281,8 @@ public class FloatingWindowPlugin extends Plugin {
         b.setTextColor(Color.WHITE);
         b.setTextSize(18);
         b.setAllCaps(false);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(0, 0, 0, 0);
         GradientDrawable kb = new GradientDrawable();
         kb.setColor(Color.parseColor("#3C4043"));
         kb.setCornerRadius(dp(8));
@@ -323,8 +326,8 @@ public class FloatingWindowPlugin extends Plugin {
         mode = "idle";
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
-        textCol.setVisibility(View.GONE);   // 閒置只留「開始」按鈕，左邊文字隱藏
-        actionBtn.setText("開始");
+        textCol.setVisibility(View.GONE);   // 閒置只留 Start 按鈕，左邊文字隱藏
+        actionBtn.setText("Start");
         setBtnColor(actionBtn, "#34A853");
     }
 
@@ -334,7 +337,7 @@ public class FloatingWindowPlugin extends Plugin {
         mainRow.setVisibility(View.VISIBLE);
         textCol.setVisibility(View.VISIBLE); // 記錄中才顯示時間 / 距離
         setText(elapsed, distance);
-        actionBtn.setText("結束");
+        actionBtn.setText("End");
         setBtnColor(actionBtn, "#EA4335");
     }
 
@@ -347,7 +350,7 @@ public class FloatingWindowPlugin extends Plugin {
 
     private void setText(int elapsedSec, int distanceM) {
         int m = elapsedSec / 60, s = elapsedSec % 60;
-        titleText.setText(String.format("🚕 %02d:%02d", m, s));
+        titleText.setText(String.format("%02d:%02d", m, s));
         if (distanceM >= 1000) subText.setText(String.format("%.1f 公里", distanceM / 1000.0));
         else subText.setText(distanceM + " 公尺");
     }
