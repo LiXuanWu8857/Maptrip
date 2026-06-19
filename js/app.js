@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.104';
+const APP_VERSION  = '1.1.105';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -702,28 +702,36 @@ function refreshRecBanner() {
   liveAct()?.updateTrip({ elapsed: Math.floor(elapsed / 1000), distance: Math.round(dist) });
 }
 
-// WKWebView reload 後原生 hit-test 會偏移（點上面那項卻觸發下面那項）。
-// 改成自己用觸控座標(clientX/Y)跟各項目實際視覺位置(getBoundingClientRect)比對，
-// 繞過原生那層的偏移；點在選單外則關閉。
+// WKWebView reload 後 CSS 位置已被 reload-fix 更新，但 compositor 仍用舊視覺座標，
+// 導致 touch clientY 與 getBoundingClientRect 之間差了 env(safe-area-inset-top)。
+// 用探針 div 量出這個 offset，補正後再對比按鈕 rect。
 function _menuTouchEnd(e) {
   const menu = document.getElementById('top-menu');
   if (!menu || menu.style.display === 'none') return;
   const t = e.changedTouches && e.changedTouches[0];
   if (!t) return;
   e.preventDefault();
-  const x = t.clientX, y = t.clientY;
-  // 診斷版：量測手指座標與各項目實際位置，找出觸控偏移量
-  let info = 'tap  x=' + Math.round(x) + '  y=' + Math.round(y);
-  const btns = menu.querySelectorAll('button[data-menu]');
-  btns.forEach(b => {
+  const x = t.clientX;
+  let y = t.clientY;
+  // 只在 iOS reload 狀態下修正：reload-fix 把固定元素往上移了 safe-area-inset-top，
+  // 但 touch 座標仍對應舊的視覺位置，所以減掉這個差值再和 getBCR 比較。
+  if (nativePlatform() === 'ios' && document.getElementById('reload-fix')) {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);left:0;width:0;height:0;pointer-events:none;visibility:hidden;';
+    document.body.appendChild(probe);
+    y -= probe.getBoundingClientRect().top;
+    document.body.removeChild(probe);
+  }
+  let action = null;
+  menu.querySelectorAll('button[data-menu]').forEach(b => {
     const r = b.getBoundingClientRect();
-    info += '\n' + b.getAttribute('data-menu') +
-            ': top=' + Math.round(r.top) + ' bot=' + Math.round(r.bottom) +
-            ' L=' + Math.round(r.left) + ' R=' + Math.round(r.right);
+    if (y >= r.top && y <= r.bottom && x >= r.left && x <= r.right) {
+      action = b.getAttribute('data-menu');
+    }
   });
-  const ef = document.elementFromPoint(x, y);
-  info += '\nelemFromPoint=' + (ef ? (ef.getAttribute('data-menu') || ef.id || ef.tagName) : 'null');
-  alert(info);
+  closeTopMenu();
+  if (action === 'today') toggleTripList();
+  else if (action === 'history') showHistory();
 }
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
