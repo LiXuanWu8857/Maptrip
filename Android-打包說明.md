@@ -46,7 +46,11 @@ npx cap sync android
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 ```
+
+> `SYSTEM_ALERT_WINDOW` 是「浮動視窗」（步驟 4.6）要用的；
+> 它是敏感權限，使用者首次記錄行程時 App 會引導去設定頁手動開啟。
 
 背景定位外掛需要一個前景服務。在 `<application>` 標籤內加入：
 
@@ -63,14 +67,22 @@ Android WebView 預設會跟著手機「設定 → 顯示 → 字體大小」放
 讓 App 字級固定、與 iPhone 一致。
 
 開啟 `android/app/src/main/java/com/maptrip/app/MainActivity.java`，
-整檔內容改成：
+整檔內容改成（同時也註冊步驟 4.6 的浮動視窗外掛）：
 
 ```java
 package com.maptrip.app;
 
+import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        // 註冊自訂的「浮動視窗」外掛（步驟 4.6）
+        registerPlugin(FloatingWindowPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+
     @Override
     public void onStart() {
         super.onStart();
@@ -83,6 +95,25 @@ public class MainActivity extends BridgeActivity {
 ```
 
 改完按綠色 ▶ 重新 Run 一次即生效。此為一次性原生設定，之後改網頁不用再動。
+
+### 4.6 浮動視窗外掛（記錄行程時浮在導航上方，對應 iPhone 的鎖屏方塊）
+
+記錄行程時，浮一張小卡片在 Google Maps、55688 導航等其他 App 上方，
+顯示已過時間 / 里程，並有一顆「結束」鈕；點卡片本體可叫回 Maptrip，
+卡片也可以拖到喜歡的位置。
+
+> Android 的浮動視窗覆蓋在「其他 App 上方」，但**鎖屏時不會顯示**
+> （這是 Android 平台限制，跟 iPhone 的鎖屏方塊不同）。
+
+把專案 `native/android/FloatingWindowPlugin.java` 這個檔，複製到
+`android/app/src/main/java/com/maptrip/app/` 資料夾裡
+（和 `MainActivity.java` 同一層）。
+
+外掛已在步驟 4.5 的 `MainActivity` 用 `registerPlugin(...)` 註冊好；
+權限 `SYSTEM_ALERT_WINDOW` 也已在步驟 4 加入。複製完按綠色 ▶ 重新 Run。
+
+使用者第一次按「開始行程」時，App 會問是否開啟浮動視窗，按確定會跳到系統
+「顯示在其他應用程式上層」設定頁，把 Maptrip 打開即可（之後記錄行程就會自動浮出）。
 
 ### 5. 在手機上開啟開發者模式
 - 手機：設定 → 關於手機 → 連點「版本號碼」7 下 → 開啟「開發人員選項」

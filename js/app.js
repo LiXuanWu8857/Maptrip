@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.106';
+const APP_VERSION  = '1.1.107';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -48,6 +48,28 @@ let currentTile = 'road';
 // Live Activity 插件的安全存取 helper（iOS 專屬，Android / web 一律回傳 null）
 function liveAct() {
   return nativePlatform() === 'ios' ? window.Capacitor?.Plugins?.LiveActivity : null;
+}
+
+// 浮動視窗插件（Android 專屬，iOS / web 一律回傳 null）
+// 行程記錄中時，浮一張小卡片在導航等其他 App 上方，對應 iOS 的 Live Activity。
+function floatWin() {
+  return nativePlatform() === 'android' ? window.Capacitor?.Plugins?.FloatingWindow : null;
+}
+
+// 第一次在 Android 記錄行程時，引導開啟「顯示在其他應用程式上層」權限（只問一次）。
+// 使用者去設定開啟後，下一趟才會真的浮出視窗；這趟先靜默略過。
+async function ensureFloatPermission() {
+  const fw = floatWin();
+  if (!fw) return;
+  try {
+    const { granted } = await fw.hasPermission();
+    if (granted) return;
+    if (localStorage.getItem('maptrip_float_asked')) return;
+    localStorage.setItem('maptrip_float_asked', '1');
+    const ok = confirm('要開啟「浮動視窗」嗎？\n\n開啟後，記錄行程時會浮一張小卡片在導航等其他 App 上方，' +
+                       '顯示時間與里程，可直接按「結束」。\n\n按確定前往設定，開啟「顯示在其他應用程式上層」。');
+    if (ok) fw.requestPermission();
+  } catch (_) {}
 }
 
 // WKWebView 安全區位移時，底部列可能被推到可視範圍外（home indicator 區）→ 點不到。
@@ -133,6 +155,19 @@ function initMap() {
           });
         }
       });
+    }
+
+    // Android 浮動視窗：結束鈕 / 點卡片回 App
+    const fw = floatWin();
+    if (fw) {
+      dbg('boot v' + APP_VERSION + ' fw=ok');
+      fw.addListener?.('floatCommand', ({ action }) => {
+        dbg('floatCommand ' + action);
+        if (action === 'end' && activeTrip) endTrip();
+        // action === 'open' 由原生端自行把 App 帶到前景，JS 不用額外處理
+      });
+      // 記錄中時把時間/距離推給浮窗（widgetHeartbeat 內含 floatWin().update）
+      setInterval(widgetHeartbeat, 3000);
     }
   }
 
@@ -425,6 +460,7 @@ function widgetHeartbeat() {
     const elapsed  = Math.floor((now - activeTrip.startTime) / 1000);
     const distance = Math.round(calcTotalDist(activeTrip.coords));
     liveAct()?.updateTrip({ elapsed, distance });
+    floatWin()?.update({ elapsed, distance }).catch(() => {});
   } else {
     liveAct()?.heartbeat?.();
   }
@@ -455,6 +491,9 @@ async function beginRecording() {
   map.panTo([currentPos.lat, currentPos.lng]);
   toast('行程開始！');
   liveAct()?.startTrip();
+  // Android 浮動視窗：第一次引導授權；有授權才顯示（沒授權靜默略過，不打擾）
+  ensureFloatPermission();
+  floatWin()?.show({ elapsed: 0, distance: 0 }).catch(() => {});
 
   // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
   await requestWakeLock();
@@ -482,6 +521,7 @@ function endTrip() {
   if (!activeTrip) return;
   clearInterval(timerTick);  timerTick = null;
   liveAct()?.endTrip();
+  floatWin()?.hide().catch(() => {});
   clearTimeout(stoppedTimer); stoppedTimer = null;
   hideArrivalBanner();
 
