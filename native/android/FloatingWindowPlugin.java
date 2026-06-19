@@ -386,7 +386,8 @@ public class FloatingWindowPlugin extends Plugin {
         return o;
     }
 
-    /** 整張卡片可任意拖曳；移動超過 touchSlop 才攔截，否則放行給按鈕點擊。 */
+    /** 整張卡片可任意拖曳；移動超過 touchSlop 才攔截，否則放行給按鈕點擊。
+     *  雙指捏合可縮放視窗寬度（150dp – 320dp）。 */
     public static class DragLayout extends FrameLayout {
         private WindowManager wm;
         private WindowManager.LayoutParams lp;
@@ -394,6 +395,10 @@ public class FloatingWindowPlugin extends Plugin {
         private int startX, startY;
         private boolean dragging;
         private final int slop;
+
+        private boolean pinching = false;
+        private float initialSpan = 0;
+        private int initialWinWidth = 0;
 
         public DragLayout(Context c) {
             super(c);
@@ -405,6 +410,16 @@ public class FloatingWindowPlugin extends Plugin {
             this.lp = lp;
         }
 
+        private float span(MotionEvent ev) {
+            float dx = ev.getX(0) - ev.getX(1);
+            float dy = ev.getY(0) - ev.getY(1);
+            return (float) Math.sqrt(dx * dx + dy * dy);
+        }
+
+        private int dpx(float v) {
+            return Math.round(v * getContext().getResources().getDisplayMetrics().density);
+        }
+
         @Override
         public boolean onInterceptTouchEvent(MotionEvent ev) {
             switch (ev.getActionMasked()) {
@@ -414,8 +429,19 @@ public class FloatingWindowPlugin extends Plugin {
                     startX = lp.x;
                     startY = lp.y;
                     dragging = false;
+                    pinching = false;
                     return false;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    if (ev.getPointerCount() == 2) {
+                        pinching = true;
+                        dragging = false;
+                        initialSpan = span(ev);
+                        initialWinWidth = lp.width;
+                        return true;
+                    }
+                    break;
                 case MotionEvent.ACTION_MOVE:
+                    if (pinching) return true;
                     if (!dragging &&
                         (Math.abs(ev.getRawX() - downX) > slop ||
                          Math.abs(ev.getRawY() - downY) > slop)) {
@@ -431,15 +457,27 @@ public class FloatingWindowPlugin extends Plugin {
         public boolean onTouchEvent(MotionEvent ev) {
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_MOVE:
+                    if (pinching && wm != null && ev.getPointerCount() >= 2) {
+                        float scale = span(ev) / initialSpan;
+                        int newW = Math.max(dpx(150), Math.min(dpx(320),
+                            (int)(initialWinWidth * scale)));
+                        lp.width = newW;
+                        wm.updateViewLayout(this, lp);
+                        return true;
+                    }
                     if (dragging && wm != null) {
                         lp.x = startX + (int) (ev.getRawX() - downX);
                         lp.y = startY + (int) (ev.getRawY() - downY);
                         wm.updateViewLayout(this, lp);
                     }
                     return true;
+                case MotionEvent.ACTION_POINTER_UP:
+                    if (ev.getPointerCount() <= 2) pinching = false;
+                    return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     dragging = false;
+                    pinching = false;
                     return true;
             }
             return super.onTouchEvent(ev);
