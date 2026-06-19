@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.103';
+const APP_VERSION  = '1.1.104';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -710,20 +710,20 @@ function _menuTouchEnd(e) {
   if (!menu || menu.style.display === 'none') return;
   const t = e.changedTouches && e.changedTouches[0];
   if (!t) return;
+  e.preventDefault();
   const x = t.clientX, y = t.clientY;
+  // 診斷版：量測手指座標與各項目實際位置，找出觸控偏移量
+  let info = 'tap  x=' + Math.round(x) + '  y=' + Math.round(y);
   const btns = menu.querySelectorAll('button[data-menu]');
-  for (const b of btns) {
+  btns.forEach(b => {
     const r = b.getBoundingClientRect();
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-      e.preventDefault();
-      const which = b.getAttribute('data-menu');
-      closeTopMenu();
-      if (which === 'today') toggleTripList();
-      else showHistory();
-      return;
-    }
-  }
-  closeTopMenu();   // 點在選單外
+    info += '\n' + b.getAttribute('data-menu') +
+            ': top=' + Math.round(r.top) + ' bot=' + Math.round(r.bottom) +
+            ' L=' + Math.round(r.left) + ' R=' + Math.round(r.right);
+  });
+  const ef = document.elementFromPoint(x, y);
+  info += '\nelemFromPoint=' + (ef ? (ef.getAttribute('data-menu') || ef.id || ef.tagName) : 'null');
+  alert(info);
 }
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
