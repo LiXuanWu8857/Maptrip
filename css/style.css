@@ -16,6 +16,15 @@ html, body {
   text-size-adjust: 100%;
 }
 
+/* Android 用 Noto Sans TC，比 iOS 的 PingFang 略寬略重。
+   微調字距 / 字重 / 抗鋸齒，讓觀感更接近 iPhone（不換字體、不下載）。 */
+.platform-android, .platform-android button, .platform-android input,
+.platform-android textarea, .platform-android select {
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
 #map {
   position: fixed;
   inset: 0;
