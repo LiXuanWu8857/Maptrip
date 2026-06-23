@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.113';
+const APP_VERSION  = '1.1.114';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -16,6 +16,7 @@ let todayTrips = [], allMapLayers = [];
 let soloLayers = [];
 let soloSet = [], soloIdx = 0, soloLabelFn = null;  // 單趟顯示：可左右切換的趟次集合
 let soloFromHistory = false;  // 從歷史紀錄進入 solo 模式時為 true
+let soloHistoryTile = null;   // 歷史 solo 時換用的無標示底圖
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let activeSnapPending = false;
@@ -986,6 +987,15 @@ function fitMapToRoute(coords, bottomElId, opts = {}) {
 function openSoloTrip(set, idx, labelFn) {
   if (!set?.length) return;
   exitDayPreview();
+  // 歷史模式：換成無標示底圖（CartoDB），退出時還原
+  if (soloFromHistory) {
+    map.removeLayer(TILE_LAYERS[currentTile]);
+    soloHistoryTile = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+      { subdomains: 'abcd', maxZoom: 20 }
+    ).addTo(map);
+    soloHistoryTile.bringToBack();
+  }
   soloSet = set;
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
@@ -1015,13 +1025,21 @@ function renderSoloTrip() {
     else if (l.setOpacity) l.setOpacity(0.15);
   });
 
-  // 畫選中行程的路線（較粗、較亮）
+  // 畫選中行程的路線（歷史模式：黑色 Uber 風格；今日模式：藍色）
   const coords = (trip.roadCoords || trip.coords).map(c => [c.lat, c.lng]);
-  soloLayers.push(
-    L.polyline(coords, { color: '#1A73E8', weight: 7, opacity: 1 }).addTo(map),
-    L.marker(coords[0],     { icon: makeStartIcon() }).addTo(map),
-    L.marker(coords.at(-1), { icon: makeEndIcon()   }).addTo(map)
-  );
+  if (soloFromHistory) {
+    soloLayers.push(
+      L.polyline(coords, { color: '#1a1a1a', weight: 5, opacity: 1 }).addTo(map),
+      L.marker(coords[0],     { icon: makeNumberIcon(soloIdx + 1, '#1a1a1a') }).addTo(map),
+      L.marker(coords.at(-1), { icon: makePreviewSquareIcon() }).addTo(map)
+    );
+  } else {
+    soloLayers.push(
+      L.polyline(coords, { color: '#1A73E8', weight: 7, opacity: 1 }).addTo(map),
+      L.marker(coords[0],     { icon: makeStartIcon() }).addTo(map),
+      L.marker(coords.at(-1), { icon: makeEndIcon()   }).addTo(map)
+    );
+  }
   fitMapToRoute(coords, 'solo-bar');
 
   const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
@@ -1066,6 +1084,12 @@ function setupSoloSwipe() {
 function exitSoloMode() {
   soloLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
   soloLayers = [];
+  // 還原底圖（歷史模式才有換）
+  if (soloHistoryTile) {
+    map.removeLayer(soloHistoryTile);
+    soloHistoryTile = null;
+    TILE_LAYERS[currentTile].addTo(map);
+  }
   soloSet = []; soloIdx = 0; soloLabelFn = null; soloFromHistory = false;
   allMapLayers.forEach(l => {
     if (l.setStyle) l.setStyle({ opacity: 0.85 });
