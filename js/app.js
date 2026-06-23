@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.111';
+const APP_VERSION  = '1.1.112';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -748,6 +748,22 @@ function makeEndIcon() {
 }
 
 
+function makePreviewDotIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<div style="width:18px;height:18px;border-radius:50%;background:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
+    iconSize: [18, 18], iconAnchor: [9, 9]
+  });
+}
+
+function makePreviewSquareIcon() {
+  return L.divIcon({
+    className: '',
+    html: '<div style="width:16px;height:16px;background:#1a1a1a;border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
+    iconSize: [16, 16], iconAnchor: [8, 8]
+  });
+}
+
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
   setAutoFollow(true);
@@ -1181,10 +1197,10 @@ function previewDay(dayKey) {
   trips.forEach((t, i) => {
     const latlngs = (t.roadCoords || t.coords).map(c => [c.lat, c.lng]);
     allCoords.push(...latlngs);
-    const line = L.polyline(latlngs, { color: '#1A73E8', weight: 7, opacity: 1 }).addTo(map);
+    const line = L.polyline(latlngs, { color: '#1a1a1a', weight: 5, opacity: 1 }).addTo(map);
     line.on('click', () => { exitDayPreview(); showHistoryTrip(dayKey, i); });
-    const startMk = L.marker(latlngs[0],     { icon: makeNumberIcon(i + 1, '#34A853') }).addTo(map);
-    const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon() }).addTo(map);
+    const startMk = L.marker(latlngs[0],     { icon: makePreviewDotIcon() }).addTo(map);
+    const endMk   = L.marker(latlngs.at(-1), { icon: makePreviewSquareIcon() }).addTo(map);
     dayPreviewLayers.push(line, startMk, endMk);
   });
   if (allCoords.length) fitMapToRoute(allCoords, 'day-preview-bar');
