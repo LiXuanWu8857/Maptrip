@@ -228,7 +228,7 @@ html, body {
 /* 地圖磚淡化：只在日預覽時套用，路線 polyline 不受影響 */
 .leaflet-tile-pane { transition: filter 0.3s; }
 body.day-preview-active .leaflet-tile-pane {
-  filter: brightness(0.45) saturate(0.4);
+  filter: grayscale(1) brightness(1.08);
 }
 
 .preview-map-btn {
