@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.112';
+const APP_VERSION  = '1.1.113';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1174,7 +1174,7 @@ function toggleDay(day) {
 }
 
 // ===== 日預覽（歷史某日全部路線靜態展示）=====
-let dayPreviewLayers = [], dayPreviewKey = null;
+let dayPreviewLayers = [], dayPreviewKey = null, dayPreviewTile = null;
 
 function previewDay(dayKey) {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -1203,6 +1203,14 @@ function previewDay(dayKey) {
     const endMk   = L.marker(latlngs.at(-1), { icon: makePreviewSquareIcon() }).addTo(map);
     dayPreviewLayers.push(line, startMk, endMk);
   });
+  // 換成無標示底圖（CartoDB Light No Labels）
+  map.removeLayer(TILE_LAYERS[currentTile]);
+  dayPreviewTile = L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+    { subdomains: 'abcd', maxZoom: 20 }
+  ).addTo(map);
+  dayPreviewTile.bringToBack();
+
   if (allCoords.length) fitMapToRoute(allCoords, 'day-preview-bar');
 }
 
@@ -1212,6 +1220,9 @@ function exitDayPreview() {
   dayPreviewKey = null;
   document.body.classList.remove('day-preview-active');
   document.getElementById('day-preview-bar').style.display = 'none';
+  // 還原原本底圖
+  if (dayPreviewTile) { map.removeLayer(dayPreviewTile); dayPreviewTile = null; }
+  TILE_LAYERS[currentTile].addTo(map);
 }
 
 // ===== 每日行程回放 =====
