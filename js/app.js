@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.109';
+const APP_VERSION  = '1.1.110';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -969,6 +969,7 @@ function fitMapToRoute(coords, bottomElId, opts = {}) {
 // 設定要顯示的趟次集合與起始索引，然後渲染
 function openSoloTrip(set, idx, labelFn) {
   if (!set?.length) return;
+  exitDayPreview();
   soloSet = set;
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
@@ -1142,6 +1143,7 @@ function renderHistorySheet() {
     return `<div class="history-day" onclick="toggleDay('${day}')">
         <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
         <span class="day-info">${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</span>
+        <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
         <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
       </div>
       <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
@@ -1153,6 +1155,47 @@ function toggleDay(day) {
   const caret = rows.previousElementSibling.querySelector('.day-caret');
   const nowCollapsed = rows.classList.toggle('collapsed');
   caret.textContent = nowCollapsed ? '▶' : '▼';
+}
+
+// ===== 日預覽（歷史某日全部路線靜態展示）=====
+let dayPreviewLayers = [], dayPreviewKey = null;
+
+function previewDay(dayKey) {
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const trips = raw[dayKey] || [];
+  if (!trips.length) { toast('該日無行程'); return; }
+  exitDayPreview();
+  dayPreviewKey = dayKey;
+  closeHistory();
+
+  // 先顯示 bar（讓 fitMapToRoute 量到正確高度）
+  const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
+  const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
+  document.getElementById('dp-info').innerHTML =
+    `<div class="dp-day">${dayKeyToLabel(dayKey)}</div>` +
+    `<div class="dp-stats">${trips.length} 趟　${fmtDist(totalDist)}${totalFare ? `　NT$ ${totalFare.toLocaleString()}` : ''}</div>`;
+  document.getElementById('day-preview-bar').style.display = 'flex';
+  document.body.classList.add('day-preview-active');
+
+  const allCoords = [];
+  trips.forEach((t, i) => {
+    const latlngs = (t.roadCoords || t.coords).map(c => [c.lat, c.lng]);
+    allCoords.push(...latlngs);
+    const line = L.polyline(latlngs, { color: '#1A73E8', weight: 7, opacity: 1 }).addTo(map);
+    line.on('click', () => { exitDayPreview(); showHistoryTrip(dayKey, i); });
+    const startMk = L.marker(latlngs[0],     { icon: makeNumberIcon(i + 1, '#34A853') }).addTo(map);
+    const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon() }).addTo(map);
+    dayPreviewLayers.push(line, startMk, endMk);
+  });
+  if (allCoords.length) fitMapToRoute(allCoords, 'day-preview-bar');
+}
+
+function exitDayPreview() {
+  dayPreviewLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
+  dayPreviewLayers = [];
+  dayPreviewKey = null;
+  document.body.classList.remove('day-preview-active');
+  document.getElementById('day-preview-bar').style.display = 'none';
 }
 
 // ===== 每日行程回放 =====
@@ -1178,6 +1221,7 @@ function openReplay() {
 
 // 回放歷史任一天：載入該日行程、臨時畫出路線、開始回放
 function replayDay(dayKey) {
+  exitDayPreview();
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const trips = raw[dayKey] || [];
   if (!trips.length) { toast('該日無行程可回放'); return; }

@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.109';</script>
+<script>window.INDEX_VERSION = '1.1.110';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -156,6 +156,12 @@ if (!sessionStorage.getItem('booted')) {
   <span id="solo-info"></span>
   <button id="solo-next" class="solo-arrow" onclick="soloNext()">›</button>
   <button id="solo-exit" onclick="exitSoloMode()">✕ 全部</button>
+</div>
+
+<!-- Day Preview Bar：預覽某日全部行程時的底部資訊列 -->
+<div id="day-preview-bar" style="display:none">
+  <div id="dp-info"></div>
+  <button id="dp-close" onclick="exitDayPreview()">✕ 關閉</button>
 </div>
 
 <!-- Recording Banner -->

@@ -203,6 +203,40 @@ html, body {
   font-family: inherit; cursor: pointer; white-space: nowrap; flex-shrink: 0;
 }
 #solo-bar button:active { background: rgba(255,255,255,0.25); }
+
+#day-preview-bar {
+  position: fixed;
+  bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  left: 12px; right: 12px;
+  background: rgba(32,33,36,0.92); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-radius: 14px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 10px;
+  z-index: 20; color: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  animation: slideUp 0.25s ease;
+}
+#dp-info { flex: 1; line-height: 1.4; }
+.dp-day   { font-size: 0.85rem; font-weight: 600; }
+.dp-stats { font-size: 0.72rem; opacity: 0.7; margin-top: 1px; }
+#dp-close {
+  background: rgba(255,255,255,0.15); border: none; color: #fff;
+  border-radius: 8px; padding: 7px 12px; font-size: 0.82rem; font-weight: 600;
+  font-family: inherit; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+#dp-close:active { background: rgba(255,255,255,0.25); }
+
+/* 地圖磚淡化：只在日預覽時套用，路線 polyline 不受影響 */
+.leaflet-tile-pane { transition: filter 0.3s; }
+body.day-preview-active .leaflet-tile-pane {
+  filter: brightness(0.45) saturate(0.4);
+}
+
+.preview-map-btn {
+  background: rgba(52,168,83,0.1); border: 1px solid rgba(52,168,83,0.25);
+  color: #34a853; border-radius: 8px; padding: 4px 10px;
+  font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer; flex-shrink: 0;
+}
+
 .solo-arrow {
   font-size: 1.3rem !important; line-height: 1; padding: 4px 10px !important;
   font-weight: 400 !important;
@@ -665,6 +699,7 @@ html, body {
   .day-summary { background: #222; border-bottom-color: rgba(255,255,255,0.05); color: #9aa0a6; }
   .history-day { color: #6ab4ff; }
   .history-day:active { background: rgba(106,180,255,0.08); }
+  .preview-map-btn { background: rgba(52,168,83,0.15); border-color: rgba(52,168,83,0.3); color: #81c995; }
   .empty-state { color: #9aa0a6; }
   .danger-btn { background: rgba(234,67,53,0.15); color: #f28b82; border-color: rgba(234,67,53,0.3); }
 
