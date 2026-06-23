@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.114';
+const APP_VERSION  = '1.1.115';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1221,9 +1221,9 @@ function previewDay(dayKey) {
   trips.forEach((t, i) => {
     const latlngs = (t.roadCoords || t.coords).map(c => [c.lat, c.lng]);
     allCoords.push(...latlngs);
-    const line = L.polyline(latlngs, { color: '#1a1a1a', weight: 5, opacity: 1 }).addTo(map);
+    const line = L.polyline(latlngs, { color: '#1a1a1a', weight: 2.5, opacity: 1 }).addTo(map);
     line.on('click', () => { exitDayPreview(); showHistoryTrip(dayKey, i); });
-    const startMk = L.marker(latlngs[0],     { icon: makePreviewDotIcon() }).addTo(map);
+    const startMk = L.marker(latlngs[0],     { icon: makeNumberIcon(i + 1, '#1a1a1a') }).addTo(map);
     const endMk   = L.marker(latlngs.at(-1), { icon: makePreviewSquareIcon() }).addTo(map);
     dayPreviewLayers.push(line, startMk, endMk);
   });
