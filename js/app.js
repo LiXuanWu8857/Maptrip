@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.116';
+const APP_VERSION  = '1.1.120';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -829,6 +829,7 @@ function _menuTouchEnd(e) {
   closeTopMenu();
   if (action === 'today') toggleTripList();
   else if (action === 'history') showHistory();
+  else if (action === 'sync') openSyncDialog();
 }
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
@@ -1402,6 +1403,52 @@ function _rrect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// ===== 雲端同步 UI =====
+
+function openSyncDialog() {
+  renderSyncPanel();
+  document.getElementById('sync-overlay').style.display = 'block';
+  document.getElementById('sync-dialog').style.display = 'block';
+}
+
+function closeSyncDialog() {
+  document.getElementById('sync-overlay').style.display = 'none';
+  document.getElementById('sync-dialog').style.display = 'none';
+}
+
+function renderSyncPanel() {
+  const statusEl = document.getElementById('sync-status');
+  const actEl = document.getElementById('sync-actions');
+  if (!statusEl || !window.MaptripSync) return;
+  const st = MaptripSync.status();
+  if (st.state === 'unconfigured') {
+    statusEl.innerHTML = '雲端同步尚未設定完成，請稍後再試。';
+    actEl.innerHTML = '';
+  } else if (st.state === 'signedout') {
+    statusEl.innerHTML = '登入 Google 帳號後，行程會自動備份到雲端。<br>換手機或重裝 App，登入同一帳號即可還原。';
+    actEl.innerHTML = '<button class="sync-google" onclick="MaptripSync.signIn()">使用 Google 登入</button>';
+  } else {
+    statusEl.innerHTML = `已登入　<b>${st.name || st.email || ''}</b><br><span class="sync-ok">✓ 行程自動同步中</span>`;
+    actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>';
+  }
+}
+
+// 雲端把新資料併進 localStorage 後呼叫：重繪今日 + 更新開啟中的清單
+function refreshAfterSync() {
+  // 記錄中／單趟檢視／預覽／回放時，先不動畫面（資料已存好，下次正常載入會顯示）
+  if (activeTrip || (typeof soloSet !== 'undefined' && soloSet.length) ||
+      dayPreviewKey || replayRAF) { updateTopBar(); return; }
+  allMapLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
+  allMapLayers = [];
+  todayTrips = [];
+  loadTodayFromStorage();
+  updateTopBar();
+  const ts = document.getElementById('trip-sheet');
+  if (ts && ts.style.display !== 'none') renderTripSheet();
+  const hs = document.getElementById('history-sheet');
+  if (hs && hs.style.display !== 'none') renderHistorySheet();
+}
+
 // ===== 每日行程回放 =====
 let replayDot = null, replayRAF = null;
 let replayTripIdx = 0, replayProgress = 0; // replayProgress：在當前趟 coords 的浮點索引
@@ -1672,18 +1719,22 @@ function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCo
 
 function saveTodayToStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const affected = new Set([todayKey()]);
   // 先移除今天這一格的舊資料，刪除／清空才會真的寫回（否則 Object.assign 不會覆蓋空陣列）
   delete raw[todayKey()];
   // 依每趟「開始時間」的營業日歸檔，跨 7:00 也不會把昨天的行程蓋掉
   const grouped = {};
   for (const t of todayTrips) {
     const key = businessDayKey(t.startTime);
+    affected.add(key);
     (grouped[key] = grouped[key] || []).push(serializeTrip(t));
   }
   Object.assign(raw, grouped);
   // 清掉任何空陣列的日期，歷史清單才不會出現空白日
   Object.keys(raw).forEach(k => { if (!raw[k] || !raw[k].length) delete raw[k]; });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+  // 推送變動的日期到雲端（未登入／未設定時 no-op）
+  if (window.MaptripSync) MaptripSync.syncDays([...affected]);
 }
 
 function loadTodayFromStorage() {
@@ -1943,6 +1994,9 @@ function boot() {
   if (dbgEnabled()) setTimeout(probeLayout, 300);
 
   initSpeedSlider();
+
+  // 雲端同步：載入登入狀態並開始監聽（未設定 Firebase 時安靜略過）
+  if (window.MaptripSync) { try { MaptripSync.init(); } catch (e) {} }
 }
 
 // app.js 由 index.html 的 loader 動態載入，可能在 window load 之後才進來，

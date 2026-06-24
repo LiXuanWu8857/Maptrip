@@ -825,3 +825,47 @@ html, body {
   background: rgba(255,255,255,0.1); color: #9aa0a6; font-size: 1rem;
   font-family: inherit; cursor: pointer;
 }
+
+/* ===== 雲端同步對話框 ===== */
+#sync-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 90;
+}
+#sync-dialog {
+  position: fixed; z-index: 91;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: calc(100% - 56px); max-width: 340px;
+  background: #fff; border-radius: 18px;
+  padding: 22px 20px 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.28);
+  text-align: center;
+}
+.sync-title { font-size: 1.05rem; font-weight: 700; color: #202124; margin-bottom: 14px; }
+#sync-status { font-size: 0.86rem; color: #5f6368; line-height: 1.6; margin-bottom: 18px; }
+#sync-status b { color: #202124; }
+.sync-ok { color: #1e8e3e; font-weight: 600; }
+#sync-actions { margin-bottom: 12px; }
+.sync-google {
+  width: 100%; padding: 13px; border-radius: 12px; border: none;
+  background: #1a73e8; color: #fff; font-size: 0.95rem; font-weight: 700;
+  font-family: inherit; cursor: pointer;
+}
+.sync-out {
+  width: 100%; padding: 12px; border-radius: 12px;
+  border: 1px solid rgba(234,67,53,0.3); background: rgba(234,67,53,0.06);
+  color: #d93025; font-size: 0.9rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+.sync-close {
+  width: 100%; padding: 11px; border-radius: 12px; border: none;
+  background: #f1f3f4; color: #5f6368; font-size: 0.88rem; font-weight: 500;
+  font-family: inherit; cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  #sync-dialog { background: #1f1f1f; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+  .sync-title { color: #e8eaed; }
+  #sync-status { color: #9aa0a6; }
+  #sync-status b { color: #e8eaed; }
+  .sync-close { background: #2d2d2d; color: #9aa0a6; }
+}
