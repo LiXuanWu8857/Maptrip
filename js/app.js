@@ -1235,6 +1235,12 @@ function previewDay(dayKey) {
   ).addTo(map);
   dayPreviewTile.bringToBack();
 
+  // 隱藏當日行程圖層
+  allMapLayers.forEach(l => {
+    if (l.setStyle) l.setStyle({ opacity: 0, fillOpacity: 0 });
+    else if (l.setOpacity) l.setOpacity(0);
+  });
+
   if (allCoords.length) fitMapToRoute(allCoords, 'day-preview-bar');
 }
 
@@ -1247,6 +1253,11 @@ function exitDayPreview() {
   // 還原原本底圖
   if (dayPreviewTile) { map.removeLayer(dayPreviewTile); dayPreviewTile = null; }
   TILE_LAYERS[currentTile].addTo(map);
+  // 還原當日行程圖層
+  allMapLayers.forEach(l => {
+    if (l.setStyle) l.setStyle({ opacity: 0.85 });
+    else if (l.setOpacity) l.setOpacity(1);
+  });
 }
 
 // ===== 每日行程回放 =====
