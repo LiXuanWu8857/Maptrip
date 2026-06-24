@@ -291,8 +291,24 @@ html, body {
 }
 .ctrl-btn:active { background: rgba(0,0,0,0.06); }
 
-#locate-btn.follow-active .ctrl-icon { color: #1a73e8; }
-#locate-btn.follow-active .ctrl-label { color: #1a73e8; }
+/* My Location FAB — Google Maps 風格右下角浮動按鈕 */
+#locate-btn {
+  position: fixed;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  right: 14px;
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  background: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(0,0,0,0.06);
+  display: flex; align-items: center; justify-content: center;
+  color: #3c4043;
+  cursor: pointer;
+  z-index: 15;
+  transition: color 0.2s, background 0.15s;
+}
+#locate-btn:active { background: #f1f3f4; }
+#locate-btn.follow-active { color: #1a73e8; }
 
 .ctrl-icon { font-size: 1.3rem; line-height: 1; }
 .ctrl-label { font-size: 0.75rem; color: #3c4043; }
@@ -673,6 +689,9 @@ html, body {
   .ctrl-btn { color: #e8eaed; }
   .ctrl-label { color: #9aa0a6; }
   #start-btn .ctrl-label { color: #6ab4ff; }
+  #locate-btn { background: #2d2d2d; color: #e8eaed; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  #locate-btn:active { background: #3a3a3a; }
+  #locate-btn.follow-active { color: #8ab4f8; }
   #start-btn.recording .ctrl-icon { color: #f28b82; }
   #start-btn.recording .ctrl-label { color: #f28b82; }
   .history-nav-btn { background: rgba(106,180,255,0.1); color: #6ab4ff; border-color: rgba(106,180,255,0.2); }

@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.115';</script>
+<script>window.INDEX_VERSION = '1.1.116';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -179,16 +179,19 @@ if (!sessionStorage.getItem('booted')) {
       <span class="ctrl-icon">▶</span>
       <span class="ctrl-label">開始行程</span>
     </button>
-    <button class="ctrl-btn" id="locate-btn" onclick="centerOnMe()">
-      <span class="ctrl-icon">⊕</span>
-      <span class="ctrl-label">我的位置</span>
-    </button>
     <button class="ctrl-btn" onclick="toggleTripList()">
       <span class="ctrl-icon">📋</span>
       <span class="ctrl-label">今日行程</span>
     </button>
   </div>
 </div>
+
+<!-- My Location FAB（Google Maps 風格，右下角浮動） -->
+<button id="locate-btn" onclick="centerOnMe()" title="我的位置">
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+  </svg>
+</button>
 
 <!-- Trip List Sheet -->
 <div id="sheet-overlay" onclick="closeActiveSheet()" style="display:none"></div>
