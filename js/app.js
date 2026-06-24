@@ -713,8 +713,8 @@ function drawTripLine(trip, idx) {
 function makeNumberIcon(n, color) {
   return L.divIcon({
     className: '',
-    html: `<div style="width:24px;height:24px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">${n}</div>`,
-    iconSize: [24, 24], iconAnchor: [12, 12]
+    html: `<div style="width:20px;height:20px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">${n}</div>`,
+    iconSize: [20, 20], iconAnchor: [10, 10]
   });
 }
 
@@ -730,21 +730,21 @@ function makeDotIcon(color) {
 function makeStartIcon() {
   return L.divIcon({
     className: '',
-    html: '<div style="width:22px;height:22px;border-radius:50%;background:#34A853;border:3px solid #fff;'
-        + 'box-shadow:0 1px 5px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
-        + '<span style="color:#fff;font-size:9px;font-weight:700;line-height:1;font-family:sans-serif">起</span></div>',
-    iconSize: [22, 22], iconAnchor: [11, 11]
+    html: '<div style="width:16px;height:16px;border-radius:50%;background:#34A853;border:2px solid #fff;'
+        + 'box-shadow:0 1px 4px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
+        + '<span style="color:#fff;font-size:7px;font-weight:700;line-height:1;font-family:sans-serif">起</span></div>',
+    iconSize: [16, 16], iconAnchor: [8, 8]
   });
 }
 
-// 終點：紅色圓角方形＋白色實心小方塊
+// 終點：紅色圓形＋白色實心小圓
 function makeEndIcon() {
   return L.divIcon({
     className: '',
-    html: '<div style="width:22px;height:22px;border-radius:50%;background:#EA4335;border:3px solid #fff;'
-        + 'box-shadow:0 1px 5px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
-        + '<div style="width:8px;height:8px;background:#fff;border-radius:50%;"></div></div>',
-    iconSize: [22, 22], iconAnchor: [11, 11]
+    html: '<div style="width:16px;height:16px;border-radius:50%;background:#EA4335;border:2px solid #fff;'
+        + 'box-shadow:0 1px 4px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
+        + '<div style="width:5px;height:5px;background:#fff;border-radius:50%;"></div></div>',
+    iconSize: [16, 16], iconAnchor: [8, 8]
   });
 }
 
@@ -877,6 +877,7 @@ function renderTripSheet() {
     <span>${todayTrips.length} 趟</span>
     <span>${fmtDist(totalDist)}</span>
     ${totalFare ? `<span class="day-fare">NT$ ${totalFare.toLocaleString()}</span>` : ''}
+    <button class="screenshot-btn" onclick="captureTripsScreenshot(null)">截圖</button>
   </div>`;
   body.innerHTML = summary + todayTrips.map((t, i) => `
     <div class="trip-row" onclick="showSoloTripFromToday(${i}); closeSheet()">
@@ -1183,6 +1184,7 @@ function renderHistorySheet() {
     return `<div class="history-day" onclick="toggleDay('${day}')">
         <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
         <span class="day-info">${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</span>
+        <button class="screenshot-btn" onclick="event.stopPropagation();captureTripsScreenshot('${day}')">截圖</button>
         <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
         <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
       </div>
@@ -1258,6 +1260,124 @@ function exitDayPreview() {
     if (l.setStyle) l.setStyle({ opacity: 0.85 });
     else if (l.setOpacity) l.setOpacity(1);
   });
+}
+
+// ===== 里程截圖 =====
+
+function captureTripsScreenshot(dayKey) {
+  let trips, dateLabel;
+  if (dayKey) {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    trips = raw[dayKey] || [];
+    dateLabel = dayKeyToLabel(dayKey);
+  } else {
+    trips = todayTrips;
+    dateLabel = dayKeyToLabel(todayKey());
+  }
+  if (!trips.length) { toast('無行程可截圖'); return; }
+
+  const W = 390, H = 520;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * 2; canvas.height = H * 2;
+  const c = canvas.getContext('2d');
+  c.scale(2, 2);
+
+  // 背景
+  c.fillStyle = '#141414';
+  _rrect(c, 0, 0, W, H, 24); c.fill();
+
+  // 標題
+  c.fillStyle = '#ffffff';
+  c.font = 'bold 22px system-ui, sans-serif';
+  c.textAlign = 'left';
+  c.fillText('Maptrip', 24, 48);
+  c.fillStyle = '#9aa0a6';
+  c.font = '14px system-ui, sans-serif';
+  c.fillText(dateLabel, 24, 70);
+
+  // 路線區
+  const rY = 88, rH = 310;
+  c.fillStyle = '#1e1e1e';
+  _rrect(c, 16, rY, W - 32, rH, 14); c.fill();
+
+  const allPts = trips.flatMap(t => (t.roadCoords || t.coords || []).map(p => [p.lat, p.lng]));
+  if (allPts.length > 1) {
+    const lats = allPts.map(p => p[0]), lngs = allPts.map(p => p[1]);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const pad = 30;
+    const aW = W - 32 - pad * 2, aH = rH - pad * 2;
+    const lngR = Math.max(maxLng - minLng, 0.002);
+    const latR = Math.max(maxLat - minLat, 0.002);
+    const sc = Math.min(aW / lngR, aH / latR);
+    const ox = 16 + pad + (aW - lngR * sc) / 2;
+    const oy = rY + pad + (aH - latR * sc) / 2;
+    const tx = lng => ox + (lng - minLng) * sc;
+    const ty = lat => oy + (maxLat - lat) * sc;
+
+    const COLS = ['#4fc3f7','#81c784','#ffb74d','#f06292','#ce93d8','#80cbc4','#a5d6a7','#fff176'];
+    trips.forEach((t, i) => {
+      const pts = (t.roadCoords || t.coords || []).map(p => [p.lat, p.lng]);
+      if (pts.length < 2) return;
+      c.beginPath();
+      c.moveTo(tx(pts[0][1]), ty(pts[0][0]));
+      pts.slice(1).forEach(p => c.lineTo(tx(p[1]), ty(p[0])));
+      c.strokeStyle = COLS[i % COLS.length];
+      c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round';
+      c.stroke();
+      // 起點圓
+      c.beginPath();
+      c.arc(tx(pts[0][1]), ty(pts[0][0]), 4, 0, Math.PI * 2);
+      c.fillStyle = COLS[i % COLS.length]; c.fill();
+    });
+  }
+
+  // 統計
+  const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
+  const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
+  const sY = rY + rH + 18;
+
+  // 分隔線
+  c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
+
+  const cols = totalFare ? [W * 0.2, W * 0.5, W * 0.8] : [W * 0.3, W * 0.7];
+  const vals = totalFare
+    ? [`${trips.length} 趟`, fmtDist(totalDist), `NT$ ${totalFare.toLocaleString()}`]
+    : [`${trips.length} 趟`, fmtDist(totalDist)];
+  const lbls = totalFare ? ['行程', '里程', '收入'] : ['行程', '里程'];
+
+  c.textAlign = 'center';
+  cols.forEach((x, i) => {
+    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
+    c.fillText(vals[i], x, sY + 18);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
+    c.fillText(lbls[i], x, sY + 34);
+  });
+
+  // 頁腳
+  c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif'; c.textAlign = 'center';
+  c.fillText('Maptrip · 行程紀錄', W / 2, H - 14);
+
+  canvas.toBlob(blob => {
+    const file = new File([blob], 'maptrip.png', { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: `Maptrip ${dateLabel}` }).catch(() => {});
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `maptrip-${dateLabel}.png`; a.click();
+    }
+  }, 'image/png');
+}
+
+function _rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 // ===== 每日行程回放 =====

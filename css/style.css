@@ -233,6 +233,11 @@ html, body {
   color: #34a853; border-radius: 8px; padding: 4px 10px;
   font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer; flex-shrink: 0;
 }
+.screenshot-btn {
+  background: rgba(26,115,232,0.1); border: 1px solid rgba(26,115,232,0.25);
+  color: #1a73e8; border-radius: 8px; padding: 4px 10px;
+  font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer; flex-shrink: 0;
+}
 
 .solo-arrow {
   font-size: 1.3rem !important; line-height: 1; padding: 4px 10px !important;
@@ -716,6 +721,7 @@ html, body {
   .history-day { color: #6ab4ff; }
   .history-day:active { background: rgba(106,180,255,0.08); }
   .preview-map-btn { background: rgba(52,168,83,0.15); border-color: rgba(52,168,83,0.3); color: #81c995; }
+  .screenshot-btn { background: rgba(26,115,232,0.15); border-color: rgba(26,115,232,0.3); color: #8ab4f8; }
   .empty-state { color: #9aa0a6; }
   .danger-btn { background: rgba(234,67,53,0.15); color: #f28b82; border-color: rgba(234,67,53,0.3); }
 
