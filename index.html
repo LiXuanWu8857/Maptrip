@@ -309,5 +309,17 @@ if (!sessionStorage.getItem('booted')) {
   tryLeaflet(0);
 })();
 </script>
+<!-- Screenshot Preview Modal -->
+<div id="screenshot-preview" style="display:none">
+  <div id="screenshot-backdrop" onclick="closeScreenshotPreview()"></div>
+  <div id="screenshot-modal">
+    <img id="screenshot-img" />
+    <div id="screenshot-actions">
+      <button id="screenshot-share-btn" onclick="shareScreenshot()">分享</button>
+      <button id="screenshot-download-btn" onclick="downloadScreenshot()">下載</button>
+      <button id="screenshot-close-btn" onclick="closeScreenshotPreview()">✕</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

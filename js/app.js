@@ -704,7 +704,7 @@ function drawTripLine(trip, idx) {
   const line = L.polyline(latlngs, { color: '#1A73E8', weight: 5, opacity: 0.85 }).addTo(map);
   line.on('click', () =>
     toast(`行程 ${idx}｜${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`));
-  const startMk = L.marker(latlngs[0], { icon: makeNumberIcon(idx, '#34A853') }).addTo(map);
+  const startMk = L.marker(latlngs[0], { icon: makeNumberIcon(idx, '#34A853'), zIndexOffset: 10 }).addTo(map);
   const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon() }).addTo(map);
   allMapLayers.push(line, startMk, endMk);
   trip._layers = [line, startMk, endMk];
@@ -1031,13 +1031,13 @@ function renderSoloTrip() {
   if (soloFromHistory) {
     soloLayers.push(
       L.polyline(coords, { color: '#1a1a1a', weight: 5, opacity: 1 }).addTo(map),
-      L.marker(coords[0],     { icon: makeNumberIcon(soloIdx + 1, '#1a1a1a') }).addTo(map),
+      L.marker(coords[0],     { icon: makeNumberIcon(soloIdx + 1, '#1a1a1a'), zIndexOffset: 10 }).addTo(map),
       L.marker(coords.at(-1), { icon: makePreviewSquareIcon() }).addTo(map)
     );
   } else {
     soloLayers.push(
       L.polyline(coords, { color: '#1A73E8', weight: 7, opacity: 1 }).addTo(map),
-      L.marker(coords[0],     { icon: makeStartIcon() }).addTo(map),
+      L.marker(coords[0],     { icon: makeStartIcon(), zIndexOffset: 10 }).addTo(map),
       L.marker(coords.at(-1), { icon: makeEndIcon()   }).addTo(map)
     );
   }
@@ -1225,7 +1225,7 @@ function previewDay(dayKey) {
     allCoords.push(...latlngs);
     const line = L.polyline(latlngs, { color: '#1a1a1a', weight: 2.5, opacity: 1 }).addTo(map);
     line.on('click', () => { exitDayPreview(); showHistoryTrip(dayKey, i); });
-    const startMk = L.marker(latlngs[0],     { icon: makeNumberIcon(i + 1, '#1a1a1a') }).addTo(map);
+    const startMk = L.marker(latlngs[0],     { icon: makeNumberIcon(i + 1, '#1a1a1a'), zIndexOffset: 10 }).addTo(map);
     const endMk   = L.marker(latlngs.at(-1), { icon: makePreviewSquareIcon() }).addTo(map);
     dayPreviewLayers.push(line, startMk, endMk);
   });
@@ -1360,14 +1360,36 @@ function captureTripsScreenshot(dayKey) {
   c.fillText('Maptrip · 行程紀錄', W / 2, H - 14);
 
   canvas.toBlob(blob => {
-    const file = new File([blob], 'maptrip.png', { type: 'image/png' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], title: `Maptrip ${dateLabel}` }).catch(() => {});
-    } else {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = `maptrip-${dateLabel}.png`; a.click();
-    }
+    _screenshotBlob = blob;
+    _screenshotLabel = dateLabel;
+    const url = URL.createObjectURL(blob);
+    document.getElementById('screenshot-img').src = url;
+    document.getElementById('screenshot-preview').style.display = 'flex';
   }, 'image/png');
+}
+
+let _screenshotBlob = null, _screenshotLabel = '';
+
+function shareScreenshot() {
+  if (!_screenshotBlob) return;
+  const file = new File([_screenshotBlob], 'maptrip.png', { type: 'image/png' });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file], title: `Maptrip ${_screenshotLabel}` }).catch(() => {});
+  } else {
+    downloadScreenshot();
+  }
+}
+
+function downloadScreenshot() {
+  if (!_screenshotBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(_screenshotBlob);
+  a.download = `maptrip-${_screenshotLabel}.png`;
+  a.click();
+}
+
+function closeScreenshotPreview() {
+  document.getElementById('screenshot-preview').style.display = 'none';
 }
 
 function _rrect(ctx, x, y, w, h, r) {
