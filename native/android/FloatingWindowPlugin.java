@@ -189,10 +189,10 @@ public class FloatingWindowPlugin extends Plugin {
 
         actionBtn = new Button(ctx);
         actionBtn.setTextColor(Color.WHITE);
-        actionBtn.setTextSize(15);
+        actionBtn.setTextSize(14);
         actionBtn.setAllCaps(false);
         actionBtn.setGravity(Gravity.CENTER);
-        actionBtn.setPadding(dp(20), dp(8), dp(20), dp(8));
+        actionBtn.setPadding(dp(14), dp(6), dp(14), dp(6));
         LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         aLp.leftMargin = dp(12);
@@ -218,7 +218,7 @@ public class FloatingWindowPlugin extends Plugin {
             : WindowManager.LayoutParams.TYPE_PHONE;
 
         lp = new WindowManager.LayoutParams(
-            dp(200),
+            dp(240),
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
@@ -328,13 +328,22 @@ public class FloatingWindowPlugin extends Plugin {
         mode = "idle";
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
-        mainRow.setGravity(Gravity.CENTER);
-        textCol.setVisibility(View.GONE);   // 閒置只留 Start 按鈕，左邊文字隱藏
+        mainRow.setGravity(Gravity.CENTER_VERTICAL);
+        // 左側：emoji + 名稱
+        textCol.setVisibility(View.VISIBLE);
+        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        textCol.setLayoutParams(textLp);
+        titleText.setText("🚗  Maptrip");
+        titleText.setTextSize(15);
+        subText.setVisibility(View.GONE);
+        // 右側：緊湊藍色按鈕
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnLp.leftMargin = dp(8);
         actionBtn.setLayoutParams(btnLp);
-        actionBtn.setText("Start");
-        setBtnColor(actionBtn, "#34A853");
+        actionBtn.setText("▶ 開始行程");
+        setBtnColor(actionBtn, "#1A73E8");
     }
 
     private void setRecording(int elapsed, int distance) {
@@ -342,13 +351,18 @@ public class FloatingWindowPlugin extends Plugin {
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
         mainRow.setGravity(Gravity.CENTER_VERTICAL);
-        textCol.setVisibility(View.VISIBLE); // 記錄中才顯示時間 / 距離
+        textCol.setVisibility(View.VISIBLE);
+        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        textCol.setLayoutParams(textLp);
+        subText.setVisibility(View.VISIBLE);
+        titleText.setTextSize(16);
+        setText(elapsed, distance);
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        btnLp.leftMargin = dp(12);
+        btnLp.leftMargin = dp(8);
         actionBtn.setLayoutParams(btnLp);
-        setText(elapsed, distance);
-        actionBtn.setText("End");
+        actionBtn.setText("結束");
         setBtnColor(actionBtn, "#EA4335");
     }
 
