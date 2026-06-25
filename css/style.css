@@ -218,12 +218,14 @@ html, body {
 #dp-info { flex: 1; line-height: 1.4; }
 .dp-day   { font-size: 0.85rem; font-weight: 600; }
 .dp-stats { font-size: 0.72rem; opacity: 0.7; margin-top: 1px; }
-#dp-close {
-  background: rgba(255,255,255,0.15); border: none; color: #fff;
-  border-radius: 8px; padding: 7px 12px; font-size: 0.82rem; font-weight: 600;
+#dp-close, #dp-screenshot {
+  border: none; border-radius: 8px; padding: 7px 12px; font-size: 0.82rem; font-weight: 600;
   font-family: inherit; cursor: pointer; white-space: nowrap; flex-shrink: 0;
 }
+#dp-close       { background: rgba(255,255,255,0.15); color: #fff; }
 #dp-close:active { background: rgba(255,255,255,0.25); }
+#dp-screenshot  { background: rgba(26,115,232,0.85); color: #fff; }
+#dp-screenshot:active { background: rgba(26,115,232,1); }
 
 /* 地圖磚過渡動畫（日預覽切換底圖時） */
 .leaflet-tile-pane { transition: opacity 0.3s; }
