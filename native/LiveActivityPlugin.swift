@@ -214,6 +214,11 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         lastElapsed = elapsed
         lastDistance = distance
 
+        // 廣播狀態給 CarPlay（若已連線）即時更新按鈕與里程顯示
+        NotificationCenter.default.post(name: .mapTripStateChanged, object: nil, userInfo: [
+            "isRecording": isRecording, "elapsed": elapsed, "distance": distance
+        ])
+
         let state = MapTripAttributes.ContentState(
             isRecording: isRecording,
             elapsedSeconds: elapsed,

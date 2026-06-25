@@ -31,6 +31,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+    // MARK: - 場景設定（僅為 CarPlay 提供場景；手機本體仍用上方 window 生命週期）
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        if connectingSceneSession.role == .carTemplateApplication {
+            let config = UISceneConfiguration(name: "CarPlay", sessionRole: connectingSceneSession.role)
+            if #available(iOS 14.0, *) {
+                config.delegateClass = CarPlaySceneDelegate.self
+            }
+            return config
+        }
+        // 其他（手機）場景：回傳預設設定，維持既有 AppDelegate window 行為
+        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+    }
+
     // 把 widget 指令寫進主程序 UserDefaults，並即時廣播給 plugin（App 已在前景時用）
     private func handleMapTripURL(_ url: URL) {
         guard url.scheme == "maptrip" else { return }

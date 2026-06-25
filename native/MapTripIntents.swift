@@ -6,6 +6,8 @@ import Foundation
 extension Notification.Name {
     static let mapTripCommand = Notification.Name("MapTripCommand")
     static let mapTripUrl     = Notification.Name("MapTripUrl")
+    // JS 端行程狀態變化（開始/更新/結束）→ 廣播給 CarPlay 更新畫面
+    static let mapTripStateChanged = Notification.Name("MapTripStateChanged")
 }
 
 let kAppGroup                  = "group.com.maptrip.app"
@@ -15,6 +17,11 @@ let kMapTripPerformProcess     = "MapTripPerformProcess"   // 診斷：perform()
 
 private let kDarwinStart = "com.maptrip.widget.start"
 private let kDarwinEnd   = "com.maptrip.widget.end"
+
+// 對外共用：CarPlay 按鈕也走這條，與鎖屏 widget 完全相同的指令派送路徑。
+func mapTripDispatchCommand(_ action: String) {
+    dispatchCommand(action)
+}
 
 // 診斷版：perform() 同時往「四個地方」寫/送，App 啟動時逐一回報哪個有效。
 private func dispatchCommand(_ action: String) {
