@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.128';
+const APP_VERSION  = '1.1.129';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1185,7 +1185,6 @@ function renderHistorySheet() {
     return `<div class="history-day" onclick="toggleDay('${day}')">
         <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
         <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟</span><span class="day-info-bot">${fmtDist(totalDist)}${fareStr}</span></span>
-        <button class="screenshot-btn" onclick="event.stopPropagation();captureTripsScreenshot('${day}')">截圖</button>
         <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
         <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
       </div>
