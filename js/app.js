@@ -1184,7 +1184,7 @@ function renderHistorySheet() {
       </div>`).join('');
     return `<div class="history-day" onclick="toggleDay('${day}')">
         <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
-        <span class="day-info">${day}　${trips.length} 趟　${fmtDist(totalDist)}${fareStr}</span>
+        <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟</span><span class="day-info-bot">${fmtDist(totalDist)}${fareStr}</span></span>
         <button class="screenshot-btn" onclick="event.stopPropagation();captureTripsScreenshot('${day}')">截圖</button>
         <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
         <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
