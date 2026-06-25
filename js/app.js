@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.130';
+const APP_VERSION  = '1.1.131';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1372,10 +1372,11 @@ async function captureTripsScreenshot(dayKey) {
       c.lineWidth = 1.5; c.strokeStyle = '#ffffff'; c.stroke();
       c.fillStyle = '#ffffff';
       c.font = `bold ${num > 9 ? 9 : 11}px system-ui, sans-serif`;
-      c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText(String(num), sx, sy + 0.5);
+      c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+      const m = c.measureText(String(num));
+      const textH = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+      c.fillText(String(num), sx, sy + m.actualBoundingBoxAscent - textH / 2);
     });
-    c.textBaseline = 'alphabetic';
     c.restore();
   } else {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
