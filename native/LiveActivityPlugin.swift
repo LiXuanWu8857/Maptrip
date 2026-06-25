@@ -3,6 +3,7 @@
 
 import Foundation
 import UIKit
+import Photos
 import Capacitor
 import ActivityKit
 
@@ -32,7 +33,8 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "updateTrip",   returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "endTrip",      returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "heartbeat",    returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "consumePendingCommand", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "consumePendingCommand", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "savePhotoBase64",       returnType: CAPPluginReturnPromise)
     ]
 
     // 方塊過期時間：App 活著時 GPS 回呼持續往後推；App 一死沒人推，過期後鎖屏畫面收成空白。
@@ -202,6 +204,26 @@ public class LiveActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             "grpNil":  grp == nil,
             "appProc": ProcessInfo.processInfo.processName
         ])
+    }
+
+    /// 將 base64 PNG 存入系統相片庫
+    @objc func savePhotoBase64(_ call: CAPPluginCall) {
+        guard let b64 = call.getString("base64"),
+              let data = Data(base64Encoded: b64),
+              let image = UIImage(data: data) else {
+            call.reject("invalid image data"); return
+        }
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else {
+                call.reject("permission denied"); return
+            }
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }) { success, error in
+                if success { call.resolve() }
+                else { call.reject(error?.localizedDescription ?? "save failed") }
+            }
+        }
     }
 
     // MARK: - 私有實作

@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.126';
+const APP_VERSION  = '1.1.127';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1422,7 +1422,24 @@ function _fallbackDownload() {
 }
 
 function shareScreenshot() { _shareImageFile(true); }
-function saveImageToPhotos() { _shareImageFile(false); }
+
+function saveImageToPhotos() {
+  if (!_screenshotBlob) return;
+  // 優先走原生 PHPhotoLibrary（iOS Capacitor）
+  const plugin = window.Capacitor?.Plugins?.LiveActivity;
+  if (plugin?.savePhotoBase64) {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result.replace(/^data:[^;]+;base64,/, '');
+      plugin.savePhotoBase64({ base64 })
+        .then(() => toast('已儲存到相片庫'))
+        .catch(() => _shareImageFile(false));
+    };
+    reader.readAsDataURL(_screenshotBlob);
+  } else {
+    _shareImageFile(false);
+  }
+}
 
 function closeScreenshotPreview() {
   document.getElementById('screenshot-preview').style.display = 'none';
