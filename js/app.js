@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.125';
+const APP_VERSION  = '1.1.126';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1265,7 +1265,20 @@ function exitDayPreview() {
 
 // ===== 里程截圖 =====
 
-function captureTripsScreenshot(dayKey) {
+function _latlngToWorldPx(lat, lng, z) {
+  const s = 256 * Math.pow(2, z);
+  const t = Math.sin(lat * Math.PI / 180);
+  return { x: (lng + 180) / 360 * s, y: (0.5 - Math.log((1 + t) / (1 - t)) / (4 * Math.PI)) * s };
+}
+
+function _loadTile(url) {
+  return new Promise(r => {
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => r(img); img.onerror = () => r(null); img.src = url;
+  });
+}
+
+async function captureTripsScreenshot(dayKey) {
   let trips, dateLabel;
   if (dayKey) {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -1283,7 +1296,7 @@ function captureTripsScreenshot(dayKey) {
   const c = canvas.getContext('2d');
   c.scale(2, 2);
 
-  // 背景
+  // 卡片背景
   c.fillStyle = '#141414';
   _rrect(c, 0, 0, W, H, 24); c.fill();
 
@@ -1297,97 +1310,119 @@ function captureTripsScreenshot(dayKey) {
   c.fillText(dateLabel, 24, 70);
 
   // 路線區
-  const rY = 88, rH = 310;
-  c.fillStyle = '#1e1e1e';
-  _rrect(c, 16, rY, W - 32, rH, 14); c.fill();
-
+  const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const allPts = trips.flatMap(t => (t.roadCoords || t.coords || []).map(p => [p.lat, p.lng]));
-  if (allPts.length > 1) {
-    const lats = allPts.map(p => p[0]), lngs = allPts.map(p => p[1]);
-    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-    const pad = 30;
-    const aW = W - 32 - pad * 2, aH = rH - pad * 2;
-    const lngR = Math.max(maxLng - minLng, 0.002);
-    const latR = Math.max(maxLat - minLat, 0.002);
-    const sc = Math.min(aW / lngR, aH / latR);
-    const ox = 16 + pad + (aW - lngR * sc) / 2;
-    const oy = rY + pad + (aH - latR * sc) / 2;
-    const tx = lng => ox + (lng - minLng) * sc;
-    const ty = lat => oy + (maxLat - lat) * sc;
 
+  if (allPts.length > 1) {
+    // 選擇最佳縮放等級（最多載入 16 tiles）
+    let z = 12, sc, viewX0, viewY0;
+    for (let zz = 16; zz >= 9; zz--) {
+      const wps = allPts.map(([la, ln]) => _latlngToWorldPx(la, ln, zz));
+      const wxs = wps.map(p => p.x), wys = wps.map(p => p.y);
+      const sX = (Math.max(...wxs) - Math.min(...wxs)) || 1;
+      const sY = (Math.max(...wys) - Math.min(...wys)) || 1;
+      const _sc = Math.min(rW / sX, rH / sY) * 0.7;
+      if ((Math.ceil(rW / _sc / 256) + 1) * (Math.ceil(rH / _sc / 256) + 1) <= 16) {
+        z = zz; sc = _sc;
+        const wcX = (Math.min(...wxs) + Math.max(...wxs)) / 2;
+        const wcY = (Math.min(...wys) + Math.max(...wys)) / 2;
+        viewX0 = wcX - rW / (2 * sc);
+        viewY0 = wcY - rH / (2 * sc);
+        break;
+      }
+    }
+
+    // 載入 CartoDB Dark 底圖 tiles
+    const TS = 256, maxT = Math.pow(2, z) - 1;
+    const tx0 = Math.floor(viewX0 / TS), ty0 = Math.floor(viewY0 / TS);
+    const tx1 = Math.ceil((viewX0 + rW / sc) / TS), ty1 = Math.ceil((viewY0 + rH / sc) / TS);
+    const subs = ['a', 'b', 'c', 'd'], jobs = [];
+    for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) {
+      if (tx < 0 || ty < 0 || tx > maxT || ty > maxT) continue;
+      jobs.push(_loadTile(`https://${subs[(tx + ty) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}.png`).then(img => ({ img, tx, ty })));
+    }
+    const tiles = await Promise.all(jobs);
+
+    // 裁剪並繪製底圖
+    c.save();
+    c.beginPath(); _rrect(c, rX, rY, rW, rH, 14); c.clip();
+    c.fillStyle = '#1a2035'; c.fillRect(rX, rY, rW, rH);
+    tiles.forEach(({ img, tx, ty }) => {
+      if (!img) return;
+      c.drawImage(img, rX + (tx * TS - viewX0) * sc, rY + (ty * TS - viewY0) * sc, TS * sc, TS * sc);
+    });
+
+    // 繪製路線
+    const wp2c = (la, ln) => { const wp = _latlngToWorldPx(la, ln, z); return [rX + (wp.x - viewX0) * sc, rY + (wp.y - viewY0) * sc]; };
     const COLS = ['#4fc3f7','#81c784','#ffb74d','#f06292','#ce93d8','#80cbc4','#a5d6a7','#fff176'];
     trips.forEach((t, i) => {
       const pts = (t.roadCoords || t.coords || []).map(p => [p.lat, p.lng]);
       if (pts.length < 2) return;
-      c.beginPath();
-      c.moveTo(tx(pts[0][1]), ty(pts[0][0]));
-      pts.slice(1).forEach(p => c.lineTo(tx(p[1]), ty(p[0])));
-      c.strokeStyle = COLS[i % COLS.length];
-      c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round';
-      c.stroke();
-      // 起點圓
-      c.beginPath();
-      c.arc(tx(pts[0][1]), ty(pts[0][0]), 4, 0, Math.PI * 2);
-      c.fillStyle = COLS[i % COLS.length]; c.fill();
+      const [sx, sy] = wp2c(pts[0][0], pts[0][1]);
+      c.beginPath(); c.moveTo(sx, sy);
+      pts.slice(1).forEach(p => { const [px, py] = wp2c(p[0], p[1]); c.lineTo(px, py); });
+      c.strokeStyle = COLS[i % COLS.length]; c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke();
+      c.beginPath(); c.arc(sx, sy, 4, 0, Math.PI * 2); c.fillStyle = COLS[i % COLS.length]; c.fill();
     });
+    c.restore();
+  } else {
+    c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
   const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
   const sY = rY + rH + 18;
-
-  // 分隔線
   c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
 
-  const cols = totalFare ? [W * 0.2, W * 0.5, W * 0.8] : [W * 0.3, W * 0.7];
+  const statCols = totalFare ? [W * 0.2, W * 0.5, W * 0.8] : [W * 0.3, W * 0.7];
   const vals = totalFare
     ? [`${trips.length} 趟`, fmtDist(totalDist), `NT$ ${totalFare.toLocaleString()}`]
     : [`${trips.length} 趟`, fmtDist(totalDist)];
   const lbls = totalFare ? ['行程', '里程', '收入'] : ['行程', '里程'];
-
   c.textAlign = 'center';
-  cols.forEach((x, i) => {
-    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
-    c.fillText(vals[i], x, sY + 18);
-    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
-    c.fillText(lbls[i], x, sY + 34);
+  statCols.forEach((x, i) => {
+    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 18);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 34);
   });
-
-  // 頁腳
   c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif'; c.textAlign = 'center';
   c.fillText('Maptrip · 行程紀錄', W / 2, H - 14);
 
-  canvas.toBlob(blob => {
-    _screenshotBlob = blob;
-    _screenshotLabel = dateLabel;
-    const url = URL.createObjectURL(blob);
-    document.getElementById('screenshot-img').src = url;
-    document.getElementById('screenshot-preview').style.display = 'flex';
-  }, 'image/png');
+  await new Promise(resolve => {
+    canvas.toBlob(blob => {
+      _screenshotBlob = blob; _screenshotLabel = dateLabel;
+      const url = URL.createObjectURL(blob);
+      document.getElementById('screenshot-img').src = url;
+      document.getElementById('screenshot-preview').style.display = 'flex';
+      resolve();
+    }, 'image/png');
+  });
 }
 
 let _screenshotBlob = null, _screenshotLabel = '';
 
-function shareScreenshot() {
+function _shareImageFile(withTitle) {
   if (!_screenshotBlob) return;
-  const file = new File([_screenshotBlob], 'maptrip.png', { type: 'image/png' });
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    navigator.share({ files: [file], title: `Maptrip ${_screenshotLabel}` }).catch(() => {});
+  const file = new File([_screenshotBlob], `maptrip-${_screenshotLabel}.png`, { type: 'image/png' });
+  const opts = withTitle ? { files: [file], title: `Maptrip ${_screenshotLabel}` } : { files: [file] };
+  if (navigator.share) {
+    navigator.share(opts).catch(() => _fallbackDownload());
   } else {
-    downloadScreenshot();
+    _fallbackDownload();
   }
 }
 
-function downloadScreenshot() {
+function _fallbackDownload() {
   if (!_screenshotBlob) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(_screenshotBlob);
   a.download = `maptrip-${_screenshotLabel}.png`;
   a.click();
 }
+
+function shareScreenshot() { _shareImageFile(true); }
+function saveImageToPhotos() { _shareImageFile(false); }
 
 function closeScreenshotPreview() {
   document.getElementById('screenshot-preview').style.display = 'none';
