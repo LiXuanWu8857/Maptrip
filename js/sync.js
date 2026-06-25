@@ -41,20 +41,45 @@
     else if (unsub) { unsub(); unsub = null; }
   }
 
-  function signIn() {
+  // Email + 密碼登入：純 API、不靠彈窗/轉址，在 App 內嵌瀏覽器 100% 可用。
+  // 沒帳號就自動註冊，有帳號就登入；密碼錯誤才提示。
+  function signIn(email, password) {
     if (!ready) { toastMsg('雲端尚未設定'); return; }
-    const provider = new firebase.auth.GoogleAuthProvider();
-    auth.signInWithPopup(provider).catch(err => {
-      const code = err && err.code;
-      if (code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request' ||
-          code === 'auth/operation-not-supported-in-this-environment' || code === 'auth/popup-closed-by-user') {
-        // webview 常擋彈窗，改用轉址登入
-        auth.signInWithRedirect(provider).catch(e => toastMsg('登入失敗：' + (e.code || e.message)));
-      } else {
-        toastMsg('登入失敗：' + (code || err.message));
-      }
-    });
+    email = (email || '').trim();
+    if (!email || !password) { toastMsg('請輸入電子郵件與密碼'); return; }
+    if (password.length < 6) { toastMsg('密碼至少 6 碼'); return; }
+    setBusy(true);
+    auth.signInWithEmailAndPassword(email, password)
+      .then(() => { setBusy(false); })
+      .catch(err => {
+        const code = err && err.code;
+        if (code === 'auth/user-not-found') {
+          // 新帳號 → 自動註冊
+          auth.createUserWithEmailAndPassword(email, password)
+            .then(() => { setBusy(false); toastMsg('已建立帳號並登入'); })
+            .catch(e => { setBusy(false); toastMsg(authErrMsg(e && e.code)); });
+        } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+          setBusy(false); toastMsg('密碼錯誤');
+        } else {
+          setBusy(false); toastMsg(authErrMsg(code));
+        }
+      });
   }
+
+  function authErrMsg(code) {
+    switch (code) {
+      case 'auth/invalid-email': return '電子郵件格式不正確';
+      case 'auth/email-already-in-use': return '此信箱已註冊，請直接登入';
+      case 'auth/weak-password': return '密碼太弱（至少 6 碼）';
+      case 'auth/network-request-failed': return '網路連線失敗';
+      case 'auth/too-many-requests': return '嘗試太多次，請稍後再試';
+      default: return '登入失敗：' + (code || '未知錯誤');
+    }
+  }
+
+  let busy = false;
+  function setBusy(b) { busy = b; updateUI(); }
+  function isBusy() { return busy; }
 
   function signOut() { if (auth) auth.signOut().then(updateUI); }
 
@@ -128,5 +153,5 @@
 
   function updateUI() { if (window.renderSyncPanel) window.renderSyncPanel(); }
 
-  window.MaptripSync = { init, signIn, signOut, syncDays, status };
+  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy };
 })();

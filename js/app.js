@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.121';
+const APP_VERSION  = '1.1.122';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1421,16 +1421,32 @@ function renderSyncPanel() {
   const actEl = document.getElementById('sync-actions');
   if (!statusEl || !window.MaptripSync) return;
   const st = MaptripSync.status();
+  const busy = MaptripSync.isBusy && MaptripSync.isBusy();
   if (st.state === 'unconfigured') {
     statusEl.innerHTML = '雲端同步尚未設定完成，請稍後再試。';
     actEl.innerHTML = '';
   } else if (st.state === 'signedout') {
-    statusEl.innerHTML = '登入 Google 帳號後，行程會自動備份到雲端。<br>換手機或重裝 App，登入同一帳號即可還原。';
-    actEl.innerHTML = '<button class="sync-google" onclick="MaptripSync.signIn()">使用 Google 登入</button>';
+    // 保留已輸入的值（重繪時不清空）
+    const prevEmail = (document.getElementById('sync-email') || {}).value || '';
+    const prevPw = (document.getElementById('sync-pw') || {}).value || '';
+    statusEl.innerHTML = '登入後行程會自動備份到雲端。<br>換手機或重裝 App，登入同一帳號即可還原。<br><span class="sync-hint">第一次輸入即自動建立帳號。</span>';
+    actEl.innerHTML =
+      '<input id="sync-email" class="sync-input" type="email" inputmode="email" ' +
+      'autocomplete="username" placeholder="電子郵件" value="' + prevEmail + '">' +
+      '<input id="sync-pw" class="sync-input" type="password" ' +
+      'autocomplete="current-password" placeholder="密碼（至少 6 碼）" value="' + prevPw + '">' +
+      '<button class="sync-google" ' + (busy ? 'disabled' : '') + ' onclick="submitSyncLogin()">' +
+      (busy ? '登入中…' : '登入 / 註冊') + '</button>';
   } else {
-    statusEl.innerHTML = `已登入　<b>${st.name || st.email || ''}</b><br><span class="sync-ok">✓ 行程自動同步中</span>`;
+    statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>';
     actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>';
   }
+}
+
+function submitSyncLogin() {
+  const email = (document.getElementById('sync-email') || {}).value || '';
+  const pw = (document.getElementById('sync-pw') || {}).value || '';
+  MaptripSync.signIn(email, pw);
 }
 
 // 雲端把新資料併進 localStorage 後呼叫：重繪今日 + 更新開啟中的清單
