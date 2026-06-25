@@ -49,17 +49,23 @@
     if (!email || !password) { toastMsg('請輸入電子郵件與密碼'); return; }
     if (password.length < 6) { toastMsg('密碼至少 6 碼'); return; }
     setBusy(true);
-    auth.signInWithEmailAndPassword(email, password)
-      .then(() => { setBusy(false); })
+    // 新版 Firebase 開啟「Email 列舉保護」後，查無帳號與密碼錯誤會回同一個
+    // auth/invalid-credential，無法靠登入錯誤碼判斷是不是新帳號。
+    // 改成「先嘗試註冊」：成功＝新帳號；已存在＝email-already-in-use→改登入。
+    auth.createUserWithEmailAndPassword(email, password)
+      .then(() => { setBusy(false); toastMsg('已建立帳號並登入'); })
       .catch(err => {
         const code = err && err.code;
-        if (code === 'auth/user-not-found') {
-          // 新帳號 → 自動註冊
-          auth.createUserWithEmailAndPassword(email, password)
-            .then(() => { setBusy(false); toastMsg('已建立帳號並登入'); })
-            .catch(e => { setBusy(false); toastMsg(authErrMsg(e && e.code)); });
-        } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-          setBusy(false); toastMsg('密碼錯誤');
+        if (code === 'auth/email-already-in-use') {
+          // 已有帳號 → 用密碼登入
+          auth.signInWithEmailAndPassword(email, password)
+            .then(() => { setBusy(false); })
+            .catch(e => {
+              setBusy(false);
+              const c = e && e.code;
+              if (c === 'auth/wrong-password' || c === 'auth/invalid-credential') toastMsg('密碼錯誤');
+              else toastMsg(authErrMsg(c));
+            });
         } else {
           setBusy(false); toastMsg(authErrMsg(code));
         }
