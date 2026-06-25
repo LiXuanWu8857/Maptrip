@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.129';
+const APP_VERSION  = '1.1.130';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1351,18 +1351,31 @@ async function captureTripsScreenshot(dayKey) {
       c.drawImage(img, rX + (tx * TS - viewX0) * sc, rY + (ty * TS - viewY0) * sc, TS * sc, TS * sc);
     });
 
-    // 繪製路線
+    // 繪製路線（先畫所有線，編號之後另一輪畫在最上層）
     const wp2c = (la, ln) => { const wp = _latlngToWorldPx(la, ln, z); return [rX + (wp.x - viewX0) * sc, rY + (wp.y - viewY0) * sc]; };
     const COLS = ['#4fc3f7','#81c784','#ffb74d','#f06292','#ce93d8','#80cbc4','#a5d6a7','#fff176'];
+    const starts = [];
     trips.forEach((t, i) => {
       const pts = (t.roadCoords || t.coords || []).map(p => [p.lat, p.lng]);
       if (pts.length < 2) return;
       const [sx, sy] = wp2c(pts[0][0], pts[0][1]);
+      starts.push([sx, sy, i + 1]);
       c.beginPath(); c.moveTo(sx, sy);
       pts.slice(1).forEach(p => { const [px, py] = wp2c(p[0], p[1]); c.lineTo(px, py); });
       c.strokeStyle = COLS[i % COLS.length]; c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke();
-      c.beginPath(); c.arc(sx, sy, 4, 0, Math.PI * 2); c.fillStyle = COLS[i % COLS.length]; c.fill();
     });
+    // 編號標記（白底深字圓，疊在所有路線之上）
+    starts.forEach(([sx, sy, num]) => {
+      const r = 9;
+      c.beginPath(); c.arc(sx, sy, r, 0, Math.PI * 2);
+      c.fillStyle = '#1a1a1a'; c.fill();
+      c.lineWidth = 1.5; c.strokeStyle = '#ffffff'; c.stroke();
+      c.fillStyle = '#ffffff';
+      c.font = `bold ${num > 9 ? 9 : 11}px system-ui, sans-serif`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(String(num), sx, sy + 0.5);
+    });
+    c.textBaseline = 'alphabetic';
     c.restore();
   } else {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
