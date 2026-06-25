@@ -853,6 +853,26 @@ html, body {
   font-family: inherit; -webkit-appearance: none; box-sizing: border-box;
 }
 .sync-input:focus { outline: none; border-color: #1a73e8; }
+
+/* ===== 登入閘門（未登入全螢幕擋住） ===== */
+#login-gate {
+  position: fixed; inset: 0; z-index: 1000;
+  background: #ffffff;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  padding-top: calc(24px + env(safe-area-inset-top, 0px));
+}
+.gate-inner { width: 100%; max-width: 340px; text-align: center; }
+.gate-logo { font-size: 3rem; margin-bottom: 8px; }
+.gate-title { font-size: 1.6rem; font-weight: 800; color: #202124; margin-bottom: 6px; }
+.gate-sub { font-size: 0.88rem; color: #5f6368; margin-bottom: 24px; line-height: 1.5; }
+.gate-hint { font-size: 0.78rem; color: #9aa0a6; margin-top: 12px; }
+
+@media (prefers-color-scheme: dark) {
+  #login-gate { background: #121212; }
+  .gate-title { color: #e8eaed; }
+  .gate-sub { color: #9aa0a6; }
+}
 .sync-google {
   width: 100%; padding: 13px; border-radius: 12px; border: none;
   background: #1a73e8; color: #fff; font-size: 0.95rem; font-weight: 700;

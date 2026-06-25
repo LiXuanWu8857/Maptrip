@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.123';</script>
+<script>window.INDEX_VERSION = '1.1.124';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -215,6 +215,21 @@ if (!sessionStorage.getItem('booted')) {
   </div>
   <div id="history-body"></div>
   <div id="version-label" onclick="onVersionTap()" style="text-align:center;padding:8px 0 14px;font-size:0.72rem;color:#9aa0a6;user-select:none;cursor:default;flex-shrink:0">v—</div>
+</div>
+
+<!-- Login Gate：未登入時全螢幕擋住，登入後自動消失 -->
+<div id="login-gate" style="display:none">
+  <div class="gate-inner">
+    <div class="gate-logo">🚗</div>
+    <div class="gate-title">Maptrip</div>
+    <div class="gate-sub">請先登入以同步並備份你的行程</div>
+    <input id="gate-email" class="sync-input" type="email" inputmode="email"
+           autocomplete="username" placeholder="電子郵件">
+    <input id="gate-pw" class="sync-input" type="password"
+           autocomplete="current-password" placeholder="密碼（至少 6 碼）">
+    <button id="gate-btn" class="sync-google" onclick="submitGateLogin()">登入 / 註冊</button>
+    <div class="gate-hint">第一次輸入即自動建立帳號</div>
+  </div>
 </div>
 
 <!-- Fare Dialog -->

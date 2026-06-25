@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.123';
+const APP_VERSION  = '1.1.124';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1416,11 +1416,36 @@ function closeSyncDialog() {
   document.getElementById('sync-dialog').style.display = 'none';
 }
 
+function applyLoginGate(state) {
+  const gate = document.getElementById('login-gate');
+  if (!gate) return;
+  // 只有「Firebase 已就緒且未登入」才強制擋；未設定/離線時不擋，避免 App 無法使用
+  if (state === 'signedout') {
+    gate.style.display = 'flex';
+    const btn = document.getElementById('gate-btn');
+    if (btn) {
+      const busy = window.MaptripSync && MaptripSync.isBusy && MaptripSync.isBusy();
+      btn.disabled = !!busy;
+      btn.textContent = busy ? '登入中…' : '登入 / 註冊';
+    }
+  } else {
+    gate.style.display = 'none';
+  }
+}
+
+function submitGateLogin() {
+  const email = (document.getElementById('gate-email') || {}).value || '';
+  const pw = (document.getElementById('gate-pw') || {}).value || '';
+  MaptripSync.signIn(email, pw);
+}
+
 function renderSyncPanel() {
+  if (!window.MaptripSync) return;
+  const st = MaptripSync.status();
+  applyLoginGate(st.state);
   const statusEl = document.getElementById('sync-status');
   const actEl = document.getElementById('sync-actions');
-  if (!statusEl || !window.MaptripSync) return;
-  const st = MaptripSync.status();
+  if (!statusEl) return;
   const busy = MaptripSync.isBusy && MaptripSync.isBusy();
   if (st.state === 'unconfigured') {
     statusEl.innerHTML = '雲端同步尚未設定完成，請稍後再試。';
