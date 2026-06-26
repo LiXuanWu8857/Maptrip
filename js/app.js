@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.137';
+const APP_VERSION  = '1.1.138';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1407,22 +1407,29 @@ async function captureTripsScreenshot(dayKey) {
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
   const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
+  const firstStart = trips[0].startTime;
+  const lastEnd = trips[trips.length - 1].endTime;
   const sY = rY + rH + 18;
   c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
 
+  // 時間範圍列：開始 → 結束 + 總行程時間
+  c.textAlign = 'center';
+  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
+  c.fillText(`${fmtTime(firstStart)}  →  ${fmtTime(lastEnd)}　${fmtDur(lastEnd - firstStart)}`, W / 2, sY + 12);
+
+  // 趟數 / 里程 / 收入（下移）
   const statCols = totalFare ? [W * 0.2, W * 0.5, W * 0.8] : [W * 0.3, W * 0.7];
   const vals = totalFare
     ? [`${trips.length} 趟`, fmtDist(totalDist), `NT$ ${totalFare.toLocaleString()}`]
     : [`${trips.length} 趟`, fmtDist(totalDist)];
   const lbls = totalFare ? ['行程', '里程', '收入'] : ['行程', '里程'];
-  c.textAlign = 'center';
   statCols.forEach((x, i) => {
-    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 18);
-    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 34);
+    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 34);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 50);
   });
   c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif'; c.textAlign = 'center';
-  c.fillText('Maptrip · 行程紀錄', W / 2, H - 14);
+  c.fillText('Maptrip · 行程紀錄', W / 2, H - 10);
 
   await new Promise(resolve => {
     canvas.toBlob(blob => {
@@ -1452,6 +1459,7 @@ async function captureSingleTripScreenshot(trip) {
   c.fillStyle = '#141414';
   _rrect(c, 0, 0, W, H, 24); c.fill();
 
+  // 左：標題 + 日期
   c.fillStyle = '#ffffff';
   c.font = 'bold 22px system-ui, sans-serif';
   c.textAlign = 'left';
@@ -1459,6 +1467,11 @@ async function captureSingleTripScreenshot(trip) {
   c.fillStyle = '#9aa0a6';
   c.font = '14px system-ui, sans-serif';
   c.fillText(dateLabel, 24, 70);
+  // 右上角：開始 → 結束時間
+  c.textAlign = 'right';
+  c.font = '13px system-ui, sans-serif';
+  c.fillText(fmtTime(trip.startTime), W - 20, 50);
+  c.fillText('→ ' + fmtTime(trip.endTime), W - 20, 68);
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
@@ -1511,41 +1524,33 @@ async function captureSingleTripScreenshot(trip) {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
-  // 統計：時間欄（開始→結束）+ 行程時間 + 里程 + 車資(選填)
+  // 統計：行程時間 + 里程 + 車資(選填)；時間已移到右上角
   const hasFare = !!trip.fare;
   const sY = rY + rH + 18;
   c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
 
-  const cols = hasFare ? [W*0.18, W*0.42, W*0.65, W*0.87] : [W*0.22, W*0.5, W*0.78];
+  const cols = hasFare ? [W*0.25, W*0.5, W*0.75] : [W*0.33, W*0.67];
   c.textAlign = 'center';
-
-  // 時間欄：兩行
-  c.fillStyle = '#ffffff'; c.font = 'bold 13px system-ui, sans-serif';
-  c.fillText(fmtTime(trip.startTime), cols[0], sY + 12);
-  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText('→ ' + fmtTime(trip.endTime), cols[0], sY + 26);
-  c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
-  c.fillText('時間', cols[0], sY + 40);
 
   // 行程時間
   c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
-  c.fillText(fmtDur(trip.endTime - trip.startTime), cols[1], sY + 20);
+  c.fillText(fmtDur(trip.endTime - trip.startTime), cols[0], sY + 20);
   c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
-  c.fillText('行程', cols[1], sY + 35);
+  c.fillText('行程', cols[0], sY + 35);
 
   // 里程
   c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
-  c.fillText(fmtDist(trip.totalDist), cols[2], sY + 20);
+  c.fillText(fmtDist(trip.totalDist), cols[1], sY + 20);
   c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
-  c.fillText('里程', cols[2], sY + 35);
+  c.fillText('里程', cols[1], sY + 35);
 
   // 車資（選填）
   if (hasFare) {
     c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
-    c.fillText('NT$ ' + trip.fare, cols[3], sY + 20);
+    c.fillText('NT$ ' + trip.fare, cols[2], sY + 20);
     c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
-    c.fillText('車資', cols[3], sY + 35);
+    c.fillText('車資', cols[2], sY + 35);
   }
 
   c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif'; c.textAlign = 'center';
