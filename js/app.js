@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.142';
+const APP_VERSION  = '1.1.143';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1311,7 +1311,7 @@ async function captureTripsScreenshot(dayKey) {
   }
   if (!trips.length) { toast('無行程可截圖'); return; }
 
-  const W = 390, H = 520;
+  const W = 390, H = 485;
   const canvas = document.createElement('canvas');
   canvas.width = W * 2; canvas.height = H * 2;
   const c = canvas.getContext('2d');
@@ -1433,8 +1433,8 @@ async function captureTripsScreenshot(dayKey) {
   const lbls = totalFare ? ['行程', '里程', '收入'] : ['行程', '里程'];
   c.textAlign = 'center';
   statCols.forEach((x, i) => {
-    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 18);
-    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 34);
+    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 23);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 39);
   });
   c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif'; c.textAlign = 'center';
   c.fillText('Maptrip · 行程紀錄', W / 2, H - 14);
