@@ -270,6 +270,9 @@ public class FloatingWindowPlugin extends Plugin {
         cashBtn.setText("現金");
         cashBtn.setTextColor(Color.WHITE);
         cashBtn.setAllCaps(false);
+        cashBtn.setGravity(Gravity.CENTER);
+        cashBtn.setPadding(0, 0, 0, 0);
+        cashBtn.setTextSize(16);
         GradientDrawable cashBg = new GradientDrawable();
         cashBg.setColor(Color.parseColor("#34A853"));
         cashBg.setCornerRadius(dp(10));
@@ -283,6 +286,9 @@ public class FloatingWindowPlugin extends Plugin {
         cardBtn.setText("刷卡");
         cardBtn.setTextColor(Color.WHITE);
         cardBtn.setAllCaps(false);
+        cardBtn.setGravity(Gravity.CENTER);
+        cardBtn.setPadding(0, 0, 0, 0);
+        cardBtn.setTextSize(16);
         GradientDrawable cardBg = new GradientDrawable();
         cardBg.setColor(Color.parseColor("#1A73E8"));
         cardBg.setCornerRadius(dp(10));
@@ -303,7 +309,7 @@ public class FloatingWindowPlugin extends Plugin {
         Button b = new Button(ctx);
         b.setText(key);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(18);
+        b.setTextSize("略過".equals(key) ? 12 : 18);
         b.setAllCaps(false);
         b.setGravity(Gravity.CENTER);
         b.setPadding(0, 0, 0, 0);
