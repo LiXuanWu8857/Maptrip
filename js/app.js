@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.143';
+const APP_VERSION  = '1.1.144';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1414,9 +1414,7 @@ async function captureTripsScreenshot(dayKey) {
   const spanLabel = spanH > 0 ? `${spanH}小時${spanM}分` : `${spanM}分`;
   c.textAlign = 'right';
   c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd), W - 20, 50);
-  c.font = '11px system-ui, sans-serif';
-  c.fillText(spanLabel, W - 20, 67);
+  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd) + ' ｜ ' + spanLabel, W - 20, 58);
 
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
