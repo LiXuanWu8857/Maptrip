@@ -547,12 +547,21 @@ html, body {
 .pay-card { background: rgba(26,115,232,0.12); color: #1a73e8; }
 
 .day-summary {
-  display: flex; gap: 12px; align-items: center;
+  display: flex; flex-direction: column; gap: 5px;
   padding: 10px 18px; background: #f8f9fa;
   font-size: 0.82rem; color: #5f6368; font-weight: 500;
   border-bottom: 1px solid rgba(0,0,0,0.06);
 }
-.day-fare { color: #1a73e8; font-weight: 700; margin-left: auto; }
+.ds-top { display: flex; gap: 12px; align-items: center; }
+.ds-top .screenshot-btn { margin-left: auto; }
+.ds-bot { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
+.fl-card  { color: #1a73e8; font-weight: 700; }
+.fl-cash  { color: #34a853; font-weight: 700; }
+.fl-total { color: #202124; font-weight: 700; margin-left: auto; }
+.day-info-bot .fl-card, .day-info-bot .fl-cash, .day-info-bot .fl-total {
+  margin-right: 10px; font-weight: 600;
+}
+.day-info-bot .fl-total { margin-right: 0; }
 .trip-dur { color: #5f6368; font-size: 0.82rem; }
 .trip-fare-tag { color: #1a73e8; font-weight: 600; }
 .fare-edit-btn {
@@ -727,6 +736,9 @@ html, body {
   .trip-row:active { background: rgba(255,255,255,0.04); }
   .trip-time { color: #e8eaed; }
   .day-summary { background: #222; border-bottom-color: rgba(255,255,255,0.05); color: #9aa0a6; }
+  .fl-card { color: #6ab4ff; }
+  .fl-cash { color: #6fcf80; }
+  .fl-total { color: #e8eaed; }
   .history-day { color: #6ab4ff; }
   .history-day:active { background: rgba(106,180,255,0.08); }
   .day-info-bot { color: #9aa0a6; }

@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.133';
+const APP_VERSION  = '1.1.134';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -878,13 +878,15 @@ function renderTripSheet() {
   if (!todayTrips.length) {
     body.innerHTML = '<div class="empty-state">今日尚無行程紀錄<br>按「開始行程」開始追蹤</div>'; return;
   }
-  const totalFare = todayTrips.reduce((s, t) => s + (t.fare || 0), 0);
   const totalDist = todayTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
+  const fareLine = _fareLineHtml(todayTrips);
   const summary = `<div class="day-summary">
-    <span>${todayTrips.length} 趟</span>
-    <span>${fmtDist(totalDist)}</span>
-    ${totalFare ? `<span class="day-fare">NT$ ${totalFare.toLocaleString()}</span>` : ''}
-    <button class="screenshot-btn" onclick="captureTripsScreenshot(null)">截圖</button>
+    <div class="ds-top">
+      <span>${todayTrips.length} 趟</span>
+      <span>${fmtDist(totalDist)}</span>
+      <button class="screenshot-btn" onclick="captureTripsScreenshot(null)">截圖</button>
+    </div>
+    ${fareLine ? `<div class="ds-bot">${fareLine}</div>` : ''}
   </div>`;
   body.innerHTML = summary + todayTrips.map((t, i) => `
     <div class="trip-row" onclick="showSoloTripFromToday(${i}); closeSheet()">
@@ -1180,8 +1182,7 @@ function renderHistorySheet() {
   body.innerHTML = days.map((day, dayIdx) => {
     const trips = raw[day];
     const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
-    const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
-    const fareStr = totalFare ? `　NT$ ${totalFare.toLocaleString()}` : '';
+    const fareLine = _fareLineHtml(trips);
     const isOpen = dayIdx === 0;
     const rows = trips.map((t, i) => `
       <div class="trip-row" onclick="showHistoryTrip('${day}',${i})">
@@ -1194,7 +1195,7 @@ function renderHistorySheet() {
       </div>`).join('');
     return `<div class="history-day" onclick="toggleDay('${day}')">
         <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
-        <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟</span><span class="day-info-bot">${fmtDist(totalDist)}${fareStr}</span></span>
+        <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : ''}</span>
         <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
         <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
       </div>
@@ -1891,6 +1892,24 @@ function _payTag(pm) {
   if (pm === 'cash') return '<span class="pay-tag pay-cash">現金</span>';
   if (pm === 'card') return '<span class="pay-tag pay-card">刷卡</span>';
   return '';
+}
+// 統計一組行程的刷卡 / 現金 / 總計金額
+function _fareStats(trips) {
+  let card = 0, cash = 0, total = 0;
+  trips.forEach(t => {
+    const f = t.fare || 0; total += f;
+    if (t.paymentMethod === 'card') card += f;
+    else if (t.paymentMethod === 'cash') cash += f;
+  });
+  return { card, cash, total };
+}
+// 產生「刷卡：X　現金：Y　總計：Z」一行；無金額回傳空字串
+function _fareLineHtml(trips) {
+  const { card, cash, total } = _fareStats(trips);
+  if (!total) return '';
+  return `<span class="fl-card">刷卡：${card.toLocaleString()}</span>` +
+         `<span class="fl-cash">現金：${cash.toLocaleString()}</span>` +
+         `<span class="fl-total">總計：${total.toLocaleString()}</span>`;
 }
 function fmtDur(ms) {
   const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
