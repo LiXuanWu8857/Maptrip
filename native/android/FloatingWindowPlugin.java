@@ -255,6 +255,9 @@ public class FloatingWindowPlugin extends Plugin {
         for (String[] row : rows) {
             LinearLayout r = new LinearLayout(ctx);
             r.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            r.setLayoutParams(rowLp);
             for (String key : row) r.addView(keyButton(ctx, key));
             pad.addView(r);
         }
