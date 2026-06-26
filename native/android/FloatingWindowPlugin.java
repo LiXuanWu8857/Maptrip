@@ -295,7 +295,7 @@ public class FloatingWindowPlugin extends Plugin {
         TextView b = new TextView(ctx);
         b.setText(key);
         b.setTextColor(Color.WHITE);
-        b.setTextSize("略過".equals(key) ? 13 : 18);
+        b.setTextSize(16);
         b.setGravity(Gravity.CENTER);
         b.setPadding(0, 0, 0, 0);
         GradientDrawable kb = new GradientDrawable();
