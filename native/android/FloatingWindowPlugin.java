@@ -266,35 +266,13 @@ public class FloatingWindowPlugin extends Plugin {
         payRowLp.topMargin = dp(6);
         payRow.setLayoutParams(payRowLp);
 
-        Button cashBtn = new Button(ctx);
-        cashBtn.setText("現金");
-        cashBtn.setTextColor(Color.WHITE);
-        cashBtn.setAllCaps(false);
-        cashBtn.setGravity(Gravity.CENTER);
-        cashBtn.setPadding(0, 0, 0, 0);
-        cashBtn.setMinWidth(0); cashBtn.setMinimumWidth(0);
-        cashBtn.setTextSize(16);
-        GradientDrawable cashBg = new GradientDrawable();
-        cashBg.setColor(Color.parseColor("#34A853"));
-        cashBg.setCornerRadius(dp(10));
-        cashBtn.setBackground(cashBg);
+        TextView cashBtn = payButton(ctx, "現金", "#34A853");
         LinearLayout.LayoutParams cashLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         cashLp.rightMargin = dp(4);
         cashBtn.setLayoutParams(cashLp);
         cashBtn.setOnClickListener(v -> confirmFare("cash"));
 
-        Button cardBtn = new Button(ctx);
-        cardBtn.setText("刷卡");
-        cardBtn.setTextColor(Color.WHITE);
-        cardBtn.setAllCaps(false);
-        cardBtn.setGravity(Gravity.CENTER);
-        cardBtn.setPadding(0, 0, 0, 0);
-        cardBtn.setMinWidth(0); cardBtn.setMinimumWidth(0);
-        cardBtn.setTextSize(16);
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setColor(Color.parseColor("#1A73E8"));
-        cardBg.setCornerRadius(dp(10));
-        cardBtn.setBackground(cardBg);
+        TextView cardBtn = payButton(ctx, "刷卡", "#1A73E8");
         LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         cardLp.leftMargin = dp(4);
         cardBtn.setLayoutParams(cardLp);
@@ -307,16 +285,15 @@ public class FloatingWindowPlugin extends Plugin {
         return pad;
     }
 
-    private Button keyButton(Context ctx, String key) {
-        Button b = new Button(ctx);
+    // 用 TextView 取代 Button：沒有預設的 minWidth / 內距 / 陰影，
+    // 等寬權重的格子才能像素級對齊（Button 預設樣式會把按鍵撐歪）。
+    private TextView keyButton(Context ctx, String key) {
+        TextView b = new TextView(ctx);
         b.setText(key);
         b.setTextColor(Color.WHITE);
-        b.setTextSize("略過".equals(key) ? 12 : 18);
-        b.setAllCaps(false);
+        b.setTextSize("略過".equals(key) ? 13 : 18);
         b.setGravity(Gravity.CENTER);
         b.setPadding(0, 0, 0, 0);
-        b.setMinWidth(0); b.setMinimumWidth(0);
-        b.setMinHeight(0); b.setMinimumHeight(0);
         GradientDrawable kb = new GradientDrawable();
         kb.setColor(Color.parseColor("#3C4043"));
         kb.setCornerRadius(dp(8));
@@ -324,7 +301,24 @@ public class FloatingWindowPlugin extends Plugin {
         LinearLayout.LayoutParams lpb = new LinearLayout.LayoutParams(0, dp(48), 1f);
         lpb.setMargins(dp(3), dp(3), dp(3), dp(3));
         b.setLayoutParams(lpb);
+        b.setClickable(true);
         b.setOnClickListener(v -> onKey(key));
+        return b;
+    }
+
+    // 現金 / 刷卡 大鈕（同樣用 TextView 避免 Button 預設樣式）
+    private TextView payButton(Context ctx, String label, String hex) {
+        TextView b = new TextView(ctx);
+        b.setText(label);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(16);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(0, 0, 0, 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor(hex));
+        bg.setCornerRadius(dp(10));
+        b.setBackground(bg);
+        b.setClickable(true);
         return b;
     }
 
