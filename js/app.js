@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.140';
+const APP_VERSION  = '1.1.141';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1408,10 +1408,15 @@ async function captureTripsScreenshot(dayKey) {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
-  // 右上角：第一筆開始 → 最後一筆結束（單行）
+  // 右上角：第一筆開始 → 最後一筆結束 + 總時長
+  const spanMs = lastEnd - firstStart;
+  const spanH = Math.floor(spanMs / 3600000), spanM = Math.floor((spanMs % 3600000) / 60000);
+  const spanLabel = spanH > 0 ? `${spanH}小時${spanM}分` : `${spanM}分`;
   c.textAlign = 'right';
   c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd), W - 20, 58);
+  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd), W - 20, 50);
+  c.font = '11px system-ui, sans-serif';
+  c.fillText(spanLabel, W - 20, 67);
 
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
@@ -1528,7 +1533,7 @@ async function captureSingleTripScreenshot(trip) {
 
   // 統計：行程時間 + 里程 + 車資(選填)；時間已移到右上角
   const hasFare = !!trip.fare;
-  const sY = rY + rH + 18;
+  const sY = rY + rH + 8;
   c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
 
