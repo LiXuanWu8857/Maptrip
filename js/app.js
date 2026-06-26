@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.138';
+const APP_VERSION  = '1.1.139';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1467,11 +1467,10 @@ async function captureSingleTripScreenshot(trip) {
   c.fillStyle = '#9aa0a6';
   c.font = '14px system-ui, sans-serif';
   c.fillText(dateLabel, 24, 70);
-  // 右上角：開始 → 結束時間
+  // 右上角：開始 → 結束時間（單行）
   c.textAlign = 'right';
-  c.font = '13px system-ui, sans-serif';
-  c.fillText(fmtTime(trip.startTime), W - 20, 50);
-  c.fillText('→ ' + fmtTime(trip.endTime), W - 20, 68);
+  c.font = '12px system-ui, sans-serif';
+  c.fillText(fmtTime(trip.startTime) + '  →  ' + fmtTime(trip.endTime), W - 20, 58);
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
