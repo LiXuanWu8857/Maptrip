@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.132';
+const APP_VERSION  = '1.1.133';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -170,9 +170,9 @@ function initMap() {
         if (action === 'end' && activeTrip) endTrip(true);
       });
       // 浮窗數字鍵盤輸入的車資 → 存到剛結束的那趟
-      fw.addListener?.('floatFare', ({ value }) => {
+      fw.addListener?.('floatFare', ({ value, paymentMethod }) => {
         dbg('floatFare ' + value);
-        saveFloatFare(value || 0);
+        saveFloatFare(value || 0, paymentMethod || '');
       });
       // 常駐顯示：有授權就先顯示閒置卡片（沒授權靜默略過）
       ensureFloatPermission().then(() => { if (!activeTrip) fw.showIdle().catch(() => {}); });
@@ -569,11 +569,12 @@ function endTrip(fromFloat) {
 }
 
 // 浮窗數字鍵盤按「確定/略過」後：把車資存到剛結束的那趟，並貼合路線存檔
-async function saveFloatFare(fare) {
+async function saveFloatFare(fare, paymentMethod) {
   const trip = pendingFareTrip;
   pendingFareTrip = null;
   if (!trip) return;
   trip.fare = fare;
+  trip.paymentMethod = paymentMethod || '';
   trip.roadCoords = await snapToRoads(trip.coords);
   saveTripFinal(trip);
 }

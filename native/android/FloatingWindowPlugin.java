@@ -259,20 +259,42 @@ public class FloatingWindowPlugin extends Plugin {
             pad.addView(r);
         }
 
-        Button ok = new Button(ctx);
-        ok.setText("確定");
-        ok.setTextColor(Color.WHITE);
-        ok.setAllCaps(false);
-        GradientDrawable okBg = new GradientDrawable();
-        okBg.setColor(Color.parseColor("#1A73E8"));
-        okBg.setCornerRadius(dp(10));
-        ok.setBackground(okBg);
-        LinearLayout.LayoutParams okLp = new LinearLayout.LayoutParams(
+        LinearLayout payRow = new LinearLayout(ctx);
+        payRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams payRowLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
-        okLp.topMargin = dp(6);
-        ok.setLayoutParams(okLp);
-        ok.setOnClickListener(v -> confirmFare());
-        pad.addView(ok);
+        payRowLp.topMargin = dp(6);
+        payRow.setLayoutParams(payRowLp);
+
+        Button cashBtn = new Button(ctx);
+        cashBtn.setText("現金");
+        cashBtn.setTextColor(Color.WHITE);
+        cashBtn.setAllCaps(false);
+        GradientDrawable cashBg = new GradientDrawable();
+        cashBg.setColor(Color.parseColor("#34A853"));
+        cashBg.setCornerRadius(dp(10));
+        cashBtn.setBackground(cashBg);
+        LinearLayout.LayoutParams cashLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        cashLp.rightMargin = dp(4);
+        cashBtn.setLayoutParams(cashLp);
+        cashBtn.setOnClickListener(v -> confirmFare("cash"));
+
+        Button cardBtn = new Button(ctx);
+        cardBtn.setText("刷卡");
+        cardBtn.setTextColor(Color.WHITE);
+        cardBtn.setAllCaps(false);
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(Color.parseColor("#1A73E8"));
+        cardBg.setCornerRadius(dp(10));
+        cardBtn.setBackground(cardBg);
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        cardLp.leftMargin = dp(4);
+        cardBtn.setLayoutParams(cardLp);
+        cardBtn.setOnClickListener(v -> confirmFare("card"));
+
+        payRow.addView(cashBtn);
+        payRow.addView(cardBtn);
+        pad.addView(payRow);
 
         return pad;
     }
@@ -300,7 +322,7 @@ public class FloatingWindowPlugin extends Plugin {
         switch (key) {
             case "略過":
                 fareStr = "";
-                confirmFare();
+                confirmFare("");
                 return;
             case "⌫":
                 if (fareStr.length() > 0) fareStr = fareStr.substring(0, fareStr.length() - 1);
@@ -312,10 +334,11 @@ public class FloatingWindowPlugin extends Plugin {
         updateFareDisplay();
     }
 
-    private void confirmFare() {
+    private void confirmFare(String paymentMethod) {
         int value = fareStr.isEmpty() ? 0 : Integer.parseInt(fareStr);
         JSObject o = new JSObject();
         o.put("value", value);
+        o.put("paymentMethod", paymentMethod);
         notifyListeners("floatFare", o);
         setIdle();
     }
