@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.139';
+const APP_VERSION  = '1.1.140';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1330,6 +1330,10 @@ async function captureTripsScreenshot(dayKey) {
   c.font = '14px system-ui, sans-serif';
   c.fillText(dateLabel, 24, 70);
 
+  // 路線區（先算時間範圍，待地圖畫完後再繪右上角，避免被蓋掉）
+  const firstStart = trips[0].startTime;
+  const lastEnd = trips[trips.length - 1].endTime;
+
   // 路線區
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const allPts = trips.flatMap(t => (t.roadCoords || t.coords || []).map(p => [p.lat, p.lng]));
@@ -1404,32 +1408,31 @@ async function captureTripsScreenshot(dayKey) {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
+  // 右上角：第一筆開始 → 最後一筆結束（單行）
+  c.textAlign = 'right';
+  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
+  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd), W - 20, 58);
+
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
   const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
-  const firstStart = trips[0].startTime;
-  const lastEnd = trips[trips.length - 1].endTime;
   const sY = rY + rH + 18;
   c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
 
-  // 時間範圍列：開始 → 結束 + 總行程時間
-  c.textAlign = 'center';
-  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText(`${fmtTime(firstStart)}  →  ${fmtTime(lastEnd)}　${fmtDur(lastEnd - firstStart)}`, W / 2, sY + 12);
-
-  // 趟數 / 里程 / 收入（下移）
+  // 趟數 / 里程 / 收入
   const statCols = totalFare ? [W * 0.2, W * 0.5, W * 0.8] : [W * 0.3, W * 0.7];
   const vals = totalFare
     ? [`${trips.length} 趟`, fmtDist(totalDist), `NT$ ${totalFare.toLocaleString()}`]
     : [`${trips.length} 趟`, fmtDist(totalDist)];
   const lbls = totalFare ? ['行程', '里程', '收入'] : ['行程', '里程'];
+  c.textAlign = 'center';
   statCols.forEach((x, i) => {
-    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 34);
-    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 50);
+    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 18);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 34);
   });
   c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif'; c.textAlign = 'center';
-  c.fillText('Maptrip · 行程紀錄', W / 2, H - 10);
+  c.fillText('Maptrip · 行程紀錄', W / 2, H - 14);
 
   await new Promise(resolve => {
     canvas.toBlob(blob => {
