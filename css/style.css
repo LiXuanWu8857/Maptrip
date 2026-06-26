@@ -394,6 +394,8 @@ html, body {
 .trip-stats { font-size: 0.75rem; color: #1a73e8; margin-top: 2px; }
 .trip-del   { color: #ea4335; opacity: 0.5; padding: 4px 6px; font-size: 0.9rem; }
 .trip-del:active { opacity: 1; }
+.trip-shot  { color: #9aa0a6; opacity: 0.6; padding: 4px 4px; font-size: 0.9rem; }
+.trip-shot:active { opacity: 1; }
 
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 

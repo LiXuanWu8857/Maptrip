@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.136';
+const APP_VERSION  = '1.1.137';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -908,6 +908,7 @@ function renderTripSheet() {
           <button class="fare-edit-btn" onclick="editFare(event,${i})">${t.fare ? '✏' : '＋金額'}</button>
         </div>
       </div>
+      <span class="trip-shot" onclick="captureTodayTripShot(event,${i})">📷</span>
       <span class="trip-del" onclick="deleteTodayTrip(event,${i})">🗑</span>
     </div>`).join('');
 }
@@ -1200,6 +1201,7 @@ function renderHistorySheet() {
           <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
           <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : ''}</div>
         </div>
+        <span class="trip-shot" onclick="captureHistoryTripShot(event,'${day}',${i})">📷</span>
         <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
       </div>`).join('');
     return `<div class="history-day" onclick="toggleDay('${day}')">
@@ -1431,6 +1433,145 @@ async function captureTripsScreenshot(dayKey) {
       resolve();
     }, 'image/png');
   });
+}
+
+// 單趟截圖
+async function captureSingleTripScreenshot(trip) {
+  if (!trip) return;
+  const d = new Date(trip.startTime);
+  const weekDays = ['週日','週一','週二','週三','週四','週五','週六'];
+  const dateLabel = `${d.getMonth()+1}月${d.getDate()}日${weekDays[d.getDay()]}`;
+  const fileLabel = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+
+  const W = 390, H = 520;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * 2; canvas.height = H * 2;
+  const c = canvas.getContext('2d');
+  c.scale(2, 2);
+
+  c.fillStyle = '#141414';
+  _rrect(c, 0, 0, W, H, 24); c.fill();
+
+  c.fillStyle = '#ffffff';
+  c.font = 'bold 22px system-ui, sans-serif';
+  c.textAlign = 'left';
+  c.fillText('Maptrip', 24, 48);
+  c.fillStyle = '#9aa0a6';
+  c.font = '14px system-ui, sans-serif';
+  c.fillText(dateLabel, 24, 70);
+
+  const rX = 16, rY = 88, rW = W - 32, rH = 310;
+  const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
+
+  if (pts.length > 1) {
+    let z = 12, sc, viewX0, viewY0;
+    for (let zz = 16; zz >= 9; zz--) {
+      const wps = pts.map(([la, ln]) => _latlngToWorldPx(la, ln, zz));
+      const wxs = wps.map(p => p.x), wys = wps.map(p => p.y);
+      const sX = (Math.max(...wxs) - Math.min(...wxs)) || 1;
+      const sY2 = (Math.max(...wys) - Math.min(...wys)) || 1;
+      const _sc = Math.min(rW / sX, rH / sY2) * 0.7;
+      if ((Math.ceil(rW / _sc / 256) + 1) * (Math.ceil(rH / _sc / 256) + 1) <= 16) {
+        z = zz; sc = _sc;
+        const wcX = (Math.min(...wxs) + Math.max(...wxs)) / 2;
+        const wcY = (Math.min(...wys) + Math.max(...wys)) / 2;
+        viewX0 = wcX - rW / (2 * sc);
+        viewY0 = wcY - rH / (2 * sc);
+        break;
+      }
+    }
+    const TS = 256, maxT = Math.pow(2, z) - 1;
+    const tx0 = Math.floor(viewX0 / TS), ty0 = Math.floor(viewY0 / TS);
+    const tx1 = Math.ceil((viewX0 + rW / sc) / TS), ty1 = Math.ceil((viewY0 + rH / sc) / TS);
+    const subs = ['a','b','c','d'], jobs = [];
+    for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) {
+      if (tx < 0 || ty < 0 || tx > maxT || ty > maxT) continue;
+      jobs.push(_loadTile(`https://${subs[(tx+ty)%4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}.png`).then(img => ({ img, tx, ty })));
+    }
+    const tiles = await Promise.all(jobs);
+
+    c.save();
+    c.beginPath(); _rrect(c, rX, rY, rW, rH, 14); c.clip();
+    c.fillStyle = '#1a2035'; c.fillRect(rX, rY, rW, rH);
+    tiles.forEach(({ img, tx, ty }) => {
+      if (!img) return;
+      c.drawImage(img, rX + (tx * TS - viewX0) * sc, rY + (ty * TS - viewY0) * sc, TS * sc, TS * sc);
+    });
+
+    const wp2c = (la, ln) => { const wp = _latlngToWorldPx(la, ln, z); return [rX + (wp.x - viewX0) * sc, rY + (wp.y - viewY0) * sc]; };
+    c.beginPath();
+    const [sx0, sy0] = wp2c(pts[0][0], pts[0][1]);
+    c.moveTo(sx0, sy0);
+    pts.slice(1).forEach(p => { const [px, py] = wp2c(p[0], p[1]); c.lineTo(px, py); });
+    c.strokeStyle = '#4fc3f7'; c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke();
+    c.beginPath(); c.arc(sx0, sy0, 5, 0, Math.PI * 2);
+    c.fillStyle = '#4fc3f7'; c.fill();
+    c.restore();
+  } else {
+    c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
+  }
+
+  // 統計：時間欄（開始→結束）+ 行程時間 + 里程 + 車資(選填)
+  const hasFare = !!trip.fare;
+  const sY = rY + rH + 18;
+  c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
+
+  const cols = hasFare ? [W*0.18, W*0.42, W*0.65, W*0.87] : [W*0.22, W*0.5, W*0.78];
+  c.textAlign = 'center';
+
+  // 時間欄：兩行
+  c.fillStyle = '#ffffff'; c.font = 'bold 13px system-ui, sans-serif';
+  c.fillText(fmtTime(trip.startTime), cols[0], sY + 12);
+  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
+  c.fillText('→ ' + fmtTime(trip.endTime), cols[0], sY + 26);
+  c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
+  c.fillText('時間', cols[0], sY + 40);
+
+  // 行程時間
+  c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
+  c.fillText(fmtDur(trip.endTime - trip.startTime), cols[1], sY + 20);
+  c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
+  c.fillText('行程', cols[1], sY + 35);
+
+  // 里程
+  c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
+  c.fillText(fmtDist(trip.totalDist), cols[2], sY + 20);
+  c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
+  c.fillText('里程', cols[2], sY + 35);
+
+  // 車資（選填）
+  if (hasFare) {
+    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif';
+    c.fillText('NT$ ' + trip.fare, cols[3], sY + 20);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
+    c.fillText('車資', cols[3], sY + 35);
+  }
+
+  c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif'; c.textAlign = 'center';
+  c.fillText('Maptrip · 行程紀錄', W / 2, H - 14);
+
+  await new Promise(resolve => {
+    canvas.toBlob(blob => {
+      _screenshotBlob = blob; _screenshotLabel = fileLabel;
+      const url = URL.createObjectURL(blob);
+      document.getElementById('screenshot-img').src = url;
+      document.getElementById('screenshot-preview').style.display = 'flex';
+      resolve();
+    }, 'image/png');
+  });
+}
+
+function captureTodayTripShot(e, i) {
+  e.stopPropagation();
+  captureSingleTripScreenshot(todayTrips[i]);
+}
+
+function captureHistoryTripShot(e, dayKey, i) {
+  e.stopPropagation();
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const trip = (raw[dayKey] || [])[i];
+  if (trip) captureSingleTripScreenshot(trip);
 }
 
 let _screenshotBlob = null, _screenshotLabel = '';
