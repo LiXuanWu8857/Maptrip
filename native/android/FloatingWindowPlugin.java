@@ -272,6 +272,7 @@ public class FloatingWindowPlugin extends Plugin {
         cashBtn.setAllCaps(false);
         cashBtn.setGravity(Gravity.CENTER);
         cashBtn.setPadding(0, 0, 0, 0);
+        cashBtn.setMinWidth(0); cashBtn.setMinimumWidth(0);
         cashBtn.setTextSize(16);
         GradientDrawable cashBg = new GradientDrawable();
         cashBg.setColor(Color.parseColor("#34A853"));
@@ -288,6 +289,7 @@ public class FloatingWindowPlugin extends Plugin {
         cardBtn.setAllCaps(false);
         cardBtn.setGravity(Gravity.CENTER);
         cardBtn.setPadding(0, 0, 0, 0);
+        cardBtn.setMinWidth(0); cardBtn.setMinimumWidth(0);
         cardBtn.setTextSize(16);
         GradientDrawable cardBg = new GradientDrawable();
         cardBg.setColor(Color.parseColor("#1A73E8"));
@@ -313,6 +315,8 @@ public class FloatingWindowPlugin extends Plugin {
         b.setAllCaps(false);
         b.setGravity(Gravity.CENTER);
         b.setPadding(0, 0, 0, 0);
+        b.setMinWidth(0); b.setMinimumWidth(0);
+        b.setMinHeight(0); b.setMinimumHeight(0);
         GradientDrawable kb = new GradientDrawable();
         kb.setColor(Color.parseColor("#3C4043"));
         kb.setCornerRadius(dp(8));
