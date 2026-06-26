@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.131';
+const APP_VERSION  = '1.1.132';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -596,23 +596,28 @@ function showFareDialog(trip) {
   document.getElementById('fare-dialog').classList.add('show');
   setTimeout(() => document.getElementById('fare-input').focus(), 300);
 
-  const save = async (fare) => {
+  const cashBtn = document.getElementById('fare-cash');
+  const cardBtn = document.getElementById('fare-card');
+  const skipBtn = document.getElementById('fare-skip');
+
+  const save = async (fare, paymentMethod) => {
     trip.fare = fare;
-    const saveBtn = document.getElementById('fare-save');
-    const skipBtn = document.getElementById('fare-skip');
-    saveBtn.textContent = '路線貼合中…'; saveBtn.disabled = true; skipBtn.disabled = true;
+    trip.paymentMethod = paymentMethod;
+    cashBtn.textContent = '路線貼合中…'; cashBtn.disabled = true;
+    cardBtn.disabled = true; skipBtn.disabled = true;
 
     trip.roadCoords = await snapToRoads(trip.coords);
 
     document.getElementById('fare-overlay').style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
-    saveBtn.textContent = '儲存行程'; saveBtn.disabled = false; skipBtn.disabled = false;
+    cashBtn.textContent = '現金'; cashBtn.disabled = false;
+    cardBtn.disabled = false; skipBtn.disabled = false;
     saveTripFinal(trip);
   };
 
-  document.getElementById('fare-save').onclick = () =>
-    save(parseInt(document.getElementById('fare-input').value) || 0);
-  document.getElementById('fare-skip').onclick = () => save(0);
+  cashBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'cash');
+  cardBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'card');
+  skipBtn.onclick = () => save(0, '');
 }
 
 function saveTripFinal(trip) {
@@ -887,7 +892,7 @@ function renderTripSheet() {
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
         <div class="trip-stats">
           ${fmtDist(t.totalDist)}
-          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}
+          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : ''}
           <button class="fare-edit-btn" onclick="editFare(event,${i})">${t.fare ? '✏' : '＋金額'}</button>
         </div>
       </div>
@@ -906,10 +911,11 @@ function editFare(e, idx) {
   document.getElementById('fare-header').textContent = `第 ${idx + 1} 趟 — 編輯金額`;
 
   const input   = document.getElementById('fare-input');
-  const saveBtn = document.getElementById('fare-save');
+  const cashBtn = document.getElementById('fare-cash');
+  const cardBtn = document.getElementById('fare-card');
   const skipBtn = document.getElementById('fare-skip');
   input.value = trip.fare || '';
-  saveBtn.textContent = '儲存'; saveBtn.disabled = false;
+  cashBtn.disabled = false; cardBtn.disabled = false;
   skipBtn.textContent = '取消'; skipBtn.disabled = false;
 
   document.getElementById('fare-overlay').style.display = 'block';
@@ -920,16 +926,19 @@ function editFare(e, idx) {
     document.getElementById('fare-overlay').style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
     document.getElementById('fare-header').textContent = '行程完成';
-    saveBtn.textContent = '儲存行程';
     skipBtn.textContent = '略過';
   };
 
-  saveBtn.onclick = () => {
+  const saveEdit = (paymentMethod) => {
     trip.fare = parseInt(input.value) || 0;
+    trip.paymentMethod = paymentMethod;
     close();
     saveTodayToStorage();
     renderTripSheet();
   };
+
+  cashBtn.onclick = () => saveEdit('cash');
+  cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
 }
 
@@ -1178,7 +1187,7 @@ function renderHistorySheet() {
         <div class="trip-num">${i + 1}</div>
         <div class="trip-meta">
           <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-          <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>` : ''}</div>
+          <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : ''}</div>
         </div>
         <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
       </div>`).join('');
@@ -1819,8 +1828,8 @@ function businessDayKey(ts = Date.now()) {
 
 function todayKey() { return businessDayKey(); }
 
-function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords }) {
-  return { id, startTime, endTime, coords, totalDist, fare: fare || 0, ...(roadCoords ? { roadCoords } : {}) };
+function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod }) {
+  return { id, startTime, endTime, coords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(roadCoords ? { roadCoords } : {}) };
 }
 
 function saveTodayToStorage() {
@@ -1877,6 +1886,11 @@ function haversine(a, b) {
 }
 
 function fmtDist(m) { return !m ? '0 m' : m >= 1000 ? `${(m/1000).toFixed(1)} km` : `${Math.round(m)} m`; }
+function _payTag(pm) {
+  if (pm === 'cash') return '<span class="pay-tag pay-cash">現金</span>';
+  if (pm === 'card') return '<span class="pay-tag pay-card">刷卡</span>';
+  return '';
+}
 function fmtDur(ms) {
   const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
   if (h > 0) return `${h}h ${m%60}m`;

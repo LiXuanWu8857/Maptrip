@@ -534,12 +534,17 @@ html, body {
   border-radius: 12px; padding: 13px; font-size: 0.9rem;
   font-family: inherit; cursor: pointer; font-weight: 500;
 }
-#fare-save {
-  flex: 2; background: #1a73e8; border: none; color: #fff;
-  border-radius: 12px; padding: 13px; font-size: 0.95rem;
-  font-family: inherit; cursor: pointer; font-weight: 600;
+#fare-cash, #fare-card {
+  flex: 2; border: none; border-radius: 12px; padding: 13px;
+  font-size: 0.95rem; font-family: inherit; cursor: pointer; font-weight: 600; color: #fff;
 }
-#fare-save:active { opacity: 0.85; }
+#fare-cash  { background: #34a853; }
+#fare-card  { background: #1a73e8; }
+#fare-cash:active, #fare-card:active { opacity: 0.85; }
+.pay-tag { display: inline-block; font-size: 0.68rem; font-weight: 600;
+  padding: 1px 5px; border-radius: 5px; margin-left: 4px; vertical-align: middle; }
+.pay-cash { background: rgba(52,168,83,0.12); color: #34a853; }
+.pay-card { background: rgba(26,115,232,0.12); color: #1a73e8; }
 
 .day-summary {
   display: flex; gap: 12px; align-items: center;
@@ -739,6 +744,8 @@ html, body {
   #fare-currency { color: #9aa0a6; }
   #fare-input { color: #e8eaed; }
   #fare-skip { background: #252525; color: #9aa0a6; }
+  .pay-cash { background: rgba(52,168,83,0.18); }
+  .pay-card { background: rgba(26,115,232,0.18); }
 
   #replay-panel { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); }
   #replay-header { color: #e8eaed; }
