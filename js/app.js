@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.134';
+const APP_VERSION  = '1.1.135';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -153,6 +153,8 @@ function initMap() {
         dbg('appStateChange isActive=' + isActive);
         if (isActive) {
           fixLayout();
+          // 記錄中回到前景：自動回主頁（地圖），收起所有覆蓋層
+          if (activeTrip) goHome();
           consumePendingWidgetCmd().then(didAct => {
             if (!didAct && !activeTrip) la.initActivity();
           });
@@ -525,8 +527,10 @@ async function requestWakeLock() {
 
 // 回到前景時自動重新鎖定螢幕常亮（系統會在熄屏/切 App 時釋放鎖）
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && activeTrip && wakeLock === null) {
-    requestWakeLock();
+  if (document.visibilityState === 'visible' && activeTrip) {
+    if (wakeLock === null) requestWakeLock();
+    // 記錄中回到前景：自動回主頁（地圖）
+    goHome();
   }
 });
 
@@ -871,6 +875,14 @@ function closeSheet() {
 function closeActiveSheet() {
   if (document.getElementById('history-sheet').style.display !== 'none') closeHistory();
   else closeSheet();
+}
+
+// 回到主頁（地圖）：關掉所有覆蓋層（今日紀錄 / 歷史 / 回放 / 地圖預覽）
+function goHome() {
+  try { closeSheet(); } catch (_) {}
+  try { closeHistory(); } catch (_) {}
+  try { if (document.getElementById('replay-panel')?.classList.contains('show')) closeReplay(); } catch (_) {}
+  try { if (document.body.classList.contains('day-preview-active')) exitDayPreview(); } catch (_) {}
 }
 
 function renderTripSheet() {
