@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.141';
+const APP_VERSION  = '1.1.142';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1458,7 +1458,7 @@ async function captureSingleTripScreenshot(trip) {
   const dateLabel = `${d.getMonth()+1}月${d.getDate()}日${weekDays[d.getDay()]}`;
   const fileLabel = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
 
-  const W = 390, H = 520;
+  const W = 390, H = 485;
   const canvas = document.createElement('canvas');
   canvas.width = W * 2; canvas.height = H * 2;
   const c = canvas.getContext('2d');
@@ -1533,7 +1533,7 @@ async function captureSingleTripScreenshot(trip) {
 
   // 統計：行程時間 + 里程 + 車資(選填)；時間已移到右上角
   const hasFare = !!trip.fare;
-  const sY = rY + rH + 8;
+  const sY = rY + rH + 18;
   c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(24, sY - 4); c.lineTo(W - 24, sY - 4); c.stroke();
 
