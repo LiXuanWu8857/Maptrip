@@ -402,15 +402,19 @@ public class FloatingWindowPlugin extends Plugin {
         subText.setVisibility(View.VISIBLE);
         titleText.setVisibility(View.VISIBLE);
         titleText.setTextSize(15);   // 時間字縮小
-        subText.setTextSize(11);     // 公尺比時間小一級
+        subText.setTextSize(9);      // 公尺縮小 2pt
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        subText.setLayoutParams(subLp);
+        subText.setGravity(Gravity.CENTER_HORIZONTAL);  // 公尺置中於時間下方
         setText(elapsed, distance);
-        // 右側：紅色「結束」橫向填滿、字置中（與開始行程一致）
+        // 右側：紅色「結束」橫向填滿、字置中、上下撐滿兩行文字高
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         btnLp.leftMargin = dp(8);
         actionBtn.setLayoutParams(btnLp);
         actionBtn.setTextSize(12);
-        actionBtn.setPadding(dp(10), dp(3), dp(10), dp(3));
+        actionBtn.setPadding(dp(10), 0, dp(10), 0);
         actionBtn.setText("結束");
         setBtnColor(actionBtn, "#EA4335");
     }
