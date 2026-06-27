@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.154';
+const APP_VERSION  = '1.1.155';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1667,22 +1667,15 @@ function _drawLogoX(c, x, y, s) {
   c.restore();
 }
 
-// 截圖左上角品牌組合：雙 X LOGO + 「Maptrip」+ 標語
+// 截圖左上角品牌組合：雙 X LOGO + 「Maptrip」
 function _drawBrand(c, x, y, s) {
   _drawLogoX(c, x, y, s);
-  const tx = x + s + 8;
   c.save();
   c.textAlign = 'left';
-  // Maptrip 字樣（粉紅）
+  c.textBaseline = 'middle';
   c.fillStyle = '#FF5E8A';
-  c.font = 'bold 18px system-ui, sans-serif';
-  c.textBaseline = 'alphabetic';
-  c.fillText('Maptrip', tx, y + s * 0.55);
-  // 標語（灰、加字距）
-  c.fillStyle = '#9CA9B8';
-  c.font = '8px system-ui, sans-serif';
-  if ('letterSpacing' in c) c.letterSpacing = '2px';
-  c.fillText('TRACK · RECORD · SHARE', tx + 1, y + s * 0.85);
+  c.font = 'bold 19px system-ui, sans-serif';
+  c.fillText('Maptrip', x + s + 8, y + s * 0.52);
   c.restore();
 }
 
