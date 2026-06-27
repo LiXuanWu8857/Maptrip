@@ -395,18 +395,23 @@ public class FloatingWindowPlugin extends Plugin {
         mainRow.setVisibility(View.VISIBLE);
         mainRow.setGravity(Gravity.CENTER_VERTICAL);
         if (appIcon != null) appIcon.setVisibility(View.GONE);
+        // 左側：時間/距離用自然寬度（不吃 weight），把剩餘空間留給右側按鈕
         textCol.setVisibility(View.VISIBLE);
         LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         textCol.setLayoutParams(textLp);
         subText.setVisibility(View.VISIBLE);
         titleText.setVisibility(View.VISIBLE);
-        titleText.setTextSize(16);
+        titleText.setTextSize(15);   // 時間字縮小
+        subText.setTextSize(11);     // 公尺比時間小一級
         setText(elapsed, distance);
+        // 右側：紅色「結束」橫向填滿、字置中（與開始行程一致）
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         btnLp.leftMargin = dp(8);
         actionBtn.setLayoutParams(btnLp);
+        actionBtn.setTextSize(12);
+        actionBtn.setPadding(dp(10), dp(3), dp(10), dp(3));
         actionBtn.setText("結束");
         setBtnColor(actionBtn, "#EA4335");
     }
