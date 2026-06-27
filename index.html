@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.151';</script>
+<script>window.INDEX_VERSION = '1.1.152';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -221,9 +221,7 @@ if (!sessionStorage.getItem('booted')) {
 <!-- Login Gate：未登入時全螢幕擋住，登入後自動消失 -->
 <div id="login-gate" style="display:none">
   <div class="gate-inner">
-    <img class="gate-logo" alt="Maptrip" src="icons/app-icon-new.png">
-    <div class="gate-title">Maptrip</div>
-    <div class="gate-slogan">TRACK · RECORD · SHARE</div>
+    <img class="gate-banner" alt="Maptrip · Track · Record · Share" src="icons/logo.svg">
     <div class="gate-sub">請先登入以同步並備份你的行程</div>
     <input id="gate-email" class="sync-input" type="email" inputmode="email"
            autocomplete="username" placeholder="電子郵件">
