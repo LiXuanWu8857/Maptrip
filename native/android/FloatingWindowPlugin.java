@@ -162,7 +162,7 @@ public class FloatingWindowPlugin extends Plugin {
 
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(10), dp(10), dp(10));
+        card.setPadding(dp(12), dp(10), dp(12), dp(10));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.parseColor("#F2202124"));
         bg.setCornerRadius(dp(16));
@@ -179,7 +179,6 @@ public class FloatingWindowPlugin extends Plugin {
         appIcon = new ImageView(ctx);
         appIcon.setImageResource(R.mipmap.ic_launcher);
         LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(42), dp(42));
-        iconLp.leftMargin = dp(6);
         iconLp.rightMargin = dp(8);
         appIcon.setLayoutParams(iconLp);
 
