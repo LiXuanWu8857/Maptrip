@@ -891,6 +891,7 @@ html, body {
 .gate-inner { width: 100%; max-width: 340px; text-align: center; }
 .gate-logo { width: 72px; height: 72px; margin-bottom: 12px; border-radius: 16px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.12); border: 1px solid rgba(0,0,0,0.06); }
+.gate-banner { width: 100%; max-width: 300px; height: auto; margin-bottom: 18px; }
 .gate-title { font-size: 1.6rem; font-weight: 800; color: #202124; margin-bottom: 6px; }
 .gate-sub { font-size: 0.88rem; color: #5f6368; margin-bottom: 24px; line-height: 1.5; }
 .gate-hint { font-size: 0.78rem; color: #9aa0a6; margin-top: 12px; }
