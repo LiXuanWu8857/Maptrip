@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.144';
+const APP_VERSION  = '1.1.145';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;

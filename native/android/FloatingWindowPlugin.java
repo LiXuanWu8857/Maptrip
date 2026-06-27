@@ -14,6 +14,7 @@ import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -49,6 +50,7 @@ public class FloatingWindowPlugin extends Plugin {
     private WindowManager.LayoutParams lp;
 
     private LinearLayout mainRow;
+    private ImageView appIcon;
     private LinearLayout textCol;
     private TextView titleText;
     private TextView subText;
@@ -173,6 +175,13 @@ public class FloatingWindowPlugin extends Plugin {
         mainRow.setLayoutParams(new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
+        // App 圖示（取代原本的 🚗 emoji）
+        appIcon = new ImageView(ctx);
+        appIcon.setImageResource(R.mipmap.ic_launcher);
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(28), dp(28));
+        iconLp.rightMargin = dp(8);
+        appIcon.setLayoutParams(iconLp);
+
         textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
 
@@ -202,6 +211,7 @@ public class FloatingWindowPlugin extends Plugin {
             else notifyListeners("floatCommand", action("end"));
         });
 
+        mainRow.addView(appIcon);
         mainRow.addView(textCol);
         mainRow.addView(actionBtn);
 
@@ -360,12 +370,13 @@ public class FloatingWindowPlugin extends Plugin {
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
         mainRow.setGravity(Gravity.CENTER_VERTICAL);
-        // 左側：emoji + 名稱
+        // 左側：App 圖示 + 名稱
+        if (appIcon != null) appIcon.setVisibility(View.VISIBLE);
         textCol.setVisibility(View.VISIBLE);
         LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         textCol.setLayoutParams(textLp);
-        titleText.setText("🚗  Maptrip");
+        titleText.setText("Maptrip");
         titleText.setTextSize(15);
         subText.setVisibility(View.GONE);
         // 右側：緊湊藍色按鈕
@@ -382,6 +393,7 @@ public class FloatingWindowPlugin extends Plugin {
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
         mainRow.setGravity(Gravity.CENTER_VERTICAL);
+        if (appIcon != null) appIcon.setVisibility(View.GONE);
         textCol.setVisibility(View.VISIBLE);
         LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
