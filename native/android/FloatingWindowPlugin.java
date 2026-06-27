@@ -376,8 +376,8 @@ public class FloatingWindowPlugin extends Plugin {
         LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         textCol.setLayoutParams(textLp);
-        titleText.setText("Maptrip");
-        titleText.setTextSize(15);
+        titleText.setText("");
+        titleText.setVisibility(View.GONE);
         subText.setVisibility(View.GONE);
         // 右側：緊湊藍色按鈕
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
@@ -399,6 +399,7 @@ public class FloatingWindowPlugin extends Plugin {
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         textCol.setLayoutParams(textLp);
         subText.setVisibility(View.VISIBLE);
+        titleText.setVisibility(View.VISIBLE);
         titleText.setTextSize(16);
         setText(elapsed, distance);
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
