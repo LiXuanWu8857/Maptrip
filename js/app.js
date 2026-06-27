@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.152';
+const APP_VERSION  = '1.1.153';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1644,15 +1644,26 @@ function _rrect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// 在截圖上畫去背的藍 X LOGO（x,y=左上角；s=尺寸）
+// 在截圖上畫去背的雙 X LOGO（半透明藍 X 偏右上 + 實心粉紅 X 偏左下）
+// x,y=左上角；s=尺寸。座標取自原始 logo SVG，等比縮放置中。
 function _drawLogoX(c, x, y, s) {
+  // SVG icon 兩個 X 的整體邊界框：x 123..389 (266)、y 136..376 (240)
+  const sc = s / 280, ox = x + (s - 266 * sc) / 2 - 123 * sc, oy = y + (s - 240 * sc) / 2 - 136 * sc;
+  const P = (ix, iy) => [ox + ix * sc, oy + iy * sc];
   c.save();
   c.lineCap = 'round';
-  c.lineWidth = s * 0.16;
-  c.beginPath(); c.strokeStyle = '#4A93E4';
-  c.moveTo(x + s * 0.70, y + s * 0.30); c.lineTo(x + s * 0.30, y + s * 0.70); c.stroke();
-  c.beginPath(); c.strokeStyle = '#7FB9F0';
-  c.moveTo(x + s * 0.30, y + s * 0.30); c.lineTo(x + s * 0.70, y + s * 0.70); c.stroke();
+  c.lineWidth = 46 * sc;
+  const line = (p1, p2) => { const a = P(...p1), b = P(...p2); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); };
+  // 半透明藍 X（偏右上）
+  let g = c.createLinearGradient(...P(216, 159), ...P(366, 309));
+  g.addColorStop(0, '#7CD8FF'); g.addColorStop(1, '#46B0FF');
+  c.strokeStyle = g; c.globalAlpha = 0.5;
+  line([216, 159], [366, 309]); line([366, 159], [216, 309]);
+  // 實心粉紅 X（偏左下）
+  g = c.createLinearGradient(...P(146, 203), ...P(296, 353));
+  g.addColorStop(0, '#FF7AC6'); g.addColorStop(1, '#FF5E62');
+  c.strokeStyle = g; c.globalAlpha = 1.0;
+  line([146, 203], [296, 353]); line([296, 203], [146, 353]);
   c.restore();
 }
 
