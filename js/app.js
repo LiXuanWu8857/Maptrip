@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.157';
+const APP_VERSION  = '1.1.158';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1707,6 +1707,9 @@ function applyLoginGate(state) {
     gate.style.display = 'flex';
     const ver = document.getElementById('gate-version');
     if (ver) ver.textContent = 'v' + APP_VERSION;
+    // logo 帶版本參數防快取（避免 WKWebView 用到舊的含標語版本）
+    const logoImg = document.getElementById('gate-logo-img');
+    if (logoImg && !logoImg.src.includes('?v=' + APP_VERSION)) logoImg.src = 'icons/logo.svg?v=' + APP_VERSION;
     const btn = document.getElementById('gate-btn');
     if (btn) {
       const busy = window.MaptripSync && MaptripSync.isBusy && MaptripSync.isBusy();
