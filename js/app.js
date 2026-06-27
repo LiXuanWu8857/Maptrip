@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.158';
+const APP_VERSION  = '1.1.159';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1419,11 +1419,9 @@ async function captureTripsScreenshot(dayKey) {
   const spanMs = lastEnd - firstStart;
   const spanH = Math.floor(spanMs / 3600000), spanM = Math.floor((spanMs % 3600000) / 60000);
   const spanLabel = spanH > 0 ? `${spanH}小時${spanM}分` : `${spanM}分`;
-  c.textAlign = 'right';
-  c.fillStyle = '#e8eaed'; c.font = '13px system-ui, sans-serif';
-  c.fillText(_fullDateLabel(firstStart), W - 20, 46);
-  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd) + ' ｜ ' + spanLabel, W - 20, 66);
+  _drawRightTwoLines(c, W - 20,
+    _fullDateLabel(firstStart), '13px system-ui, sans-serif', '#e8eaed', 46,
+    fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd) + ' ｜ ' + spanLabel, '12px system-ui, sans-serif', '#9aa0a6', 66);
 
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
@@ -1476,12 +1474,10 @@ async function captureSingleTripScreenshot(trip) {
 
   // 左：去背 LOGO
   _drawBrand(c, 20, 28, 42);
-  // 右上：日期（上）+ 開始→結束時間（下）
-  c.textAlign = 'right';
-  c.fillStyle = '#e8eaed'; c.font = '13px system-ui, sans-serif';
-  c.fillText(_fullDateLabel(trip.startTime), W - 20, 46);
-  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText(fmtTime(trip.startTime) + '  →  ' + fmtTime(trip.endTime), W - 20, 66);
+  // 右上：日期（上）+ 開始→結束時間（下），兩行互相置中
+  _drawRightTwoLines(c, W - 20,
+    _fullDateLabel(trip.startTime), '13px system-ui, sans-serif', '#e8eaed', 46,
+    fmtTime(trip.startTime) + '  →  ' + fmtTime(trip.endTime), '12px system-ui, sans-serif', '#9aa0a6', 66);
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
@@ -1676,6 +1672,18 @@ function _drawBrand(c, x, y, s) {
   c.fillStyle = '#FF5E8A';
   c.font = 'bold 19px system-ui, sans-serif';
   c.fillText('Maptrip', x + s + 8, y + s * 0.52);
+  c.restore();
+}
+
+// 右上角兩行（日期 + 時間）互相置中，整體靠右邊界 rightX 對齊
+function _drawRightTwoLines(c, rightX, l1, f1, c1, y1, l2, f2, c2, y2) {
+  c.save();
+  c.textAlign = 'center';
+  c.font = f1; const w1 = c.measureText(l1).width;
+  c.font = f2; const w2 = c.measureText(l2).width;
+  const cx = rightX - Math.max(w1, w2) / 2;
+  c.fillStyle = c1; c.font = f1; c.fillText(l1, cx, y1);
+  c.fillStyle = c2; c.font = f2; c.fillText(l2, cx, y2);
   c.restore();
 }
 
