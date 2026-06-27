@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.156';
+const APP_VERSION  = '1.1.157';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1705,6 +1705,8 @@ function applyLoginGate(state) {
   // 只有「Firebase 已就緒且未登入」才強制擋；未設定/離線時不擋，避免 App 無法使用
   if (state === 'signedout') {
     gate.style.display = 'flex';
+    const ver = document.getElementById('gate-version');
+    if (ver) ver.textContent = 'v' + APP_VERSION;
     const btn = document.getElementById('gate-btn');
     if (btn) {
       const busy = window.MaptripSync && MaptripSync.isBusy && MaptripSync.isBusy();

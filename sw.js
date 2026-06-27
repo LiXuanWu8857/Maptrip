@@ -1,4 +1,4 @@
-// Service Worker v1.1.156
+// Service Worker v1.1.157
 // Intercepts every page navigation and fetches index.html fresh from the
 // network (cache: 'no-store'), permanently bypassing WKWebView's HTTP cache.
 self.addEventListener('install', () => self.skipWaiting());

@@ -894,6 +894,8 @@ html, body {
 .gate-banner { width: 100%; max-width: 300px; height: auto; margin-bottom: 18px; }
 .gate-sub { font-size: 0.88rem; color: #5f6368; margin-bottom: 24px; line-height: 1.5; }
 .gate-hint { font-size: 0.78rem; color: #9aa0a6; margin-top: 12px; }
+#gate-version { position: absolute; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left: 0; right: 0; text-align: center; font-size: 0.72rem; color: #c0c4c9; }
 
 @media (prefers-color-scheme: dark) {
   #login-gate { background: #121212; }
