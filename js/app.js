@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.148';
+const APP_VERSION  = '1.1.149';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1127,6 +1127,13 @@ function exitSoloMode() {
   document.getElementById('solo-bar').style.display = 'none';
 }
 
+// 從任何非主頁狀態（單趟 / 日預覽 / 清單 / 回放）回到地圖主頁
+function backToMainMap() {
+  if (soloSet.length) exitSoloMode();
+  if (document.body.classList.contains('day-preview-active')) exitDayPreview();
+  goHome();
+}
+
 // 地圖層級的水平滑動 → 切換單趟（solo mode 時才掛上）
 let _soloSwX = null, _soloSwY = null, _soloLastTap = 0;
 function _soloTouchStart(e) {
@@ -1147,7 +1154,7 @@ function _soloTouchEnd(e) {
     const now = Date.now();
     if (now - _soloLastTap < 350) {
       _soloLastTap = 0;
-      exitSoloMode();
+      backToMainMap();
     } else {
       _soloLastTap = now;
     }
@@ -1240,6 +1247,9 @@ function previewDay(dayKey) {
     `<div class="dp-stats">${trips.length} 趟　${fmtDist(totalDist)}${totalFare ? `　NT$ ${totalFare.toLocaleString()}` : ''}</div>`;
   document.getElementById('day-preview-bar').style.display = 'flex';
   document.body.classList.add('day-preview-active');
+  // 日預覽時：雙擊地圖回主頁（暫時關掉 Leaflet 雙擊放大避免衝突）
+  map.doubleClickZoom.disable();
+  map.on('dblclick', backToMainMap);
 
   const allCoords = [];
   trips.forEach((t, i) => {
@@ -1272,6 +1282,9 @@ function exitDayPreview() {
   dayPreviewLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
   dayPreviewLayers = [];
   dayPreviewKey = null;
+  // 還原 Leaflet 雙擊放大
+  map.off('dblclick', backToMainMap);
+  map.doubleClickZoom.enable();
   document.body.classList.remove('day-preview-active');
   document.getElementById('day-preview-bar').style.display = 'none';
   // 還原原本底圖
@@ -1321,14 +1334,8 @@ async function captureTripsScreenshot(dayKey) {
   c.fillStyle = '#141414';
   _rrect(c, 0, 0, W, H, 24); c.fill();
 
-  // 標題
-  c.fillStyle = '#ffffff';
-  c.font = 'bold 22px system-ui, sans-serif';
-  c.textAlign = 'left';
-  c.fillText('Maptrip', 24, 48);
-  c.fillStyle = '#9aa0a6';
-  c.font = '14px system-ui, sans-serif';
-  c.fillText(dateLabel, 24, 70);
+  // 左：去背 LOGO（右上角日期+時間範圍待地圖畫完後再繪）
+  _drawLogoX(c, 20, 28, 42);
 
   // 路線區（先算時間範圍，待地圖畫完後再繪右上角，避免被蓋掉）
   const firstStart = trips[0].startTime;
@@ -1408,13 +1415,15 @@ async function captureTripsScreenshot(dayKey) {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
-  // 右上角：第一筆開始 → 最後一筆結束 + 總時長
+  // 右上角：日期（上）+ 開始→結束 ｜ 總時長（下）
   const spanMs = lastEnd - firstStart;
   const spanH = Math.floor(spanMs / 3600000), spanM = Math.floor((spanMs % 3600000) / 60000);
   const spanLabel = spanH > 0 ? `${spanH}小時${spanM}分` : `${spanM}分`;
   c.textAlign = 'right';
+  c.fillStyle = '#e8eaed'; c.font = '13px system-ui, sans-serif';
+  c.fillText(_fullDateLabel(firstStart), W - 20, 46);
   c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd) + ' ｜ ' + spanLabel, W - 20, 58);
+  c.fillText(fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd) + ' ｜ ' + spanLabel, W - 20, 66);
 
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
@@ -1465,18 +1474,14 @@ async function captureSingleTripScreenshot(trip) {
   c.fillStyle = '#141414';
   _rrect(c, 0, 0, W, H, 24); c.fill();
 
-  // 左：標題 + 日期
-  c.fillStyle = '#ffffff';
-  c.font = 'bold 22px system-ui, sans-serif';
-  c.textAlign = 'left';
-  c.fillText('Maptrip', 24, 48);
-  c.fillStyle = '#9aa0a6';
-  c.font = '14px system-ui, sans-serif';
-  c.fillText(dateLabel, 24, 70);
-  // 右上角：開始 → 結束時間（單行）
+  // 左：去背 LOGO
+  _drawLogoX(c, 20, 28, 42);
+  // 右上：日期（上）+ 開始→結束時間（下）
   c.textAlign = 'right';
-  c.font = '12px system-ui, sans-serif';
-  c.fillText(fmtTime(trip.startTime) + '  →  ' + fmtTime(trip.endTime), W - 20, 58);
+  c.fillStyle = '#e8eaed'; c.font = '13px system-ui, sans-serif';
+  c.fillText(_fullDateLabel(trip.startTime), W - 20, 46);
+  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
+  c.fillText(fmtTime(trip.startTime) + '  →  ' + fmtTime(trip.endTime), W - 20, 66);
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
@@ -1637,6 +1642,25 @@ function _rrect(ctx, x, y, w, h, r) {
   ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
   ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+// 在截圖上畫去背的藍 X LOGO（x,y=左上角；s=尺寸）
+function _drawLogoX(c, x, y, s) {
+  c.save();
+  c.lineCap = 'round';
+  c.lineWidth = s * 0.16;
+  c.beginPath(); c.strokeStyle = '#4A93E4';
+  c.moveTo(x + s * 0.70, y + s * 0.30); c.lineTo(x + s * 0.30, y + s * 0.70); c.stroke();
+  c.beginPath(); c.strokeStyle = '#7FB9F0';
+  c.moveTo(x + s * 0.30, y + s * 0.30); c.lineTo(x + s * 0.70, y + s * 0.70); c.stroke();
+  c.restore();
+}
+
+// 截圖用完整日期：2026年6月24日 星期三
+function _fullDateLabel(ts) {
+  const d = new Date(ts);
+  const wd = '日一二三四五六'[d.getDay()];
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 星期${wd}`;
 }
 
 // ===== 雲端同步 UI =====
