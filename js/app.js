@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.153';
+const APP_VERSION  = '1.1.154';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1335,7 +1335,7 @@ async function captureTripsScreenshot(dayKey) {
   _rrect(c, 0, 0, W, H, 24); c.fill();
 
   // 左：去背 LOGO（右上角日期+時間範圍待地圖畫完後再繪）
-  _drawLogoX(c, 20, 28, 42);
+  _drawBrand(c, 20, 28, 42);
 
   // 路線區（先算時間範圍，待地圖畫完後再繪右上角，避免被蓋掉）
   const firstStart = trips[0].startTime;
@@ -1475,7 +1475,7 @@ async function captureSingleTripScreenshot(trip) {
   _rrect(c, 0, 0, W, H, 24); c.fill();
 
   // 左：去背 LOGO
-  _drawLogoX(c, 20, 28, 42);
+  _drawBrand(c, 20, 28, 42);
   // 右上：日期（上）+ 開始→結束時間（下）
   c.textAlign = 'right';
   c.fillStyle = '#e8eaed'; c.font = '13px system-ui, sans-serif';
@@ -1664,6 +1664,25 @@ function _drawLogoX(c, x, y, s) {
   g.addColorStop(0, '#FF7AC6'); g.addColorStop(1, '#FF5E62');
   c.strokeStyle = g; c.globalAlpha = 1.0;
   line([146, 203], [296, 353]); line([296, 203], [146, 353]);
+  c.restore();
+}
+
+// 截圖左上角品牌組合：雙 X LOGO + 「Maptrip」+ 標語
+function _drawBrand(c, x, y, s) {
+  _drawLogoX(c, x, y, s);
+  const tx = x + s + 8;
+  c.save();
+  c.textAlign = 'left';
+  // Maptrip 字樣（粉紅）
+  c.fillStyle = '#FF5E8A';
+  c.font = 'bold 18px system-ui, sans-serif';
+  c.textBaseline = 'alphabetic';
+  c.fillText('Maptrip', tx, y + s * 0.55);
+  // 標語（灰、加字距）
+  c.fillStyle = '#9CA9B8';
+  c.font = '8px system-ui, sans-serif';
+  if ('letterSpacing' in c) c.letterSpacing = '2px';
+  c.fillText('TRACK · RECORD · SHARE', tx + 1, y + s * 0.85);
   c.restore();
 }
 
