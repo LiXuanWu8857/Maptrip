@@ -8,7 +8,7 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231a73e8'/><path d='M50 20c-11 0-20 9-20 20 0 15 20 40 20 40s20-25 20-40c0-11-9-20-20-20zm0 27a7 7 0 1 1 0-14 7 7 0 0 1 0 14z' fill='white'/></svg>",
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='white'/><g stroke-linecap='round' stroke-width='15' fill='none'><path d='M70 32 L30 68' stroke='%234A93E4'/><path d='M30 32 L70 68' stroke='%237FB9F0'/></g></svg>",
       "sizes": "any",
       "type": "image/svg+xml"
     }

@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.146';</script>
+<script>window.INDEX_VERSION = '1.1.147';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -221,7 +221,7 @@ if (!sessionStorage.getItem('booted')) {
 <!-- Login Gate：未登入時全螢幕擋住，登入後自動消失 -->
 <div id="login-gate" style="display:none">
   <div class="gate-inner">
-    <img class="gate-logo" alt="Maptrip" src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231a73e8'/><path d='M50 20c-11 0-20 9-20 20 0 15 20 40 20 40s20-25 20-40c0-11-9-20-20-20zm0 27a7 7 0 1 1 0-14 7 7 0 0 1 0 14z' fill='white'/></svg>">
+    <img class="gate-logo" alt="Maptrip" src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='white'/><g stroke-linecap='round' stroke-width='15' fill='none'><path d='M70 32 L30 68' stroke='%234A93E4'/><path d='M30 32 L70 68' stroke='%237FB9F0'/></g></svg>">
     <div class="gate-title">Maptrip</div>
     <div class="gate-sub">請先登入以同步並備份你的行程</div>
     <input id="gate-email" class="sync-input" type="email" inputmode="email"
