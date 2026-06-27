@@ -8,9 +8,14 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='white'/><g stroke-linecap='round' stroke-width='15' fill='none'><path d='M70 32 L30 68' stroke='%234A93E4'/><path d='M30 32 L70 68' stroke='%237FB9F0'/></g></svg>",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "icons/app-icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/app-icon-new.png",
+      "sizes": "256x256",
+      "type": "image/png"
     }
   ]
 }
