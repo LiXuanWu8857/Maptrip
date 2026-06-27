@@ -178,7 +178,8 @@ public class FloatingWindowPlugin extends Plugin {
         // App 圖示（取代原本的 🚗 emoji）
         appIcon = new ImageView(ctx);
         appIcon.setImageResource(R.mipmap.ic_launcher);
-        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(28), dp(28));
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(42), dp(42));
+        iconLp.leftMargin = dp(6);
         iconLp.rightMargin = dp(8);
         appIcon.setLayoutParams(iconLp);
 
@@ -198,10 +199,14 @@ public class FloatingWindowPlugin extends Plugin {
 
         actionBtn = new Button(ctx);
         actionBtn.setTextColor(Color.WHITE);
-        actionBtn.setTextSize(14);
+        actionBtn.setTextSize(13);
         actionBtn.setAllCaps(false);
         actionBtn.setGravity(Gravity.CENTER);
-        actionBtn.setPadding(dp(14), dp(6), dp(14), dp(6));
+        actionBtn.setPadding(dp(10), dp(5), dp(10), dp(5));
+        actionBtn.setMinWidth(0);
+        actionBtn.setMinimumWidth(0);
+        actionBtn.setMinHeight(0);
+        actionBtn.setMinimumHeight(0);
         LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         aLp.leftMargin = dp(12);
