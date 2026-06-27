@@ -179,7 +179,7 @@ public class FloatingWindowPlugin extends Plugin {
         appIcon = new ImageView(ctx);
         appIcon.setImageResource(R.mipmap.ic_launcher);
         LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(42), dp(42));
-        iconLp.rightMargin = dp(8);
+        iconLp.rightMargin = dp(12);   // logo 與按鈕中間間隔 = 卡片左右內距
         appIcon.setLayoutParams(iconLp);
 
         textCol = new LinearLayout(ctx);
@@ -377,13 +377,13 @@ public class FloatingWindowPlugin extends Plugin {
         // 左側：App 圖示（idle 不顯示文字欄）
         if (appIcon != null) appIcon.setVisibility(View.VISIBLE);
         textCol.setVisibility(View.GONE);
-        // 右側：藍色按鈕橫向填滿剩餘空間、字小、上下細
+        // 右側：藍色按鈕橫向填滿、字置中、上下撐滿 logo 高
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        btnLp.leftMargin = dp(8);
+            0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
+        btnLp.leftMargin = 0;
         actionBtn.setLayoutParams(btnLp);
         actionBtn.setTextSize(12);
-        actionBtn.setPadding(dp(10), dp(3), dp(10), dp(3));
+        actionBtn.setPadding(dp(10), 0, dp(10), 0);
         actionBtn.setText("▶ 開始行程");
         setBtnColor(actionBtn, "#1A73E8");
     }
@@ -411,7 +411,7 @@ public class FloatingWindowPlugin extends Plugin {
         // 右側：紅色「結束」橫向填滿、字置中、上下撐滿兩行文字高
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
-        btnLp.leftMargin = dp(8);
+        btnLp.leftMargin = dp(12);
         actionBtn.setLayoutParams(btnLp);
         actionBtn.setTextSize(12);
         actionBtn.setPadding(dp(10), 0, dp(10), 0);
