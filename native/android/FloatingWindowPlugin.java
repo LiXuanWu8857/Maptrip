@@ -375,20 +375,16 @@ public class FloatingWindowPlugin extends Plugin {
         keypad.setVisibility(View.GONE);
         mainRow.setVisibility(View.VISIBLE);
         mainRow.setGravity(Gravity.CENTER_VERTICAL);
-        // 左側：App 圖示 + 名稱
+        // 左側：App 圖示（idle 不顯示文字欄）
         if (appIcon != null) appIcon.setVisibility(View.VISIBLE);
-        textCol.setVisibility(View.VISIBLE);
-        LinearLayout.LayoutParams textLp = new LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        textCol.setLayoutParams(textLp);
-        titleText.setText("");
-        titleText.setVisibility(View.GONE);
-        subText.setVisibility(View.GONE);
-        // 右側：緊湊藍色按鈕
+        textCol.setVisibility(View.GONE);
+        // 右側：藍色按鈕橫向填滿剩餘空間、字小、上下細
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         btnLp.leftMargin = dp(8);
         actionBtn.setLayoutParams(btnLp);
+        actionBtn.setTextSize(12);
+        actionBtn.setPadding(dp(10), dp(3), dp(10), dp(3));
         actionBtn.setText("▶ 開始行程");
         setBtnColor(actionBtn, "#1A73E8");
     }
