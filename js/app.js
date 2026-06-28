@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.159';
+const APP_VERSION  = '1.1.160';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -717,10 +717,20 @@ function drawTripLine(trip, idx) {
   trip._layers = [line, startMk, endMk];
 }
 
-function makeNumberIcon(n, color) {
+// 深色模式偵測（系統設定）
+function _isDark() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+// 無標示底圖（淺/深）
+const NOLABEL_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
+const NOLABEL_DARK  = 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
+
+// dark=true 時：淺色填色配深色外框/數字（深色底圖才看得見）
+function makeNumberIcon(n, color, dark) {
+  const edge = dark ? '#1a1a1a' : '#fff';
   return L.divIcon({
     className: '',
-    html: `<div style="width:20px;height:20px;border-radius:50%;background:${color};border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;">${n}</div>`,
+    html: `<div style="width:20px;height:20px;border-radius:50%;background:${color};border:2px solid ${edge};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:${edge};">${n}</div>`,
     iconSize: [20, 20], iconAnchor: [10, 10]
   });
 }
@@ -764,10 +774,11 @@ function makePreviewDotIcon() {
   });
 }
 
-function makePreviewSquareIcon() {
+function makePreviewSquareIcon(dark) {
+  const fill = dark ? '#f1f3f4' : '#1a1a1a';
   return L.divIcon({
     className: '',
-    html: '<div style="width:16px;height:16px;background:#1a1a1a;border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
+    html: `<div style="width:16px;height:16px;background:${fill};border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
     iconSize: [16, 16], iconAnchor: [8, 8]
   });
 }
@@ -1014,8 +1025,7 @@ function openSoloTrip(set, idx, labelFn) {
   // 歷史模式：換成無標示底圖（CartoDB），退出時還原
   if (soloFromHistory) {
     map.removeLayer(TILE_LAYERS[currentTile]);
-    soloHistoryTile = L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+    soloHistoryTile = L.tileLayer(_isDark() ? NOLABEL_DARK : NOLABEL_LIGHT,
       { subdomains: 'abcd', maxZoom: 20 }
     ).addTo(map);
     soloHistoryTile.bringToBack();
@@ -1052,10 +1062,12 @@ function renderSoloTrip() {
   // 畫選中行程的路線（歷史模式：黑色 Uber 風格；今日模式：藍色）
   const coords = (trip.roadCoords || trip.coords).map(c => [c.lat, c.lng]);
   if (soloFromHistory) {
+    const dark = _isDark();
+    const inkColor = dark ? '#f1f3f4' : '#1a1a1a';
     soloLayers.push(
-      L.polyline(coords, { color: '#1a1a1a', weight: 5, opacity: 1 }).addTo(map),
-      L.marker(coords[0],     { icon: makeNumberIcon(soloIdx + 1, '#1a1a1a'), zIndexOffset: 10 }).addTo(map),
-      L.marker(coords.at(-1), { icon: makePreviewSquareIcon() }).addTo(map)
+      L.polyline(coords, { color: inkColor, weight: 5, opacity: 1 }).addTo(map),
+      L.marker(coords[0],     { icon: makeNumberIcon(soloIdx + 1, inkColor, dark), zIndexOffset: 10 }).addTo(map),
+      L.marker(coords.at(-1), { icon: makePreviewSquareIcon(dark) }).addTo(map)
     );
   } else {
     soloLayers.push(
@@ -1251,22 +1263,24 @@ function previewDay(dayKey) {
   map.doubleClickZoom.disable();
   map.on('dblclick', backToMainMap);
 
+  // 深色模式：深色底圖 + 淺色路線/點；淺色模式：淺色底圖 + 黑色路線/點
+  const dark = _isDark();
+  const inkColor = dark ? '#f1f3f4' : '#1a1a1a';
+
   const allCoords = [];
   trips.forEach((t, i) => {
     const latlngs = (t.roadCoords || t.coords).map(c => [c.lat, c.lng]);
     allCoords.push(...latlngs);
-    const line = L.polyline(latlngs, { color: '#1a1a1a', weight: 2.5, opacity: 1 }).addTo(map);
+    const line = L.polyline(latlngs, { color: inkColor, weight: 2.5, opacity: 1 }).addTo(map);
     line.on('click', () => { exitDayPreview(); showHistoryTrip(dayKey, i); });
-    const startMk = L.marker(latlngs[0],     { icon: makeNumberIcon(i + 1, '#1a1a1a'), zIndexOffset: 10 }).addTo(map);
-    const endMk   = L.marker(latlngs.at(-1), { icon: makePreviewSquareIcon() }).addTo(map);
+    const startMk = L.marker(latlngs[0],     { icon: makeNumberIcon(i + 1, inkColor, dark), zIndexOffset: 10 }).addTo(map);
+    const endMk   = L.marker(latlngs.at(-1), { icon: makePreviewSquareIcon(dark) }).addTo(map);
     dayPreviewLayers.push(line, startMk, endMk);
   });
-  // 換成無標示底圖（CartoDB Light No Labels）
+  // 換成無標示底圖（深色模式用 Dark No Labels）
   map.removeLayer(TILE_LAYERS[currentTile]);
-  dayPreviewTile = L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-    { subdomains: 'abcd', maxZoom: 20 }
-  ).addTo(map);
+  dayPreviewTile = L.tileLayer(dark ? NOLABEL_DARK : NOLABEL_LIGHT,
+    { subdomains: 'abcd', maxZoom: 20 }).addTo(map);
   dayPreviewTile.bringToBack();
 
   // 隱藏當日行程圖層
