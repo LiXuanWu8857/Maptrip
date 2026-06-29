@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.160';
+const APP_VERSION  = '1.1.161';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1208,29 +1208,68 @@ function renderHistorySheet() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const days = Object.keys(raw).sort().reverse().filter(d => raw[d]?.length > 0);
   if (!days.length) { body.innerHTML = '<div class="empty-state">尚無歷史紀錄</div>'; return; }
-  body.innerHTML = days.map((day, dayIdx) => {
-    const trips = raw[day];
-    const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
-    const fareLine = _fareLineHtml(trips);
-    const isOpen = dayIdx === 0;
-    const rows = trips.map((t, i) => `
-      <div class="trip-row" onclick="showHistoryTrip('${day}',${i})">
-        <div class="trip-num">${i + 1}</div>
-        <div class="trip-meta">
-          <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-          <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : ''}</div>
+
+  // 依月份（YYYY-MM）分組，月份由近到遠
+  const months = [], monthMap = {};
+  days.forEach(day => {
+    const mk = day.slice(0, 7);
+    if (!monthMap[mk]) { monthMap[mk] = []; months.push(mk); }
+    monthMap[mk].push(day);
+  });
+
+  let globalDayIdx = 0;
+  body.innerHTML = months.map((mk, monthIdx) => {
+    const mDays = monthMap[mk];
+    const mTrips = mDays.flatMap(d => raw[d]);
+    const mDist = mTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
+    const mFareLine = _fareLineHtml(mTrips);
+    const [yy, mm] = mk.split('-');
+    const monthLabel = `${yy}年${parseInt(mm, 10)}月`;
+    const monthOpen = monthIdx === 0;   // 最近月份展開，較遠月份預設收折
+
+    const daysHtml = mDays.map(day => {
+      const trips = raw[day];
+      const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
+      const fareLine = _fareLineHtml(trips);
+      const isOpen = globalDayIdx === 0;   // 全清單最近一天展開
+      globalDayIdx++;
+      const rows = trips.map((t, i) => `
+        <div class="trip-row" onclick="showHistoryTrip('${day}',${i})">
+          <div class="trip-num">${i + 1}</div>
+          <div class="trip-meta">
+            <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
+            <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : ''}</div>
+          </div>
+          <span class="trip-shot" onclick="captureHistoryTripShot(event,'${day}',${i})">📷</span>
+          <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
+        </div>`).join('');
+      return `<div class="history-day" onclick="toggleDay('${day}')">
+          <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
+          <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : ''}</span>
+          <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
+          <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
         </div>
-        <span class="trip-shot" onclick="captureHistoryTripShot(event,'${day}',${i})">📷</span>
-        <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
-      </div>`).join('');
-    return `<div class="history-day" onclick="toggleDay('${day}')">
-        <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
-        <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : ''}</span>
-        <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
-        <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
+        <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
+    }).join('');
+
+    return `<div class="history-month" onclick="toggleMonth('${mk}')">
+        <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
+        <span class="month-info">
+          <span class="month-title">${monthLabel}</span>
+          <span class="month-sub">${mTrips.length} 趟　${fmtDist(mDist)}</span>
+          ${mFareLine ? `<span class="month-fare">${mFareLine}</span>` : ''}
+        </span>
       </div>
-      <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
+      <div class="month-days${monthOpen ? '' : ' collapsed'}" id="month-days-${mk}">${daysHtml}</div>`;
   }).join('');
+}
+
+function toggleMonth(mk) {
+  const el = document.getElementById('month-days-' + mk);
+  if (!el) return;
+  const caret = el.previousElementSibling.querySelector('.month-caret');
+  const nowCollapsed = el.classList.toggle('collapsed');
+  if (caret) caret.textContent = nowCollapsed ? '▶' : '▼';
 }
 
 function toggleDay(day) {
