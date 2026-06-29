@@ -579,6 +579,24 @@ html, body {
 .ds-top { display: flex; gap: 12px; align-items: center; }
 .ds-top .screenshot-btn { margin-left: auto; }
 .ds-bot { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
+.ds-time { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
+.ds-time b { color: #202124; font-weight: 700; }
+.rest-wrap { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.rest-input {
+  width: 46px; text-align: center; font-size: 0.82rem; font-family: inherit;
+  border: 1px solid rgba(0,0,0,0.18); border-radius: 7px; padding: 3px 4px;
+  background: #fff; color: #202124; outline: none;
+}
+.dr-rest {
+  padding: 6px 18px 8px; font-size: 0.76rem; color: #5f6368;
+  display: flex; align-items: center; gap: 4px;
+}
+.dr-rest b { color: #1a73e8; font-weight: 700; }
+@media (prefers-color-scheme: dark) {
+  .ds-time b { color: #e8eaed; }
+  .rest-input { background: #2a2a2c; color: #e8eaed; border-color: rgba(255,255,255,0.2); }
+  .dr-rest { color: #9aa0a6; }
+}
 .fl-card  { color: #1a73e8; font-weight: 700; }
 .fl-cash  { color: #34a853; font-weight: 700; }
 .fl-total { color: #202124; font-weight: 700; margin-left: auto; }

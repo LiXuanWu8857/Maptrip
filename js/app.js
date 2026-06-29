@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.161';
+const APP_VERSION  = '1.1.162';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -900,6 +900,9 @@ function renderTripSheet() {
   }
   const totalDist = todayTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
   const fareLine = _fareLineHtml(todayTrips);
+  const restMin = getRestMin(todayKey());
+  const restHr = restMin ? +(restMin / 60).toFixed(2) : '';
+  const work = workMs(todayTrips, restMin);
   const summary = `<div class="day-summary">
     <div class="ds-top">
       <span>${todayTrips.length} 趟</span>
@@ -907,6 +910,12 @@ function renderTripSheet() {
       <button class="screenshot-btn" onclick="captureTripsScreenshot(null)">截圖</button>
     </div>
     ${fareLine ? `<div class="ds-bot">${fareLine}</div>` : ''}
+    <div class="ds-time">
+      <span>工作 <b>${fmtWork(work)}</b></span>
+      <span class="rest-wrap">休息
+        <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5"
+               value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span>
+    </div>
   </div>`;
   body.innerHTML = summary + todayTrips.map((t, i) => `
     <div class="trip-row" onclick="showSoloTripFromToday(${i}); closeSheet()">
@@ -922,6 +931,13 @@ function renderTripSheet() {
       <span class="trip-shot" onclick="captureTodayTripShot(event,${i})">📷</span>
       <span class="trip-del" onclick="deleteTodayTrip(event,${i})">🗑</span>
     </div>`).join('');
+}
+
+// 設定今日休息時間（輸入為小時，內部存分鐘）
+function setTodayRest(hoursStr) {
+  const hr = Math.max(0, parseFloat(hoursStr) || 0);
+  setRestMin(todayKey(), Math.round(hr * 60));
+  renderTripSheet();
 }
 
 function editFare(e, idx) {
@@ -1223,6 +1239,7 @@ function renderHistorySheet() {
     const mTrips = mDays.flatMap(d => raw[d]);
     const mDist = mTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
     const mFareLine = _fareLineHtml(mTrips);
+    const mWork = mDays.reduce((s, d) => s + workMs(raw[d], getRestMin(d)), 0);
     const [yy, mm] = mk.split('-');
     const monthLabel = `${yy}年${parseInt(mm, 10)}月`;
     const monthOpen = monthIdx === 0;   // 最近月份展開，較遠月份預設收折
@@ -1231,9 +1248,15 @@ function renderHistorySheet() {
       const trips = raw[day];
       const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
       const fareLine = _fareLineHtml(trips);
+      const dRestMin = getRestMin(day);
+      const dRestHr = dRestMin ? +(dRestMin / 60).toFixed(2) : '';
+      const dWork = workMs(trips, dRestMin);
       const isOpen = globalDayIdx === 0;   // 全清單最近一天展開
       globalDayIdx++;
-      const rows = trips.map((t, i) => `
+      const restRow = `<div class="dr-rest">工作 <b id="work-${day}">${fmtWork(dWork)}</b>　休息
+        <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5"
+               value="${dRestHr}" placeholder="0" onchange="setHistoryRest('${day}', this.value)"> 小時</div>`;
+      const rows = restRow + trips.map((t, i) => `
         <div class="trip-row" onclick="showHistoryTrip('${day}',${i})">
           <div class="trip-num">${i + 1}</div>
           <div class="trip-meta">
@@ -1256,12 +1279,28 @@ function renderHistorySheet() {
         <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
         <span class="month-info">
           <span class="month-title">${monthLabel}</span>
-          <span class="month-sub">${mTrips.length} 趟　${fmtDist(mDist)}</span>
+          <span class="month-sub">${mTrips.length} 趟　${fmtDist(mDist)}　工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></span>
           ${mFareLine ? `<span class="month-fare">${mFareLine}</span>` : ''}
         </span>
       </div>
       <div class="month-days${monthOpen ? '' : ' collapsed'}" id="month-days-${mk}">${daysHtml}</div>`;
   }).join('');
+}
+
+// 設定歷史某日休息時間（小時）— 只就地更新該日/該月工作時長，避免整頁重繪收折
+function setHistoryRest(day, hoursStr) {
+  const hr = Math.max(0, parseFloat(hoursStr) || 0);
+  setRestMin(day, Math.round(hr * 60));
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const wEl = document.getElementById('work-' + day);
+  if (wEl) wEl.textContent = fmtWork(workMs(raw[day] || [], getRestMin(day)));
+  const mk = day.slice(0, 7);
+  const mEl = document.getElementById('mwork-' + mk);
+  if (mEl) {
+    const mWork = Object.keys(raw).filter(d => d.slice(0, 7) === mk)
+      .reduce((s, d) => s + workMs(raw[d] || [], getRestMin(d)), 0);
+    mEl.textContent = fmtWork(mWork);
+  }
 }
 
 function toggleMonth(mk) {
@@ -1468,10 +1507,9 @@ async function captureTripsScreenshot(dayKey) {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
-  // 右上角：日期（上）+ 開始→結束 ｜ 總時長（下）
-  const spanMs = lastEnd - firstStart;
-  const spanH = Math.floor(spanMs / 3600000), spanM = Math.floor((spanMs % 3600000) / 60000);
-  const spanLabel = spanH > 0 ? `${spanH}小時${spanM}分` : `${spanM}分`;
+  // 右上角：日期（上）+ 開始→結束 ｜ 工作時長（已扣休息）（下）
+  const restMin = getRestMin(dayKey || todayKey());
+  const spanLabel = fmtWork(workMs(trips, restMin));
   _drawRightTwoLines(c, W - 20,
     _fullDateLabel(firstStart), '13px system-ui, sans-serif', '#e8eaed', 46,
     fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd) + ' ｜ ' + spanLabel, '12px system-ui, sans-serif', '#9aa0a6', 66);
@@ -2188,6 +2226,31 @@ function fmtDur(ms) {
   const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
   if (h > 0) return `${h}h ${m%60}m`;
   return `${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+// 工作時長中文：X小時Y分
+function fmtWork(ms) {
+  const totalMin = Math.max(0, Math.round(ms / 60000));
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  return h > 0 ? `${h}小時${m}分` : `${m}分`;
+}
+
+// 每日休息時間（分鐘）儲存，key = dayKey
+const REST_KEY = 'maptrip_rest';
+function getRestMin(dayKey) {
+  try { return JSON.parse(localStorage.getItem(REST_KEY) || '{}')[dayKey] || 0; }
+  catch (_) { return 0; }
+}
+function setRestMin(dayKey, min) {
+  let r = {};
+  try { r = JSON.parse(localStorage.getItem(REST_KEY) || '{}'); } catch (_) {}
+  if (min > 0) r[dayKey] = min; else delete r[dayKey];
+  localStorage.setItem(REST_KEY, JSON.stringify(r));
+}
+// 一組行程的「實際工作時長」= (最後結束 - 第一筆開始) - 休息
+function workMs(trips, restMin) {
+  if (!trips || !trips.length) return 0;
+  const span = trips[trips.length - 1].endTime - trips[0].startTime;
+  return Math.max(0, span - (restMin || 0) * 60000);
 }
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }); }
 
