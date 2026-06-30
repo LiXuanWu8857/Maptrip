@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.163';
+const APP_VERSION  = '1.1.164';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -602,9 +602,10 @@ function showFareDialog(trip) {
   const cardBtn = document.getElementById('fare-card');
   const skipBtn = document.getElementById('fare-skip');
 
-  const save = async (fare, paymentMethod) => {
+  const save = async (fare, paymentMethod, label) => {
     trip.fare = fare;
     trip.paymentMethod = paymentMethod;
+    trip.label = label || '';
     cashBtn.textContent = '路線貼合中…'; cashBtn.disabled = true;
     cardBtn.disabled = true; skipBtn.disabled = true;
 
@@ -619,7 +620,11 @@ function showFareDialog(trip) {
 
   cashBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'cash');
   cardBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'card');
-  skipBtn.onclick = () => save(0, '');
+  // 其他：輸入名稱（如「騎腳踏車」），不需金額，時間照算進工作時間
+  skipBtn.onclick = () => {
+    const name = (prompt('輸入名稱（例如：騎腳踏車）', '') || '').trim();
+    save(0, 'other', name);
+  };
 }
 
 function saveTripFinal(trip) {
@@ -924,8 +929,8 @@ function renderTripSheet() {
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
         <div class="trip-stats">
           ${fmtDist(t.totalDist)}
-          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : ''}
-          <button class="fare-edit-btn" onclick="editFare(event,${i})">${t.fare ? '✏' : '＋金額'}</button>
+          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}
+          <button class="fare-edit-btn" onclick="editFare(event,${i})">${(t.fare || t.paymentMethod === 'other') ? '✏' : '＋金額'}</button>
         </div>
       </div>
       <span class="trip-shot" onclick="captureTodayTripShot(event,${i})">📷</span>
@@ -966,7 +971,7 @@ function editFare(e, idx) {
     document.getElementById('fare-overlay').style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
     document.getElementById('fare-header').textContent = '行程完成';
-    skipBtn.textContent = '略過';
+    skipBtn.textContent = '其他';
   };
 
   const saveEdit = (paymentMethod) => {
@@ -1261,7 +1266,7 @@ function renderHistorySheet() {
           <div class="trip-num">${i + 1}</div>
           <div class="trip-meta">
             <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-            <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : ''}</div>
+            <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}</div>
           </div>
           <span class="trip-shot" onclick="captureHistoryTripShot(event,'${day}',${i})">📷</span>
           <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
@@ -2141,8 +2146,8 @@ function businessDayKey(ts = Date.now()) {
 
 function todayKey() { return businessDayKey(); }
 
-function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod }) {
-  return { id, startTime, endTime, coords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(roadCoords ? { roadCoords } : {}) };
+function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label }) {
+  return { id, startTime, endTime, coords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(label ? { label } : {}), ...(roadCoords ? { roadCoords } : {}) };
 }
 
 function saveTodayToStorage() {
@@ -2202,6 +2207,11 @@ function fmtDist(m) { return !m ? '0 m' : m >= 1000 ? `${(m/1000).toFixed(1)} km
 function _payTag(pm) {
   if (pm === 'cash') return '<span class="pay-tag pay-cash">現金</span>';
   if (pm === 'card') return '<span class="pay-tag pay-card">刷卡</span>';
+  return '';
+}
+// 「其他」類行程的名稱標籤（如騎腳踏車）
+function _otherTag(t) {
+  if (t.paymentMethod === 'other') return `<span class="pay-tag pay-other">${t.label || '其他'}</span>`;
   return '';
 }
 // 統計一組行程的刷卡 / 現金 / 總計金額

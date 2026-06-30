@@ -569,6 +569,7 @@ html, body {
   padding: 1px 5px; border-radius: 5px; margin-left: 4px; vertical-align: middle; }
 .pay-cash { background: rgba(52,168,83,0.12); color: #34a853; }
 .pay-card { background: rgba(26,115,232,0.12); color: #1a73e8; }
+.pay-other { background: rgba(255,152,0,0.14); color: #e67e00; }
 
 .day-summary {
   display: flex; flex-direction: column; gap: 5px;
