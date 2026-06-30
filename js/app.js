@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.162';
+const APP_VERSION  = '1.1.163';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1507,12 +1507,12 @@ async function captureTripsScreenshot(dayKey) {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
-  // 右上角：日期（上）+ 開始→結束 ｜ 工作時長（已扣休息）（下）
+  // 右上角：日期（上）+ 工作時長（已扣休息）（下）
   const restMin = getRestMin(dayKey || todayKey());
   const spanLabel = fmtWork(workMs(trips, restMin));
   _drawRightTwoLines(c, W - 20,
     _fullDateLabel(firstStart), '13px system-ui, sans-serif', '#e8eaed', 46,
-    fmtTime(firstStart) + '  →  ' + fmtTime(lastEnd) + ' ｜ ' + spanLabel, '12px system-ui, sans-serif', '#9aa0a6', 66);
+    '工作 ' + spanLabel, '12px system-ui, sans-serif', '#9aa0a6', 66);
 
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
@@ -1565,10 +1565,10 @@ async function captureSingleTripScreenshot(trip) {
 
   // 左：去背 LOGO
   _drawBrand(c, 20, 28, 42);
-  // 右上：日期（上）+ 開始→結束時間（下），兩行互相置中
+  // 右上：日期（上）+ 工作時間（下），兩行互相置中
   _drawRightTwoLines(c, W - 20,
     _fullDateLabel(trip.startTime), '13px system-ui, sans-serif', '#e8eaed', 46,
-    fmtTime(trip.startTime) + '  →  ' + fmtTime(trip.endTime), '12px system-ui, sans-serif', '#9aa0a6', 66);
+    '工作 ' + fmtWork(trip.endTime - trip.startTime), '12px system-ui, sans-serif', '#9aa0a6', 66);
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
