@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.172';
+const APP_VERSION  = '1.1.173';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -199,9 +199,13 @@ function initMap() {
   }
 
   loadTodayFromStorage();
+  restoreActiveTripIfAny();   // 若上次重載/當掉時正在記錄，自動接回
   startGpsWatch();
   updateTopBar();
   setInterval(updateTopBar, 30000);
+  // 頁面即將卸載（重載/切走）前，把進行中的行程再存一次，把損失壓到最小
+  window.addEventListener('pagehide', saveActiveTrip);
+  window.addEventListener('beforeunload', saveActiveTrip);
 }
 
 function startGpsWatch() {
@@ -334,6 +338,7 @@ function onGpsUpdate(pos) {
     const last = activeTrip.coords.at(-1);
     if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
       activeTrip.coords.push({ lat, lng, t: Date.now() });
+      saveActiveTrip();   // 每存一個座標就更新復原暫存
       // 定期把累積軌跡貼合到道路上（即時更新折線）
       const n = activeTrip.coords.length;
       if (n >= 4 && n % LIVE_SNAP_PTS === 0 && !activeSnapPending) {
@@ -524,6 +529,7 @@ async function beginRecording() {
   liveAct()?.startTrip();
   // Android 浮動視窗切到「記錄中」狀態
   floatWin()?.showRecording({ elapsed: 0, distance: 0 }).catch(() => {});
+  saveActiveTrip();   // 立即存一份，供重載復原
 
   // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
   await requestWakeLock();
@@ -550,6 +556,7 @@ document.addEventListener('visibilitychange', () => {
 // fromFloat=true：由浮動視窗的「結束」鈕觸發 → 車資改用浮窗數字鍵盤輸入
 function endTrip(fromFloat) {
   if (!activeTrip) return;
+  clearActiveTrip();   // 行程正式結束，清掉復原暫存
   clearInterval(timerTick);  timerTick = null;
   liveAct()?.endTrip();
   clearTimeout(stoppedTimer); stoppedTimer = null;
@@ -583,6 +590,49 @@ function endTrip(fromFloat) {
     floatWin()?.showIdle().catch(() => {});
     showFareDialog(trip);
   }
+}
+
+// ===== 進行中行程的「當機／重載」復原 =====
+// 記錄中定期把 activeTrip 存本機；重開 App 若偵測到未結束的行程，自動接回繼續記錄。
+const ACTIVE_KEY = 'maptrip_active';
+function saveActiveTrip() {
+  if (!activeTrip) return;
+  try {
+    localStorage.setItem(ACTIVE_KEY, JSON.stringify({
+      id: activeTrip.id, startTime: activeTrip.startTime,
+      coords: activeTrip.coords, savedAt: Date.now()
+    }));
+  } catch (_) {}
+}
+function clearActiveTrip() { try { localStorage.removeItem(ACTIVE_KEY); } catch (_) {} }
+
+function restoreActiveTripIfAny() {
+  if (activeTrip) return;
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(ACTIVE_KEY) || 'null'); } catch (_) {}
+  if (!s || !Array.isArray(s.coords) || !s.coords.length) return;
+  if (s.savedAt && Date.now() - s.savedAt > 12 * 3600 * 1000) { clearActiveTrip(); return; }
+  activeTrip = { id: s.id, startTime: s.startTime, coords: s.coords };
+  activePolyline = L.polyline(s.coords.map(c => [c.lat, c.lng]),
+    { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
+  setAutoFollow(true);
+  const startBtn = document.getElementById('start-btn');
+  startBtn.onclick = () => endTrip();
+  startBtn.querySelector('.ctrl-icon').textContent = '■';
+  startBtn.querySelector('.ctrl-label').textContent = '結束';
+  startBtn.classList.add('recording');
+  document.getElementById('rec-banner').style.display = 'flex';
+  timerTick = setInterval(refreshRecBanner, 1000);
+  refreshRecBanner();
+  requestWakeLock();
+  try { liveAct()?.startTrip?.(); } catch (_) {}
+  try {
+    floatWin()?.showRecording({
+      elapsed: Math.floor((Date.now() - activeTrip.startTime) / 1000),
+      distance: Math.round(calcTotalDist(activeTrip.coords))
+    }).catch(() => {});
+  } catch (_) {}
+  toast('已接回記錄中的行程');
 }
 
 // 浮窗數字鍵盤按「確定/略過」後：把車資存到剛結束的那趟，並貼合路線存檔
