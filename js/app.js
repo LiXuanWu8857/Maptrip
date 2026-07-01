@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.178';
+const APP_VERSION  = '1.1.179';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -22,6 +22,7 @@ let autoFollow = false, wakeLock = null;
 let headingUp = false;          // 朝車頭模式（地圖旋轉跟隨行進方向）
 let lastHeading = 0, headingRefPos = null;
 let deviceCompassOn = false, lastMoveSpeed = 0;
+let myHeading = null;           // 我的位置朝向（GPS 行進方向 / 羅盤），供方向光束用
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, lastKnownPos = null;
 let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
@@ -101,7 +102,7 @@ function initMap() {
   // 地圖旋轉時，讓指北針的針頭永遠指向真正的北方
   if (map.setBearing) {
     document.getElementById('compass-btn').style.display = 'flex';
-    map.on('rotate', updateCompassNeedle);
+    map.on('rotate', () => { updateCompassNeedle(); updateMyHeadingArrow(); });
     updateCompassNeedle();
   }
 
@@ -311,11 +312,17 @@ function onGpsUpdate(pos) {
   // 背景續命：背景 GPS 回呼會持續觸發，藉此刷新鎖屏方塊的 staleDate
   if (isNative()) widgetHeartbeat();
 
+  // GPS 行進方向（移動時才可靠）→ 更新我的朝向
+  if (pos.coords.heading != null && !isNaN(pos.coords.heading) &&
+      pos.coords.heading >= 0 && effectiveSpeed > 1.5) {
+    myHeading = pos.coords.heading;
+  }
+
   if (!myDotMarker) {
     const icon = L.divIcon({
       className: '',
-      html: '<div style="width:16px;height:16px;border-radius:50%;background:#4285F4;border:2.5px solid #fff;box-shadow:0 0 6px rgba(66,133,244,0.6)"></div>',
-      iconSize: [16, 16], iconAnchor: [8, 8]
+      html: '<div class="myloc"><div class="myloc-rot" style="display:none"><div class="myloc-beam"></div></div><div class="myloc-dot"></div></div>',
+      iconSize: [60, 60], iconAnchor: [30, 30]
     });
     myDotMarker = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
     accuracyCircle = L.circle([lat, lng], {
@@ -327,6 +334,7 @@ function onGpsUpdate(pos) {
     myDotMarker.setLatLng([lat, lng]);
     accuracyCircle.setLatLng([lat, lng]).setRadius(acc);
   }
+  updateMyHeadingArrow();
 
   if (autoFollow) map.panTo([lat, lng], { animate: true, duration: 0.5 });
 
@@ -857,6 +865,7 @@ function makePreviewSquareIcon(dark) {
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
   setAutoFollow(true);
+  enableDeviceCompass();   // 開啟羅盤：停著也能顯示方向光束
   map.setView([currentPos.lat, currentPos.lng], 16);
 }
 
@@ -875,6 +884,19 @@ function updateCompassNeedle() {
   const n = document.getElementById('compass-needle');
   if (!n || !map.getBearing) return;
   n.style.transform = `rotate(${-map.getBearing()}deg)`;
+}
+
+// 我的位置方向光束：指向 myHeading（考慮地圖旋轉，畫面上永遠指對方向）
+function updateMyHeadingArrow() {
+  if (!myDotMarker || !myDotMarker.getElement) return;
+  const el = myDotMarker.getElement();
+  if (!el) return;
+  const rot = el.querySelector('.myloc-rot');
+  if (!rot) return;
+  if (myHeading == null) { rot.style.display = 'none'; return; }
+  const mapB = (map.getBearing && map.getBearing()) || 0;
+  rot.style.display = '';
+  rot.style.transform = `rotate(${myHeading + mapB}deg)`;
 }
 
 // 平滑旋轉：以 rAF 緩動到目標角度（走最短角度差），避免硬切造成卡頓
@@ -941,8 +963,6 @@ function enableDeviceCompass() {
 
 // 羅盤回呼：停著或低速時用手機朝向轉地圖；高速行駛時交給 GPS 方向
 function onDeviceOrient(e) {
-  if (!headingUp || !map.setBearing) return;
-  if (activeTrip && lastMoveSpeed > 2) return;   // 開車中優先用 GPS 方向
   let h = null;
   if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
     h = e.webkitCompassHeading;                  // iOS：0=北、順時針
@@ -950,8 +970,13 @@ function onDeviceOrient(e) {
     h = (360 - e.alpha) % 360;                   // Android
   }
   if (h == null || isNaN(h)) return;
-  lastHeading = h;
-  setTargetBearing(-h);
+  const driving = activeTrip && lastMoveSpeed > 2;   // 開車中優先用 GPS 方向
+  if (!driving) {
+    myHeading = h;                                // 停/慢速：羅盤朝向 = 我的朝向
+    updateMyHeadingArrow();
+    lastHeading = h;
+    if (headingUp && map.setBearing) setTargetBearing(-h);
+  }
 }
 
 // 記錄中每筆 GPS：若開啟朝車頭，讓地圖旋轉到行進方向
