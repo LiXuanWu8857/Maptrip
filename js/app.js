@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.168';
+const APP_VERSION  = '1.1.169';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -21,6 +21,7 @@ let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let headingUp = false;          // 朝車頭模式（地圖旋轉跟隨行進方向）
 let lastHeading = 0, headingRefPos = null;
+let deviceCompassOn = false, lastMoveSpeed = 0;
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, lastKnownPos = null;
 let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
@@ -831,7 +832,8 @@ function toggleCompass() {
   const btn = document.getElementById('compass-btn');
   if (headingUp) {
     btn.classList.add('heading-on');
-    if (lastHeading) map.setBearing(-lastHeading);   // 立即朝車頭
+    enableDeviceCompass();                            // 啟用手機羅盤（停著也能轉）
+    if (lastHeading) map.setBearing(-lastHeading);
     toast('地圖朝行進方向');
   } else {
     btn.classList.remove('heading-on');
@@ -840,8 +842,42 @@ function toggleCompass() {
   }
 }
 
+// 啟用手機羅盤：iOS 需經使用者手勢請求權限（指北針點擊即手勢）
+function enableDeviceCompass() {
+  if (deviceCompassOn) return;
+  const start = () => {
+    window.addEventListener('deviceorientationabsolute', onDeviceOrient, true);
+    window.addEventListener('deviceorientation', onDeviceOrient, true);
+    deviceCompassOn = true;
+  };
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission()
+        .then(res => { if (res === 'granted') start(); else toast('未授權羅盤，移動時仍會依 GPS 轉向'); })
+        .catch(() => {});
+    } else { start(); }
+  } catch (_) {}
+}
+
+// 羅盤回呼：停著或低速時用手機朝向轉地圖；高速行駛時交給 GPS 方向
+function onDeviceOrient(e) {
+  if (!headingUp || !map.setBearing) return;
+  if (activeTrip && lastMoveSpeed > 2) return;   // 開車中優先用 GPS 方向
+  let h = null;
+  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+    h = e.webkitCompassHeading;                  // iOS：0=北、順時針
+  } else if (e.alpha != null && (e.absolute || e.absolute === undefined)) {
+    h = (360 - e.alpha) % 360;                   // Android
+  }
+  if (h == null || isNaN(h)) return;
+  lastHeading = h;
+  map.setBearing(-h);
+}
+
 // 記錄中每筆 GPS：若開啟朝車頭，讓地圖旋轉到行進方向
 function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
+  lastMoveSpeed = effectiveSpeed || 0;
   if (!headingUp || !map.setBearing) return;
   if (soloSet.length || dayPreviewKey) return;   // 預覽/單趟模式不旋轉
   let heading = gpsHeading;
