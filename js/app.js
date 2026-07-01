@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.181';
+const APP_VERSION  = '1.1.182';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -879,24 +879,45 @@ function bearingBetween(a, b) {
   return (toD(Math.atan2(y, x)) + 360) % 360;
 }
 
+// 角度累積器：讓 CSS transition 永遠走最短路徑，
+// 跨 0°/360° 時不會反向繞一整圈（例：350°→10° 只轉 +20°，不轉 -340°）
+function _accumAngle(prev, targetDeg) {
+  const diff = ((targetDeg - prev) % 360 + 540) % 360 - 180;
+  return prev + diff;
+}
+
 // 指北針針頭旋轉，永遠指向真北（= 地圖 bearing 的反向）
+let _needleAnim = 0;
 function updateCompassNeedle() {
   const n = document.getElementById('compass-needle');
   if (!n || !map.getBearing) return;
-  n.style.transform = `rotate(${-map.getBearing()}deg)`;
+  _needleAnim = _accumAngle(_needleAnim, -map.getBearing());
+  n.style.transform = `rotate(${_needleAnim}deg)`;
 }
 
 // 我的位置方向光束：指向 myHeading（考慮地圖旋轉，畫面上永遠指對方向）
+let _beamAnim = null;
 function updateMyHeadingArrow() {
   if (!myDotMarker || !myDotMarker.getElement) return;
   const el = myDotMarker.getElement();
   if (!el) return;
   const rot = el.querySelector('.myloc-rot');
   if (!rot) return;
-  if (myHeading == null) { rot.style.display = 'none'; return; }
+  if (myHeading == null) return;   // 尚無方向資料，維持現狀（一旦顯示就不再隱藏）
   const mapB = (map.getBearing && map.getBearing()) || 0;
+  const target = myHeading + mapB;
   rot.style.display = '';
-  rot.style.transform = `rotate(${myHeading + mapB}deg)`;
+  if (_beamAnim == null) {
+    // 第一次顯示：直接定位、不做動畫（避免從 0 度掃一圈過去）
+    rot.style.transition = 'none';
+    _beamAnim = target;
+    rot.style.transform = `rotate(${_beamAnim}deg)`;
+    void rot.offsetWidth;
+    rot.style.transition = '';
+    return;
+  }
+  _beamAnim = _accumAngle(_beamAnim, target);
+  rot.style.transform = `rotate(${_beamAnim}deg)`;
 }
 
 // 平滑旋轉：以 rAF 緩動到目標角度（走最短角度差），避免硬切造成卡頓
@@ -943,8 +964,10 @@ function toggleCompass() {
   }
 }
 
-// 啟用手機羅盤：iOS 需經使用者手勢請求權限（指北針點擊即手勢）
-function enableDeviceCompass() {
+// 啟用手機羅盤：iOS 需經使用者手勢請求權限（指北針點擊即手勢）。
+// silent=true 用於開機自動嘗試：先前授權過就直接生效（不會跳視窗），
+// 尚未授權則安靜略過，等使用者按指北針/定位鈕時再正式請求。
+function enableDeviceCompass(silent) {
   if (deviceCompassOn) return;
   const start = () => {
     window.addEventListener('deviceorientationabsolute', onDeviceOrient, true);
@@ -955,7 +978,10 @@ function enableDeviceCompass() {
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       DeviceOrientationEvent.requestPermission()
-        .then(res => { if (res === 'granted') start(); else toast('未授權羅盤，移動時仍會依 GPS 轉向'); })
+        .then(res => {
+          if (res === 'granted') start();
+          else if (!silent) toast('未授權羅盤，移動時仍會依 GPS 轉向');
+        })
         .catch(() => {});
     } else { start(); }
   } catch (_) {}
@@ -2783,6 +2809,8 @@ function boot() {
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
   if (glBtn) glBtn.textContent = window.MAPTRIP_GL ? '🗺 換回標準地圖' : '🧪 新地圖引擎（Beta）';
+  // 開機自動嘗試啟用羅盤（先前授權過就生效），方向光束一開始就會顯示
+  setTimeout(() => { try { enableDeviceCompass(true); } catch (_) {} }, 800);
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
