@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.180';
+const APP_VERSION  = '1.1.181';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1052,7 +1052,18 @@ function _menuTouchEnd(e) {
   if (action === 'today') toggleTripList();
   else if (action === 'history') showHistory();
   else if (action === 'sync') openSyncDialog();
+  else if (action === 'glmap') toggleGlEngine();
 }
+
+// 切換地圖引擎：向量（MapLibre GL，旋轉時文字保持正立）↔ 標準（Leaflet）
+function toggleGlEngine() {
+  if (activeTrip) { toast('行程記錄中，請先結束再切換地圖引擎'); return; }
+  const on = localStorage.getItem('maptrip_gl') === '1';
+  if (on) localStorage.removeItem('maptrip_gl');
+  else localStorage.setItem('maptrip_gl', '1');
+  location.reload();
+}
+
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
   if (menu.style.display !== 'none') { closeTopMenu(); return; }
@@ -2769,6 +2780,9 @@ function boot() {
 
   document.body.classList.add('platform-' + nativePlatform());
   initMap();
+  // 依目前引擎更新選單文字
+  const glBtn = document.getElementById('glmap-menu-btn');
+  if (glBtn) glBtn.textContent = window.MAPTRIP_GL ? '🗺 換回標準地圖' : '🧪 新地圖引擎（Beta）';
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
