@@ -285,9 +285,9 @@ html, body {
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
 #bottom-buttons {
-  height: calc(47px + env(safe-area-inset-bottom, 0px));
+  height: 50px;                 /* 不再加 safe-area，貼近 home 條、減少白邊 */
+  padding: 0 12px 6px;
   display: flex; align-items: center; justify-content: space-around;
-  padding: 0 12px;
 }
 
 .ctrl-btn {
