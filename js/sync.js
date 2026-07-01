@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  let auth = null, db = null, user = null, unsub = null, ready = false;
+  let auth = null, db = null, user = null, unsub = null, unsubDel = null, ready = false;
   let cloudInfo = { days: 0, trips: 0, at: 0 };   // 雲端資料摘要（診斷用）
 
   function log(...a) { try { if (window.dbg) window.dbg('[sync] ' + a.join(' ')); } catch (_) {} }
@@ -39,7 +39,10 @@
   function onAuth(u) {
     updateUI();
     if (u) { pullAndListen(); }
-    else if (unsub) { unsub(); unsub = null; }
+    else {
+      if (unsub) { unsub(); unsub = null; }
+      if (unsubDel) { unsubDel(); unsubDel = null; }
+    }
   }
 
   // Email + 密碼登入：純 API、不靠彈窗/轉址，在 App 內嵌瀏覽器 100% 可用。
@@ -94,10 +97,68 @@
     return db.collection('users').doc(user.uid).collection('days');
   }
 
+  // 雲端刪除名單（墓碑）：讓「刪除」跨裝置生效，任何裝置都不會把刪掉的趟推回來
+  function deletedDoc() {
+    return db.collection('users').doc(user.uid).collection('meta').doc('deleted');
+  }
+
+  // 讀本機墓碑
+  function localTombstones() {
+    try { return JSON.parse(localStorage.getItem('maptrip_deleted') || '[]'); }
+    catch (_) { return []; }
+  }
+
+  // 雲端墓碑併入本機，並把該刪的趟從本機清掉；本機有新墓碑則推上雲端
+  function mergeCloudTombstones(cloudArr) {
+    const local = localTombstones();
+    const byId = new Map();
+    [...local, ...(cloudArr || [])].forEach(d => {
+      if (!d || d.id == null) return;
+      const ex = byId.get(d.id);
+      if (!ex || (d.at || 0) > (ex.at || 0)) byId.set(d.id, d);
+    });
+    const cutoff = Date.now() - 90 * 864e5;
+    const merged = [...byId.values()].filter(d => (d.at || 0) > cutoff);
+    localStorage.setItem('maptrip_deleted', JSON.stringify(merged));
+
+    // 本機若還留著已刪除的趟 → 清掉並刷新畫面
+    const dead = new Set(merged.map(d => d.id));
+    const localDays = getLocal();
+    let changed = false;
+    Object.keys(localDays).forEach(day => {
+      const before = (localDays[day] || []).length;
+      localDays[day] = (localDays[day] || []).filter(t => !dead.has(t.id));
+      if (localDays[day].length !== before) changed = true;
+      if (!localDays[day].length) delete localDays[day];
+    });
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localDays));
+      if (window.refreshAfterSync) window.refreshAfterSync();
+    }
+
+    // 本機墓碑比雲端多 → 推上去（推完雲端一致，不會無限循環）
+    const cloudIds = new Set((cloudArr || []).map(d => d && d.id));
+    if (merged.some(d => !cloudIds.has(d.id))) pushDeleted(merged);
+  }
+
+  async function pushDeleted(list) {
+    if (!ready || !user) return;
+    try {
+      const ids = list || localTombstones();
+      await deletedDoc().set({ ids, updatedAt: Date.now() });
+    } catch (e) { log('pushDel fail ' + (e && e.code)); }
+  }
+
   // 監聽雲端（首次也會收到一次完整快照 → 等同初次下載）
   function pullAndListen() {
     if (unsub) unsub();
+    if (unsubDel) unsubDel();
     try {
+      // 先訂閱刪除名單（墓碑），確保天資料抵達前就知道哪些趟已刪除
+      unsubDel = deletedDoc().onSnapshot(snap => {
+        mergeCloudTombstones((snap.exists && snap.data().ids) || []);
+      }, err => log('del snapshot err ' + (err && err.code)));
+
       unsub = daysCol().onSnapshot(snap => {
         const cloud = {};
         let tripCount = 0;
@@ -195,5 +256,5 @@
 
   function updateUI() { if (window.renderSyncPanel) window.renderSyncPanel(); }
 
-  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud };
+  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud, pushDeleted };
 })();

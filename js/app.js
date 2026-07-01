@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.179';
+const APP_VERSION  = '1.1.180';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -2461,9 +2461,10 @@ function removeTripFromStorage(id) {
     if (!raw[day].length) delete raw[day];
   });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
-  // 從雲端也移除該趟
-  if (window.MaptripSync && MaptripSync.deleteTripFromCloud) {
-    affected.forEach(day => MaptripSync.deleteTripFromCloud(day, id));
+  // 從雲端移除該趟 + 把刪除名單推上雲端（跨裝置生效）
+  if (window.MaptripSync) {
+    if (MaptripSync.deleteTripFromCloud) affected.forEach(day => MaptripSync.deleteTripFromCloud(day, id));
+    if (MaptripSync.pushDeleted) MaptripSync.pushDeleted();
   }
 }
 
