@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.167';</script>
+<script>window.INDEX_VERSION = '1.1.168';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -53,9 +53,9 @@ if (!sessionStorage.getItem('booted')) {
   z-index: 20 !important;
 }
 #bottom-buttons {
-  height: 50px;
-  display: flex; align-items: center; justify-content: space-around;
-  padding: 0 12px 6px;
+  height: 58px;
+  display: flex; align-items: flex-end; justify-content: space-around;
+  padding: 0 12px 4px;
 }
 .ctrl-btn  { padding: 2px 14px !important; gap: 2px !important; }
 .ctrl-icon { line-height: 1 !important; }
