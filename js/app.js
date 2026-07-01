@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.166';
+const APP_VERSION  = '1.1.167';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -19,6 +19,8 @@ let soloFromHistory = false;  // 從歷史紀錄進入 solo 模式時為 true
 let soloHistoryTile = null;   // 歷史 solo 時換用的無標示底圖
 let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
+let headingUp = false;          // 朝車頭模式（地圖旋轉跟隨行進方向）
+let lastHeading = 0, headingRefPos = null;
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, lastKnownPos = null;
 let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
@@ -88,9 +90,19 @@ function ensureBottomBarVisible() {
 
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0,
-                       preferCanvas: true })
+                       preferCanvas: true,
+                       // leaflet-rotate：允許程式旋轉，但關掉手勢旋轉（避免誤觸）
+                       rotate: true, rotateControl: false, touchRotate: false,
+                       shiftKeyRotate: false, bearing: 0 })
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
+
+  // 地圖旋轉時，讓指北針的針頭永遠指向真正的北方
+  if (map.setBearing) {
+    document.getElementById('compass-btn').style.display = 'flex';
+    map.on('rotate', updateCompassNeedle);
+    updateCompassNeedle();
+  }
 
   // WKWebView 首次載入時：容器尺寸常還沒就緒（地圖變灰），且安全區位移會把
   // 底部按鈕推到畫面外（home indicator 區）→ 點不到。fixLayout 同時處理兩者。
@@ -312,6 +324,7 @@ function onGpsUpdate(pos) {
   }
 
   if (autoFollow) map.panTo([lat, lng], { animate: true, duration: 0.5 });
+  applyHeadingUp(lat, lng, effectiveSpeed, pos.coords.heading);
 
   if (activeTrip) {
     // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）
@@ -794,6 +807,52 @@ function centerOnMe() {
   map.setView([currentPos.lat, currentPos.lng], 16);
 }
 
+// 兩點間方位角（度，正北為 0，順時針）
+function bearingBetween(a, b) {
+  const toR = d => d * Math.PI / 180, toD = r => r * 180 / Math.PI;
+  const dLon = toR(b.lng - a.lng);
+  const y = Math.sin(dLon) * Math.cos(toR(b.lat));
+  const x = Math.cos(toR(a.lat)) * Math.sin(toR(b.lat)) -
+            Math.sin(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.cos(dLon);
+  return (toD(Math.atan2(y, x)) + 360) % 360;
+}
+
+// 指北針針頭旋轉，永遠指向真北（= 地圖 bearing 的反向）
+function updateCompassNeedle() {
+  const n = document.getElementById('compass-needle');
+  if (!n || !map.getBearing) return;
+  n.style.transform = `rotate(${-map.getBearing()}deg)`;
+}
+
+// 按指北針：在「朝車頭」與「鎖定指北」間切換
+function toggleCompass() {
+  if (!map.setBearing) return;
+  headingUp = !headingUp;
+  const btn = document.getElementById('compass-btn');
+  if (headingUp) {
+    btn.classList.add('heading-on');
+    if (lastHeading) map.setBearing(-lastHeading);   // 立即朝車頭
+    toast('地圖朝行進方向');
+  } else {
+    btn.classList.remove('heading-on');
+    map.setBearing(0);                                // 鎖定指北
+    toast('地圖已鎖定指北');
+  }
+}
+
+// 記錄中每筆 GPS：若開啟朝車頭，讓地圖旋轉到行進方向
+function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
+  if (!headingUp || !map.setBearing) return;
+  if (soloSet.length || dayPreviewKey) return;   // 預覽/單趟模式不旋轉
+  let heading = gpsHeading;
+  if (heading == null || isNaN(heading) || heading < 0) {
+    if (headingRefPos && effectiveSpeed > 1) heading = bearingBetween(headingRefPos, { lat, lng });
+    else heading = lastHeading;
+  }
+  if (effectiveSpeed > 1) { lastHeading = heading; headingRefPos = { lat, lng }; }
+  if (effectiveSpeed > 0.8) map.setBearing(-lastHeading);
+}
+
 function updateTopBar() {
   // 顯示「營業日」日期（07:00 之前仍算前一天）
   const d = new Date(Date.now() - DAY_SPLIT_HOUR * 3600 * 1000);
@@ -1042,6 +1101,7 @@ function fitMapToRoute(coords, bottomElId, opts = {}) {
 // 設定要顯示的趟次集合與起始索引，然後渲染
 function openSoloTrip(set, idx, labelFn) {
   if (!set?.length) return;
+  if (map.setBearing) map.setBearing(0);   // 單趟檢視固定指北
   exitDayPreview();
   // 歷史模式：換成無標示底圖（CartoDB），退出時還原
   if (soloFromHistory) {
@@ -1330,6 +1390,7 @@ function previewDay(dayKey) {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const trips = raw[dayKey] || [];
   if (!trips.length) { toast('該日無行程'); return; }
+  if (map.setBearing) map.setBearing(0);   // 日預覽固定指北
   exitDayPreview();
   dayPreviewKey = dayKey;
   closeHistory();

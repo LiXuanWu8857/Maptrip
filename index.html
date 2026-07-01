@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.166';</script>
+<script>window.INDEX_VERSION = '1.1.167';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -195,6 +195,16 @@ if (!sessionStorage.getItem('booted')) {
   </svg>
 </button>
 
+<!-- 指北針：朝車頭模式時亮起；按下鎖定指北 -->
+<button id="compass-btn" onclick="toggleCompass()" title="指北針" style="display:none">
+  <span id="compass-needle">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+      <polygon points="12,3 8,13 12,11 16,13" fill="#EA4335"/>
+      <polygon points="12,21 8,11 12,13 16,11" fill="#9aa0a6"/>
+    </svg>
+  </span>
+</button>
+
 <!-- Trip List Sheet -->
 <div id="sheet-overlay" onclick="closeActiveSheet()" style="display:none"></div>
 <div id="trip-sheet" style="display:none">
@@ -317,7 +327,9 @@ if (!sessionStorage.getItem('booted')) {
   }
   function loadApp() {
     sessionStorage.removeItem('lfRetry');
-    loadScript('js/app.js?t=' + Date.now());
+    // 先載地圖旋轉外掛（朝車頭功能）；載入失敗也照常啟動 App
+    var startApp = function () { loadScript('js/app.js?t=' + Date.now()); };
+    loadScript('https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js', startApp, startApp);
   }
   function tryLeaflet(i) {
     if (typeof L !== 'undefined') { loadApp(); return; }

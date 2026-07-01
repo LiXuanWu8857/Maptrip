@@ -317,6 +317,25 @@ html, body {
 #locate-btn:active { background: #f1f3f4; }
 #locate-btn.follow-active { color: #1a73e8; }
 
+#compass-btn {
+  position: fixed;
+  bottom: calc(126px + env(safe-area-inset-bottom, 0px));   /* 疊在定位鈕上方 */
+  right: 14px;
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  background: #fff; border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(0,0,0,0.06);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 15; padding: 0;
+}
+#compass-btn:active { background: #f1f3f4; }
+#compass-btn.heading-on { box-shadow: 0 2px 8px rgba(26,115,232,0.4), 0 0 0 1.5px #1a73e8; }
+#compass-needle { display: flex; transition: transform 0.15s linear; }
+@media (prefers-color-scheme: dark) {
+  #compass-btn { background: #2d2d2d; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+  #compass-btn:active { background: #3a3a3a; }
+}
+
 .ctrl-icon { font-size: 1.3rem; line-height: 1; }
 .ctrl-label { font-size: 0.75rem; color: #3c4043; }
 #start-btn .ctrl-label { color: #1a73e8; }
