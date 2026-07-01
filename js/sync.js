@@ -115,15 +115,37 @@
 
   function getLocal() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
 
+  // 已刪除的趟 id（墓碑）：合併時要排除，避免刪掉的又被同步加回來
+  function deletedIdSet() {
+    try {
+      const arr = JSON.parse(localStorage.getItem('maptrip_deleted') || '[]');
+      return new Set(arr.map(d => d && d.id).filter(v => v != null));
+    } catch (_) { return new Set(); }
+  }
+
   function mergeTrips(a, b) {
     const map = new Map();
+    const dead = deletedIdSet();
     const score = x => (x.fare ? 1 : 0) + (x.roadCoords ? 2 : 0) + ((x.coords || []).length / 1e6);
     [...(a || []), ...(b || [])].forEach(t => {
-      if (!t || t.id == null) return;
+      if (!t || t.id == null || dead.has(t.id)) return;   // 排除墓碑
       const ex = map.get(t.id);
       if (!ex || score(t) > score(ex)) map.set(t.id, t);
     });
     return [...map.values()].sort((x, y) => x.startTime - y.startTime);
+  }
+
+  // 從雲端移除某趟（使用者明確刪除時）
+  async function deleteTripFromCloud(day, id) {
+    if (!ready || !user) return;
+    try {
+      const ref = daysCol().doc(day);
+      const snap = await ref.get();
+      if (!snap.exists) return;
+      const trips = (snap.data().trips || []).filter(t => t.id !== id);
+      if (trips.length) await ref.set({ trips, updatedAt: Date.now() });
+      else await ref.delete();
+    } catch (e) { log('delTrip fail ' + day + ' ' + (e && e.code)); }
   }
 
   function mergeCloudIntoLocal(cloud) {
@@ -173,5 +195,5 @@
 
   function updateUI() { if (window.renderSyncPanel) window.renderSyncPanel(); }
 
-  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy };
+  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud };
 })();

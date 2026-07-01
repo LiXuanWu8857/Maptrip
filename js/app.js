@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.177';
+const APP_VERSION  = '1.1.178';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -2386,8 +2386,13 @@ function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCo
 // localStorage 既有、但 todayTrips 這次沒帶到的趟「保留」，
 // 這樣即使 todayTrips 一時不完整，也絕不會把本機既有的行程弄丟。
 // （刪除走 removeTripFromStorage，不經過這裡的合併。）
+function _deletedIdSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]').map(d => d && d.id).filter(v => v != null)); }
+  catch (_) { return new Set(); }
+}
 function saveTodayToStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const dead = _deletedIdSet();
   const affected = new Set([todayKey()]);
   const grouped = {};
   for (const t of todayTrips) {
@@ -2397,8 +2402,8 @@ function saveTodayToStorage() {
   }
   affected.forEach(day => {
     const byId = new Map();
-    (raw[day] || []).forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
-    (grouped[day] || []).forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
+    (raw[day] || []).forEach(t => { if (t && t.id != null && !dead.has(t.id)) byId.set(t.id, t); });
+    (grouped[day] || []).forEach(t => { if (t && t.id != null && !dead.has(t.id)) byId.set(t.id, t); });
     const merged = [...byId.values()].sort((a, b) => a.startTime - b.startTime);
     if (merged.length) raw[day] = merged; else delete raw[day];
   });
@@ -2406,8 +2411,21 @@ function saveTodayToStorage() {
   if (window.MaptripSync) MaptripSync.syncDays([...affected]);
 }
 
-// 明確從本機移除某趟（供刪除使用，不會被合併存檔救回）
+// 刪除墓碑：記住已刪除的趟 id，讓合併同步不會把它加回來
+const DELETED_KEY = 'maptrip_deleted';
+function addDeletedId(id) {
+  let arr;
+  try { arr = JSON.parse(localStorage.getItem(DELETED_KEY) || '[]'); } catch (_) { arr = []; }
+  arr = arr.filter(d => d && d.id !== id);
+  arr.push({ id, at: Date.now() });
+  const cutoff = Date.now() - 90 * 864e5;   // 保留 90 天的墓碑
+  arr = arr.filter(d => (d.at || 0) > cutoff);
+  localStorage.setItem(DELETED_KEY, JSON.stringify(arr));
+}
+
+// 明確從本機移除某趟（供刪除使用，不會被合併存檔／雲端救回）
 function removeTripFromStorage(id) {
+  addDeletedId(id);   // 先立墓碑，避免同步又加回來
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const affected = [];
   Object.keys(raw).forEach(day => {
@@ -2418,7 +2436,10 @@ function removeTripFromStorage(id) {
     if (!raw[day].length) delete raw[day];
   });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
-  if (window.MaptripSync && affected.length) MaptripSync.syncDays(affected);
+  // 從雲端也移除該趟
+  if (window.MaptripSync && MaptripSync.deleteTripFromCloud) {
+    affected.forEach(day => MaptripSync.deleteTripFromCloud(day, id));
+  }
 }
 
 function loadTodayFromStorage() {
