@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.169';
+const APP_VERSION  = '1.1.170';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -825,6 +825,33 @@ function updateCompassNeedle() {
   n.style.transform = `rotate(${-map.getBearing()}deg)`;
 }
 
+// 平滑旋轉：以 rAF 緩動到目標角度（走最短角度差），避免硬切造成卡頓
+let _targetBearing = 0, _animBearing = 0, _bearingRAF = null;
+function setTargetBearing(deg) {
+  if (!map.setBearing) return;
+  _targetBearing = ((deg % 360) + 360) % 360;
+  if (_bearingRAF == null) _bearingRAF = requestAnimationFrame(_stepBearing);
+}
+function _stepBearing() {
+  let diff = ((_targetBearing - _animBearing + 540) % 360) - 180;   // -180..180 最短路徑
+  if (Math.abs(diff) < 0.4) {
+    _animBearing = _targetBearing;
+    map.setBearing(_animBearing);
+    _bearingRAF = null;
+    return;
+  }
+  _animBearing = (_animBearing + diff * 0.2 + 360) % 360;            // 每幀補 20%
+  map.setBearing(_animBearing);
+  _bearingRAF = requestAnimationFrame(_stepBearing);
+}
+// 立即歸位指北（切換到預覽/單趟時用，不做動畫）
+function resetBearingNow() {
+  if (!map.setBearing) return;
+  if (_bearingRAF != null) { cancelAnimationFrame(_bearingRAF); _bearingRAF = null; }
+  _targetBearing = _animBearing = 0;
+  map.setBearing(0);
+}
+
 // 按指北針：在「朝車頭」與「鎖定指北」間切換
 function toggleCompass() {
   if (!map.setBearing) return;
@@ -833,11 +860,11 @@ function toggleCompass() {
   if (headingUp) {
     btn.classList.add('heading-on');
     enableDeviceCompass();                            // 啟用手機羅盤（停著也能轉）
-    if (lastHeading) map.setBearing(-lastHeading);
+    if (lastHeading) setTargetBearing(-lastHeading);
     toast('地圖朝行進方向');
   } else {
     btn.classList.remove('heading-on');
-    map.setBearing(0);                                // 鎖定指北
+    setTargetBearing(0);                              // 平滑轉回指北
     toast('地圖已鎖定指北');
   }
 }
@@ -872,7 +899,7 @@ function onDeviceOrient(e) {
   }
   if (h == null || isNaN(h)) return;
   lastHeading = h;
-  map.setBearing(-h);
+  setTargetBearing(-h);
 }
 
 // 記錄中每筆 GPS：若開啟朝車頭，讓地圖旋轉到行進方向
@@ -886,7 +913,7 @@ function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
     else heading = lastHeading;
   }
   if (effectiveSpeed > 1) { lastHeading = heading; headingRefPos = { lat, lng }; }
-  if (effectiveSpeed > 0.8) map.setBearing(-lastHeading);
+  if (effectiveSpeed > 0.8) setTargetBearing(-lastHeading);
 }
 
 function updateTopBar() {
@@ -1137,7 +1164,7 @@ function fitMapToRoute(coords, bottomElId, opts = {}) {
 // 設定要顯示的趟次集合與起始索引，然後渲染
 function openSoloTrip(set, idx, labelFn) {
   if (!set?.length) return;
-  if (map.setBearing) map.setBearing(0);   // 單趟檢視固定指北
+  resetBearingNow();   // 單趟檢視固定指北
   exitDayPreview();
   // 歷史模式：換成無標示底圖（CartoDB），退出時還原
   if (soloFromHistory) {
@@ -1426,7 +1453,7 @@ function previewDay(dayKey) {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const trips = raw[dayKey] || [];
   if (!trips.length) { toast('該日無行程'); return; }
-  if (map.setBearing) map.setBearing(0);   // 日預覽固定指北
+  resetBearingNow();   // 日預覽固定指北
   exitDayPreview();
   dayPreviewKey = dayKey;
   closeHistory();
