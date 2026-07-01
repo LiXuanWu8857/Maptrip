@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.170';
+const APP_VERSION  = '1.1.171';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -325,7 +325,6 @@ function onGpsUpdate(pos) {
   }
 
   if (autoFollow) map.panTo([lat, lng], { animate: true, duration: 0.5 });
-  applyHeadingUp(lat, lng, effectiveSpeed, pos.coords.heading);
 
   if (activeTrip) {
     // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）
@@ -346,6 +345,9 @@ function onGpsUpdate(pos) {
   } else {
     checkAutoStart(effectiveSpeed);
   }
+
+  // 地圖朝車頭旋轉放最後，並包 try/catch：即使旋轉出錯也絕不影響上面的行程記錄
+  try { applyHeadingUp(lat, lng, effectiveSpeed, pos.coords.heading); } catch (_) {}
 }
 
 function checkArrival(speed) {
