@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.182';
+const APP_VERSION  = '1.1.183';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -2440,8 +2440,47 @@ function businessDayKey(ts = Date.now()) {
 
 function todayKey() { return businessDayKey(); }
 
+// 座標 5 位小數 ≈ 1.1m 精度：對顯示/統計無感，但 JSON 體積省一半以上
+function _r5(v) { return Math.round(v * 1e5) / 1e5; }
+
+// Douglas-Peucker 路線簡化（迭代版，tol 以「度」為單位，0.00004 ≈ 4.4m）。
+// 只用在道路貼合線（畫線用），totalDist 統計早已存好，不受影響。
+function _simplifyPath(pts, tol) {
+  if (!pts || pts.length <= 2) return pts;
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    let maxD = 0, maxI = -1;
+    const ax = pts[a].lng, ay = pts[a].lat, bx = pts[b].lng, by = pts[b].lat;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    for (let i = a + 1; i < b; i++) {
+      let d;
+      if (len2 === 0) {
+        d = Math.hypot(pts[i].lng - ax, pts[i].lat - ay);
+      } else {
+        const t = ((pts[i].lng - ax) * dx + (pts[i].lat - ay) * dy) / len2;
+        const cl = Math.max(0, Math.min(1, t));
+        d = Math.hypot(pts[i].lng - (ax + cl * dx), pts[i].lat - (ay + cl * dy));
+      }
+      if (d > maxD) { maxD = d; maxI = i; }
+    }
+    if (maxD > tol && maxI > 0) { keep[maxI] = 1; stack.push([a, maxI], [maxI, b]); }
+  }
+  const out = [];
+  for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i]);
+  return out;
+}
+
 function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label }) {
-  return { id, startTime, endTime, coords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(label ? { label } : {}), ...(roadCoords ? { roadCoords } : {}) };
+  const slimCoords = (coords || []).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng), t: c.t }));
+  let slimRoad = null;
+  if (roadCoords) {
+    slimRoad = _simplifyPath(roadCoords, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));
+  }
+  return { id, startTime, endTime, coords: slimCoords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(label ? { label } : {}), ...(slimRoad ? { roadCoords: slimRoad } : {}) };
 }
 
 // 合併式存檔：以趟 id 為鍵，todayTrips（目前/編輯後）優先覆蓋；

@@ -9,6 +9,7 @@
 
   let auth = null, db = null, user = null, unsub = null, unsubDel = null, ready = false;
   let cloudInfo = { days: 0, trips: 0, at: 0 };   // 雲端資料摘要（診斷用）
+  const warnedDays = new Set();                    // 已提示過備份失敗的日期（避免重複跳提示）
 
   function log(...a) { try { if (window.dbg) window.dbg('[sync] ' + a.join(' ')); } catch (_) {} }
   function toastMsg(m) { try { if (window.toast) window.toast(m); } catch (_) {} }
@@ -243,7 +244,15 @@
       const merged = mergeTrips(local, cloud);
       if (merged.length) await ref.set({ trips: merged, updatedAt: Date.now() });
       // 不再自動刪除雲端整天資料，避免本機異常把雲端清空（資料安全優先）
-    } catch (e) { log('syncDay fail ' + day + ' ' + (e && e.code)); }
+      warnedDays.delete(day);
+    } catch (e) {
+      log('syncDay fail ' + day + ' ' + (e && e.code));
+      // 備份失敗要讓使用者知道（例如單日資料超過 Firestore 1MB 上限）
+      if (!warnedDays.has(day)) {
+        warnedDays.add(day);
+        toastMsg('⚠ 雲端備份失敗：' + day + '（' + ((e && e.code) || '未知錯誤') + '）');
+      }
+    }
   }
 
   function syncDays(keys) { if (ready && user && keys) keys.forEach(syncDay); }
