@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.176';
+const APP_VERSION  = '1.1.177';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -2085,7 +2085,9 @@ function renderSyncPanel() {
       '<button class="sync-google" ' + (busy ? 'disabled' : '') + ' onclick="submitSyncLogin()">' +
       (busy ? '登入中…' : '登入 / 註冊') + '</button>';
   } else {
-    statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>';
+    const c = st.cloud || { days: 0, trips: 0 };
+    statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>'
+      + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟</span>';
     actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>';
   }
 }

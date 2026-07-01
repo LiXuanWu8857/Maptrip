@@ -8,6 +8,7 @@
   'use strict';
 
   let auth = null, db = null, user = null, unsub = null, ready = false;
+  let cloudInfo = { days: 0, trips: 0, at: 0 };   // 雲端資料摘要（診斷用）
 
   function log(...a) { try { if (window.dbg) window.dbg('[sync] ' + a.join(' ')); } catch (_) {} }
   function toastMsg(m) { try { if (window.toast) window.toast(m); } catch (_) {} }
@@ -99,7 +100,14 @@
     try {
       unsub = daysCol().onSnapshot(snap => {
         const cloud = {};
-        snap.forEach(doc => { cloud[doc.id] = doc.data().trips || []; });
+        let tripCount = 0;
+        snap.forEach(doc => {
+          const trips = doc.data().trips || [];
+          cloud[doc.id] = trips;
+          tripCount += trips.length;
+        });
+        cloudInfo = { days: snap.size, trips: tripCount, at: Date.now() };
+        updateUI();
         mergeCloudIntoLocal(cloud);
       }, err => log('snapshot err ' + (err && err.code)));
     } catch (e) { log('listen failed'); }
@@ -160,7 +168,7 @@
   function status() {
     if (!cfgValid(window.FIREBASE_CONFIG) || typeof firebase === 'undefined') return { state: 'unconfigured' };
     if (!user) return { state: 'signedout' };
-    return { state: 'signedin', email: user.email, name: user.displayName };
+    return { state: 'signedin', email: user.email, name: user.displayName, cloud: cloudInfo };
   }
 
   function updateUI() { if (window.renderSyncPanel) window.renderSyncPanel(); }
