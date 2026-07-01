@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.174';
+const APP_VERSION  = '1.1.175';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1139,7 +1139,7 @@ function editFare(e, idx) {
 
   document.getElementById('fare-overlay').style.display = 'block';
   document.getElementById('fare-dialog').classList.add('show');
-  setTimeout(() => input.focus(), 300);
+  // 編輯時不自動彈鍵盤：讓「現金/刷卡」按鈕不被鍵盤蓋住，可直接點選切換
 
   const close = () => {
     document.getElementById('fare-overlay').style.display = 'none';
@@ -1184,7 +1184,7 @@ function editHistoryFare(e, day, idx) {
 
   document.getElementById('fare-overlay').style.display = 'block';
   document.getElementById('fare-dialog').classList.add('show');
-  setTimeout(() => input.focus(), 300);
+  // 編輯時不自動彈鍵盤：可直接點現金/刷卡切換
 
   const close = () => {
     document.getElementById('fare-overlay').style.display = 'none';

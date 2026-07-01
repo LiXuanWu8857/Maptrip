@@ -630,8 +630,8 @@ html, body {
 .trip-fare-tag { color: #1a73e8; font-weight: 600; }
 .fare-edit-btn {
   background: none; border: none;
-  color: #1a73e8; font-size: 0.78rem;
-  cursor: pointer; padding: 0 4px;
+  color: #1a73e8; font-size: 0.82rem;
+  cursor: pointer; padding: 4px 8px;
   font-family: inherit; vertical-align: middle;
 }
 
