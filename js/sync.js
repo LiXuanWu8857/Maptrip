@@ -142,10 +142,16 @@
 
   async function syncDay(day) {
     if (!ready || !user) return;
-    const trips = getLocal()[day];
+    const local = getLocal()[day] || [];
     try {
-      if (trips && trips.length) await daysCol().doc(day).set({ trips, updatedAt: Date.now() });
-      else await daysCol().doc(day).delete();
+      const ref = daysCol().doc(day);
+      // 先讀雲端現有資料，與本機「合併」（依 id 聯集、保留較完整那筆），再寫回。
+      // 這樣即使本機一時異常少了幾趟，也絕不會把雲端已有的資料覆蓋掉／刪掉。
+      let cloud = [];
+      try { const snap = await ref.get(); if (snap.exists) cloud = snap.data().trips || []; } catch (_) {}
+      const merged = mergeTrips(local, cloud);
+      if (merged.length) await ref.set({ trips: merged, updatedAt: Date.now() });
+      // 不再自動刪除雲端整天資料，避免本機異常把雲端清空（資料安全優先）
     } catch (e) { log('syncDay fail ' + day + ' ' + (e && e.code)); }
   }
 
