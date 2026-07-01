@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.175';
+const APP_VERSION  = '1.1.176';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1424,7 +1424,8 @@ function deleteTodayTrip(e, idx) {
   const t = todayTrips[idx];
   if (t._layers) t._layers.forEach(l => map.removeLayer(l));
   todayTrips.splice(idx, 1);
-  saveTodayToStorage(); updateTopBar(); renderTripSheet();
+  removeTripFromStorage(t.id);   // 明確移除該趟（合併存檔不會救回）
+  updateTopBar(); renderTripSheet();
   toast(`已刪除第 ${idx + 1} 趟`);
 }
 
@@ -1433,8 +1434,11 @@ function confirmClearDay() {
   if (!confirm(`確定清除今日全部 ${todayTrips.length} 趟行程？`)) return;
   exitSoloMode();
   allMapLayers.forEach(l => map.removeLayer(l));
-  allMapLayers = []; todayTrips = [];
-  saveTodayToStorage(); updateTopBar(); closeSheet();
+  allMapLayers = [];
+  // 明確逐趟移除本機（合併存檔不會救回），再清空記憶體
+  todayTrips.slice().forEach(t => removeTripFromStorage(t.id));
+  todayTrips = [];
+  updateTopBar(); closeSheet();
   toast('今日行程已清除');
 }
 
@@ -2376,24 +2380,43 @@ function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCo
   return { id, startTime, endTime, coords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(label ? { label } : {}), ...(roadCoords ? { roadCoords } : {}) };
 }
 
+// 合併式存檔：以趟 id 為鍵，todayTrips（目前/編輯後）優先覆蓋；
+// localStorage 既有、但 todayTrips 這次沒帶到的趟「保留」，
+// 這樣即使 todayTrips 一時不完整，也絕不會把本機既有的行程弄丟。
+// （刪除走 removeTripFromStorage，不經過這裡的合併。）
 function saveTodayToStorage() {
   const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const affected = new Set([todayKey()]);
-  // 先移除今天這一格的舊資料，刪除／清空才會真的寫回（否則 Object.assign 不會覆蓋空陣列）
-  delete raw[todayKey()];
-  // 依每趟「開始時間」的營業日歸檔，跨 7:00 也不會把昨天的行程蓋掉
   const grouped = {};
   for (const t of todayTrips) {
     const key = businessDayKey(t.startTime);
     affected.add(key);
     (grouped[key] = grouped[key] || []).push(serializeTrip(t));
   }
-  Object.assign(raw, grouped);
-  // 清掉任何空陣列的日期，歷史清單才不會出現空白日
-  Object.keys(raw).forEach(k => { if (!raw[k] || !raw[k].length) delete raw[k]; });
+  affected.forEach(day => {
+    const byId = new Map();
+    (raw[day] || []).forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
+    (grouped[day] || []).forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
+    const merged = [...byId.values()].sort((a, b) => a.startTime - b.startTime);
+    if (merged.length) raw[day] = merged; else delete raw[day];
+  });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
-  // 推送變動的日期到雲端（未登入／未設定時 no-op）
   if (window.MaptripSync) MaptripSync.syncDays([...affected]);
+}
+
+// 明確從本機移除某趟（供刪除使用，不會被合併存檔救回）
+function removeTripFromStorage(id) {
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const affected = [];
+  Object.keys(raw).forEach(day => {
+    if (!Array.isArray(raw[day])) return;
+    const before = raw[day].length;
+    raw[day] = raw[day].filter(t => t.id !== id);
+    if (raw[day].length !== before) affected.push(day);
+    if (!raw[day].length) delete raw[day];
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+  if (window.MaptripSync && affected.length) MaptripSync.syncDays(affected);
 }
 
 function loadTodayFromStorage() {
