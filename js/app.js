@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.173';
+const APP_VERSION  = '1.1.174';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -1161,6 +1161,55 @@ function editFare(e, idx) {
   skipBtn.onclick = close;
 }
 
+// 編輯「歷史」某趟的金額 / 現金刷卡
+function editHistoryFare(e, day, idx) {
+  e.stopPropagation();
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const trip = (raw[day] || [])[idx];
+  if (!trip) return;
+
+  document.getElementById('fs-start').textContent = fmtTime(trip.startTime);
+  document.getElementById('fs-end').textContent   = fmtTime(trip.endTime);
+  document.getElementById('fs-dur').textContent   = fmtDur(trip.endTime - trip.startTime);
+  document.getElementById('fs-dist').textContent  = fmtDist(trip.totalDist);
+  document.getElementById('fare-header').textContent = `${day} 第 ${idx + 1} 趟 — 編輯`;
+
+  const input   = document.getElementById('fare-input');
+  const cashBtn = document.getElementById('fare-cash');
+  const cardBtn = document.getElementById('fare-card');
+  const skipBtn = document.getElementById('fare-skip');
+  input.value = trip.fare || '';
+  cashBtn.disabled = false; cardBtn.disabled = false;
+  skipBtn.textContent = '取消'; skipBtn.disabled = false;
+
+  document.getElementById('fare-overlay').style.display = 'block';
+  document.getElementById('fare-dialog').classList.add('show');
+  setTimeout(() => input.focus(), 300);
+
+  const close = () => {
+    document.getElementById('fare-overlay').style.display = 'none';
+    document.getElementById('fare-dialog').classList.remove('show');
+    document.getElementById('fare-header').textContent = '行程完成';
+    skipBtn.textContent = '其他';
+  };
+
+  const saveEdit = (paymentMethod) => {
+    const cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (cur[day] && cur[day][idx]) {
+      cur[day][idx].fare = parseInt(input.value) || 0;
+      cur[day][idx].paymentMethod = paymentMethod;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
+      if (window.MaptripSync) MaptripSync.syncDays([day]);
+    }
+    close();
+    renderHistorySheet();
+  };
+
+  cashBtn.onclick = () => saveEdit('cash');
+  cardBtn.onclick = () => saveEdit('card');
+  skipBtn.onclick = close;
+}
+
 // 把 "2026-06-17" 格式的 dayKey 轉成「6月17日 週三」
 function dayKeyToLabel(dayKey) {
   const [y, m, d] = dayKey.split('-').map(Number);
@@ -1443,6 +1492,7 @@ function renderHistorySheet() {
             <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
             <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}</div>
           </div>
+          <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${i})">✏</span>
           <span class="trip-shot" onclick="captureHistoryTripShot(event,'${day}',${i})">📷</span>
           <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
         </div>`).join('');
