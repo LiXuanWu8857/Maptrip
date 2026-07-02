@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.189';
+const APP_VERSION  = '1.1.190';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -642,32 +642,44 @@ function endTrip(fromFloat) {
   }
 }
 
-// 更新「已落盤」的行程：補車資 / 付款方式 / 貼路座標，並重畫該趟路線
+// 更新「已落盤」的行程：補車資 / 付款方式 / 貼路座標，並重畫該趟路線。
+// 注意：貼路是慢速網路操作，期間畫面可能被雲端同步刷新（todayTrips 換成新物件），
+// 所以寫回時一律用「行程 id」重新定位，不依賴物件同一性，否則結果會寫到孤兒物件上遺失。
 async function finalizeSavedTrip(trip, fare, paymentMethod, label) {
-  trip.fare = fare;
-  trip.paymentMethod = paymentMethod;
-  if (label !== undefined) trip.label = label || '';
-  saveTodayToStorage();   // 車資先存（貼路是慢速網路操作，成功與否不影響金額）
+  const apply = (t) => {
+    t.fare = fare;
+    t.paymentMethod = paymentMethod;
+    if (label !== undefined) t.label = label || '';
+  };
+  apply(trip);
+  let mem = todayTrips.find(t => t.id === trip.id);
+  if (mem && mem !== trip) apply(mem);
+  saveTodayToStorage();   // 車資先存（貼路成功與否不影響金額）
   updateTopBar();
+
   const road = await snapToRoads(trip.coords);
   if (road) {
-    trip.roadCoords = road;
-    // 貼路成功 → 原始 GPS 座標只留頭尾（畫線/回放/截圖一律用 roadCoords，
-    // 縮掉可大幅省儲存空間；貼路失敗的趟保留完整座標，開機時會自動重試）
-    if (trip.coords && trip.coords.length > 2) {
-      trip.coords = [trip.coords[0], trip.coords[trip.coords.length - 1]];
+    // 以 id 重新定位目前清單中的那筆（可能已被同步刷新換新）
+    mem = todayTrips.find(t => t.id === trip.id) || trip;
+    mem.roadCoords = road;
+    // 貼路成功 → 原始 GPS 座標只留頭尾（畫線/回放/截圖一律用 roadCoords）
+    if (mem.coords && mem.coords.length > 2) {
+      mem.coords = [mem.coords[0], mem.coords[mem.coords.length - 1]];
     }
     // 重畫這趟的路線（換成貼路座標）
-    const idx = todayTrips.indexOf(trip);
-    if (idx >= 0 && trip._layers) {
-      trip._layers.forEach(l => {
+    const idx = todayTrips.indexOf(mem);
+    if (idx >= 0) {
+      (mem._layers || []).forEach(l => {
         try { map.removeLayer(l); } catch (_) {}
         const j = allMapLayers.indexOf(l);
         if (j >= 0) allMapLayers.splice(j, 1);
       });
-      drawTripLine(trip, idx + 1);
+      drawTripLine(mem, idx + 1);
     }
     saveTodayToStorage();
+  } else {
+    // 貼路失敗：60 秒後自動重試（不必等下次開機）
+    setTimeout(() => { if (!activeTrip) retrySnapBacklog(2); }, 60000);
   }
   const ts = document.getElementById('trip-sheet');
   if (ts && ts.style.display !== 'none') renderTripSheet();
@@ -2708,6 +2720,19 @@ async function retrySnapBacklog(maxTrips = 5) {
         .map(c => ({ lat: c.lat, lng: c.lng }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
       if (window.MaptripSync) MaptripSync.syncDays([j.day]);
+      // 今日清單中的趟 → 同步記憶體並立即重畫成貼路線
+      const memT = todayTrips.find(t => t.id === j.id);
+      if (memT) {
+        memT.roadCoords = trip.roadCoords;
+        memT.coords = trip.coords;
+        const mi = todayTrips.indexOf(memT);
+        (memT._layers || []).forEach(l => {
+          try { map.removeLayer(l); } catch (_) {}
+          const k = allMapLayers.indexOf(l);
+          if (k >= 0) allMapLayers.splice(k, 1);
+        });
+        drawTripLine(memT, mi + 1);
+      }
       done++;
       await new Promise(r => setTimeout(r, 800));   // 節流
     }
