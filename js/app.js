@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.192';
+const APP_VERSION  = '1.1.193';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -92,6 +92,34 @@ function ensureBottomBarVisible() {
 }
 
 function initMap() {
+  // leaflet-rotate 已知問題修補（外掛原始碼中作者自留 @TODO）：
+  // 捏合「同時」縮放+旋轉會讓圖層變換與內部座標脫鉤 —— 實測每次手勢偏移 ~7px 且會累積，
+  // 這就是「縮放時路徑亂跑、貼不回地圖」的元兇。修補成 Google 地圖式手勢鎖定：
+  // 依先達到門檻者鎖定為「縮放」或「旋轉」，二擇一，杜絕同時變換。
+  if (L.Map && L.Map.TouchGestures && !L.Map.TouchGestures.__gLockPatched) {
+    L.Map.TouchGestures.__gLockPatched = true;
+    const proto = L.Map.TouchGestures.prototype;
+    const origStart = proto._onTouchStart, origMove = proto._onTouchMove, origEnd = proto._onTouchEnd;
+    proto._onTouchStart = function (e) { this._gLock = null; return origStart.call(this, e); };
+    proto._onTouchMove = function (e) {
+      if (e.touches && e.touches.length === 2 && this._zooming && this._rotating && this._gLock == null) {
+        const m = this._map;
+        const p1 = m.mouseEventToContainerPoint(e.touches[0]);
+        const p2 = m.mouseEventToContainerPoint(e.touches[1]);
+        const scale = p1.distanceTo(p2) / this._startDist;
+        const v = p1.subtract(p2);
+        let dB = (Math.atan(v.x / v.y) - this._startTheta) * 180 / Math.PI;
+        if (v.y < 0) dB += 180;
+        dB = ((dB + 540) % 360) - 180;
+        const zd = Math.abs(Math.log2(scale));
+        if (zd > 0.12)              { this._gLock = 'zoom';   this._rotating = false; }
+        else if (Math.abs(dB) > 12) { this._gLock = 'rotate'; this._zooming  = false; }
+      }
+      return origMove.call(this, e);
+    };
+    proto._onTouchEnd = function () { this._gLock = null; return origEnd.apply(this, arguments); };
+  }
+
   map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0,
                        // 用 SVG 繪圖器：Canvas 與 leaflet-rotate 不相容，
                        // 旋轉狀態下縮放時線條會錯位亂跑
