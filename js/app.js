@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.198';
+const APP_VERSION  = '1.1.199';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -208,9 +208,21 @@ function initMap() {
       _animBearing = _targetBearing = ((map.getBearing() % 360) + 360) % 360;
     }
   };
-  mapEl.addEventListener('touchstart', trackTouch, { passive: true });
-  mapEl.addEventListener('touchend', (e) => { trackTouch(e); if (_mapTouching === 0) { resyncLiveLine(); scheduleFollowResume(); } }, { passive: true });
-  mapEl.addEventListener('touchcancel', (e) => { trackTouch(e); if (_mapTouching === 0) { resyncLiveLine(); scheduleFollowResume(); } }, { passive: true });
+  // 計數掛在 document（不能只掛 #map）：手指在地圖按下、卻在懸浮按鈕/彈窗上放開時，
+  // #map 收不到那個 touchend，計數會永遠卡在 >0 → 跟隨/旋轉/歸位全部停擺
+  document.addEventListener('touchstart', trackTouch, { passive: true });
+  document.addEventListener('touchend', trackTouch, { passive: true });
+  document.addEventListener('touchcancel', trackTouch, { passive: true });
+  const mapTouchDone = (e) => {
+    trackTouch(e);
+    if (_mapTouching !== 0) return;
+    resyncLiveLine();
+    // 沒在跟隨時，手指離開地圖也排一次 5 秒歸位（檢視單趟/日預覽時除外）
+    if (!autoFollow && !soloSet.length && !dayPreviewKey && currentPos) _wantFollowResume = true;
+    scheduleFollowResume();
+  };
+  mapEl.addEventListener('touchend', mapTouchDone, { passive: true });
+  mapEl.addEventListener('touchcancel', mapTouchDone, { passive: true });
 
   // 縮放動畫期間「絕不」改動向量線（Leaflet 縮放中改線會用新座標系重算、疊在舊變換上 → 整條線飛走）
   map.on('zoomstart', () => { _mapZooming = true; });
@@ -1191,6 +1203,7 @@ function resetBearingNow() {
 function toggleCompass() {
   if (!map.setBearing) return;
   headingUp = !headingUp;
+  try { localStorage.setItem('maptrip_headup', headingUp ? '1' : '0'); } catch (_) {}
   const btn = document.getElementById('compass-btn');
   if (headingUp) {
     btn.classList.add('heading-on');
@@ -1236,7 +1249,9 @@ function onDeviceOrient(e) {
     h = (360 - e.alpha) % 360;                   // Android
   }
   if (h == null || isNaN(h)) return;
-  const driving = activeTrip && lastMoveSpeed > 2;   // 開車中優先用 GPS 方向
+  // 只要在移動就優先用 GPS 行進方向（不限記錄中）：
+  // 手機架在車上時羅盤指的是「手機面向」而非行進方向，行進中會與實際方向不符
+  const driving = lastMoveSpeed > 1.2;
   if (!driving) {
     myHeading = h;                                // 停/慢速：羅盤朝向 = 我的朝向
     updateMyHeadingArrow();
@@ -3251,6 +3266,11 @@ function boot() {
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
   if (glBtn) glBtn.textContent = window.MAPTRIP_GL ? '🗺 換回標準地圖' : '🧪 新地圖引擎（Beta）';
+  // 朝行進方向預設開啟（按指北針可關，選擇會記住）
+  try {
+    headingUp = localStorage.getItem('maptrip_headup') !== '0';
+    if (headingUp) document.getElementById('compass-btn')?.classList.add('heading-on');
+  } catch (_) {}
   // 開機自動嘗試啟用羅盤（先前授權過就生效），方向光束一開始就會顯示
   setTimeout(() => { try { enableDeviceCompass(true); } catch (_) {} }, 800);
   // 開機 10 秒後補貼路（未在記錄中才跑），逐步把「直線趟」修成真實路線

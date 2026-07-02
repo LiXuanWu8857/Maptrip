@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.198';</script>
+<script>window.INDEX_VERSION = '1.1.199';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -65,21 +65,17 @@ if (!sessionStorage.getItem('booted')) {
   #bottom-bar { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
 }
 </style>
-<!-- WKWebView reload fix：重新整理後 viewport 已下移 safe-area-inset-top px，
-     env(safe-area-inset-top) 仍回傳原值，造成 top-bar 雙重偏移。
-     偵測到 reload 時立即注入 top:0 覆寫，消除多餘間距。 -->
+<!-- WKWebView safe-area fix：某些狀態（重新整理、App 被系統回收後復原）viewport 會整個
+     下移 safe-area-inset-top px，但 env(safe-area-inset-top) 仍回傳原值，
+     造成固定元素雙重下移（頂列上方露出一條地圖）。
+     不再只靠「是不是 reload」猜測：直接量測 viewport 是否已不滿版來決定要不要套 top:0，
+     並在載入、回前景、轉向、視窗改變時重新判斷。 -->
 <script>
 (function () {
-  try {
-    var navType = '';
-    var navEntries = performance.getEntriesByType('navigation');
-    if (navEntries.length) {
-      navType = navEntries[0].type;
-    } else if (performance.navigation) {
-      navType = performance.navigation.type === 1 ? 'reload' : 'navigate';
-    }
-    if (navType === 'reload') {
-      var s = document.createElement('style');
+  function setFix(on) {
+    var s = document.getElementById('reload-fix');
+    if (on && !s) {
+      s = document.createElement('style');
       s.id = 'reload-fix';
       s.textContent =
         '#top-bar{top:0!important}' +
@@ -89,8 +85,43 @@ if (!sessionStorage.getItem('booted')) {
         '#autostart-banner.show{top:56px!important}' +
         '#arrival-banner.show{top:56px!important}';
       document.head.appendChild(s);
+    } else if (!on && s) {
+      s.remove();
     }
+  }
+  var isReload = false;
+  try {
+    var nav = performance.getEntriesByType('navigation');
+    var t = nav.length ? nav[0].type :
+      (performance.navigation && performance.navigation.type === 1 ? 'reload' : '');
+    isReload = (t === 'reload');
   } catch (e) {}
+  if (isReload) setFix(true);   // 冷啟動自動 reload 的主路徑：維持既有已驗證行為
+  function evaluate() {
+    if (isReload) return;   // reload 場次固定套用，不做量測（避免誤判動到已正常的狀態）
+    try {
+      // 鍵盤開啟時 innerHeight 會縮小，量出來不準 → 略過，等鍵盤收起後的 resize 再判斷
+      var ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+      var el = document.createElement('div');
+      el.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none';
+      (document.body || document.documentElement).appendChild(el);
+      var inset = el.getBoundingClientRect().height;
+      el.parentNode.removeChild(el);
+      if (!(inset > 0)) { setFix(false); return; }   // 無瀏海/安卓 → 不需處理
+      // 直向且「螢幕高 - 視窗高 ≥ 瀏海高」= viewport 已整體下移但 env 仍回報原值
+      // （App 被系統回收後復原就會這樣，navigation type 卻是 navigate，舊邏輯套不到修正）
+      var shifted = window.innerHeight > window.innerWidth &&
+                    (window.screen.height - window.innerHeight) >= inset - 2;
+      setFix(shifted);
+    } catch (e) {}
+  }
+  if (document.readyState !== 'loading') evaluate();
+  else document.addEventListener('DOMContentLoaded', evaluate);
+  window.addEventListener('pageshow', evaluate);
+  window.addEventListener('resize', evaluate);
+  window.addEventListener('orientationchange', evaluate);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) evaluate(); });
 })();
 </script>
 </head>
