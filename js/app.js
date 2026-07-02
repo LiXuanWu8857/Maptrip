@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.191';
+const APP_VERSION  = '1.1.192';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -22,6 +22,7 @@ let autoFollow = false, wakeLock = null;
 let headingUp = false;          // 朝車頭模式（地圖旋轉跟隨行進方向）
 let lastHeading = 0, headingRefPos = null;
 let deviceCompassOn = false, lastMoveSpeed = 0;
+let _mapTouching = 0;           // 手指目前在地圖上的數量（>0 時暫停自動跟隨/旋轉）
 let myHeading = null;           // 我的位置朝向（GPS 行進方向 / 羅盤），供方向光束用
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, autoStartResetTimer = null, lastKnownPos = null;
@@ -140,6 +141,20 @@ function initMap() {
   map.on('dragstart', () => {
     if (autoFollow) setAutoFollow(false);
   });
+
+  // 手指在地圖上時（捏合縮放/旋轉「不會」觸發 dragstart！）：
+  // 暫停自動 panTo 與自動旋轉、停掉旋轉動畫，否則手勢會被程式搶走、畫面亂跳
+  const mapEl = document.getElementById('map');
+  const trackTouch = (e) => {
+    _mapTouching = e.touches ? e.touches.length : 0;
+    if (_mapTouching > 0 && _bearingRAF != null) {
+      cancelAnimationFrame(_bearingRAF); _bearingRAF = null;
+      _animBearing = _targetBearing = ((map.getBearing() % 360) + 360) % 360;
+    }
+  };
+  mapEl.addEventListener('touchstart', trackTouch, { passive: true });
+  mapEl.addEventListener('touchend', trackTouch, { passive: true });
+  mapEl.addEventListener('touchcancel', trackTouch, { passive: true });
 
   // 單趟顯示列：左右滑切換趟次（往左滑＝下一趟，往右滑＝上一趟）
   setupSoloSwipe();
@@ -345,7 +360,7 @@ function onGpsUpdate(pos) {
   }
   updateMyHeadingArrow();
 
-  if (autoFollow) map.panTo([lat, lng], { animate: true, duration: 0.5 });
+  if (autoFollow && !_mapTouching) map.panTo([lat, lng], { animate: true, duration: 0.5 });
 
   if (activeTrip) {
     // GPS 品質閘門：都市峽谷/高架下的反射訊號會產生亂飄的點，
@@ -839,14 +854,18 @@ async function snapToRoads(coords) {
 
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return null;
+    if (!res.ok) { window._snapErr = 'HTTP' + res.status; return null; }
     const data = await res.json();
     if (data.code === 'Ok' && data.matchings?.length) {
+      window._snapErr = null;
       return data.matchings.flatMap(m =>
         m.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
       );
     }
-  } catch (_) {}
+    window._snapErr = data.code || 'NoMatch';
+  } catch (e) {
+    window._snapErr = (e && e.name === 'TimeoutError') ? '逾時' : '網路錯誤';
+  }
   return null;
 }
 
@@ -1103,7 +1122,7 @@ function onDeviceOrient(e) {
     myHeading = h;                                // 停/慢速：羅盤朝向 = 我的朝向
     updateMyHeadingArrow();
     lastHeading = h;
-    if (headingUp && map.setBearing && autoFollow) setTargetBearing(-h);   // 拖動瀏覽中不搶地圖
+    if (headingUp && map.setBearing && autoFollow && !_mapTouching) setTargetBearing(-h);   // 拖動/手勢中不搶地圖
   }
 }
 
@@ -1120,7 +1139,7 @@ function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
     else heading = lastHeading;
   }
   if (effectiveSpeed > 1) { lastHeading = heading; headingRefPos = { lat, lng }; }
-  if (!autoFollow) return;                        // 使用者正在自由瀏覽 → 不搶地圖
+  if (!autoFollow || _mapTouching) return;        // 使用者正在自由瀏覽/操作手勢 → 不搶地圖
   if (effectiveSpeed > 0.8) setTargetBearing(-lastHeading);
 }
 
@@ -2714,14 +2733,14 @@ async function retrySnapBacklog(maxTrips = 5) {
       if (!t.roadCoords && t.coords && t.coords.length > 20) jobs.push({ day, id: t.id });
     }));
     if (!jobs.length) return;
-    let done = 0;
+    let done = 0, failed = 0;
     for (const j of jobs) {
-      if (done >= maxTrips || activeTrip) break;   // 記錄中不佔用網路
+      if (done + failed >= maxTrips || activeTrip) break;   // 記錄中不佔用網路
       const cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');  // 重讀避免蓋掉期間變動
       const trip = (cur[j.day] || []).find(t => t.id === j.id);
       if (!trip || trip.roadCoords) continue;
       const road = await snapToRoads(trip.coords);
-      if (!road) continue;
+      if (!road) { failed++; await new Promise(r => setTimeout(r, 800)); continue; }
       trip.roadCoords = _simplifyPath(road, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));
       trip.coords = [trip.coords[0], trip.coords[trip.coords.length - 1]]
         .map(c => ({ lat: c.lat, lng: c.lng }));
@@ -2743,7 +2762,9 @@ async function retrySnapBacklog(maxTrips = 5) {
       done++;
       await new Promise(r => setTimeout(r, 800));   // 節流
     }
-    if (done) dbg('retrySnap done ' + done);
+    // 讓使用者看得到補貼路結果與失敗原因（診斷用）
+    if (done && !failed) toast(`已補貼路 ${done} 趟`);
+    else if (failed) toast(`補貼路：成功 ${done}、失敗 ${failed}（${window._snapErr || '未知'}）`);
   } catch (_) {}
 }
 
