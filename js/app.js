@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.184';
+const APP_VERSION  = '1.1.185';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -2611,14 +2611,19 @@ function compactStorage(aggressive) {
     const s = localStorage.getItem(STORAGE_KEY);
     if (!s) return true;
     const raw = JSON.parse(s);                       // 解析失敗直接進 catch，不會覆寫
-    const cutoff = businessDayKey(Date.now() - 30 * 864e5);
+    const dropCut = businessDayKey(Date.now() - 7 * 864e5);   // 7 天前
     const tk = todayKey();
     Object.keys(raw).forEach(day => {
       raw[day] = (raw[day] || []).map(t => {
         const slim = serializeTrip(t);
-        // 30 天前（或緊急模式時非今日）且已有貼路線 → 原始座標只留頭尾
+        // 非今日：原始座標的每點時間戳已無用途（貼路只在存檔當下做）→ 丟棄
+        if (day !== tk && slim.coords) {
+          slim.coords = slim.coords.map(c => ({ lat: c.lat, lng: c.lng }));
+        }
+        // 7 天前（或緊急模式時非今日）且已有貼路線 → 原始座標只留頭尾
+        // （畫線/回放/截圖一律優先用 roadCoords，不受影響）
         if (slim.roadCoords && slim.coords && slim.coords.length > 2 &&
-            (day < cutoff || (aggressive && day !== tk))) {
+            (day < dropCut || (aggressive && day !== tk))) {
           slim.coords = [slim.coords[0], slim.coords[slim.coords.length - 1]];
         }
         return slim;
@@ -2980,10 +2985,10 @@ function boot() {
   // 一次性儲存壓實（每個壓實版本只跑一次）：釋放舊全精度資料佔用的空間，
   // 避免 localStorage 滿載導致存檔靜默失敗
   try {
-    if (localStorage.getItem('maptrip_compacted') !== 'v1') {
+    if (localStorage.getItem('maptrip_compacted') !== 'v2') {
       const before = storageBytes();
       if (compactStorage(false)) {
-        localStorage.setItem('maptrip_compacted', 'v1');
+        localStorage.setItem('maptrip_compacted', 'v2');
         const freed = before - storageBytes();
         if (freed > 200000) setTimeout(() => toast(`已整理儲存空間，釋放 ${(freed / 1048576).toFixed(1)} MB`), 1500);
       }
