@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.196';
+const APP_VERSION  = '1.1.197';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -167,10 +167,12 @@ function initMap() {
       currentTile === 'road' ? '🛰 衛星' : '🗺 地圖';
   });
 
-  // 使用者手動拖地圖時，暫停自動跟隨
+  // 使用者手動拖地圖時，暫停自動跟隨；5 秒沒再操作就自動飛回原位繼續跟隨
   map.on('dragstart', () => {
-    if (autoFollow) setAutoFollow(false);
+    if (autoFollow) { setAutoFollow(false); _wantFollowResume = true; }
   });
+  map.on('dragend', scheduleFollowResume);
+  map.on('zoomend', scheduleFollowResume);
 
   // 手指在地圖上時（捏合縮放/旋轉「不會」觸發 dragstart！）：
   // 暫停自動 panTo 與自動旋轉、停掉旋轉動畫，否則手勢會被程式搶走、畫面亂跳
@@ -183,8 +185,8 @@ function initMap() {
     }
   };
   mapEl.addEventListener('touchstart', trackTouch, { passive: true });
-  mapEl.addEventListener('touchend', (e) => { trackTouch(e); if (_mapTouching === 0) resyncLiveLine(); }, { passive: true });
-  mapEl.addEventListener('touchcancel', (e) => { trackTouch(e); if (_mapTouching === 0) resyncLiveLine(); }, { passive: true });
+  mapEl.addEventListener('touchend', (e) => { trackTouch(e); if (_mapTouching === 0) { resyncLiveLine(); scheduleFollowResume(); } }, { passive: true });
+  mapEl.addEventListener('touchcancel', (e) => { trackTouch(e); if (_mapTouching === 0) { resyncLiveLine(); scheduleFollowResume(); } }, { passive: true });
 
   // 縮放動畫期間「絕不」改動向量線（Leaflet 縮放中改線會用新座標系重算、疊在舊變換上 → 整條線飛走）
   map.on('zoomstart', () => { _mapZooming = true; });
@@ -602,8 +604,29 @@ function activeDist() {
 
 function setAutoFollow(on) {
   autoFollow = on;
+  if (on) {   // 已進入跟隨 → 取消排程中的自動歸位
+    _wantFollowResume = false;
+    clearTimeout(_resumeFollowTimer);
+  }
   const btn = document.getElementById('locate-btn');
   if (btn) btn.classList.toggle('follow-active', on);
+}
+
+// 拖動暫停跟隨後：5 秒無操作自動飛回目前位置、恢復跟隨（含朝車頭旋轉）
+let _resumeFollowTimer = null, _wantFollowResume = false;
+function scheduleFollowResume() {
+  if (!_wantFollowResume) return;
+  clearTimeout(_resumeFollowTimer);
+  _resumeFollowTimer = setTimeout(() => {
+    if (!_wantFollowResume) return;
+    // 還在操作 / 在單趟檢視 / 日預覽中 → 延後再試
+    if (_mapTouching || soloSet.length || dayPreviewKey) { scheduleFollowResume(); return; }
+    _wantFollowResume = false;
+    if (!currentPos) return;
+    setAutoFollow(true);
+    map.panTo([currentPos.lat, currentPos.lng], { animate: true, duration: 0.8 });
+    if (headingUp && lastHeading) setTargetBearing(-lastHeading);
+  }, 5000);
 }
 
 async function beginRecording() {
