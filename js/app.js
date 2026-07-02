@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.194';
+const APP_VERSION  = '1.1.195';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -23,6 +23,8 @@ let headingUp = false;          // 朝車頭模式（地圖旋轉跟隨行進方
 let lastHeading = 0, headingRefPos = null;
 let deviceCompassOn = false, lastMoveSpeed = 0;
 let _mapTouching = 0;           // 手指目前在地圖上的數量（>0 時暫停自動跟隨/旋轉）
+let _mapZooming = false;        // 縮放動畫進行中（期間不可改動線條，否則整條線會飛走）
+let _lineResyncPending = false; // 縮放/手勢期間累積的新點 → 結束後一次補畫
 let myHeading = null;           // 我的位置朝向（GPS 行進方向 / 羅盤），供方向光束用
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, autoStartResetTimer = null, lastKnownPos = null;
@@ -181,8 +183,12 @@ function initMap() {
     }
   };
   mapEl.addEventListener('touchstart', trackTouch, { passive: true });
-  mapEl.addEventListener('touchend', trackTouch, { passive: true });
-  mapEl.addEventListener('touchcancel', trackTouch, { passive: true });
+  mapEl.addEventListener('touchend', (e) => { trackTouch(e); if (_mapTouching === 0) resyncLiveLine(); }, { passive: true });
+  mapEl.addEventListener('touchcancel', (e) => { trackTouch(e); if (_mapTouching === 0) resyncLiveLine(); }, { passive: true });
+
+  // 縮放動畫期間「絕不」改動向量線（Leaflet 縮放中改線會用新座標系重算、疊在舊變換上 → 整條線飛走）
+  map.on('zoomstart', () => { _mapZooming = true; });
+  map.on('zoomend', () => { _mapZooming = false; resyncLiveLine(); });
 
   // 單趟顯示列：左右滑切換趟次（往左滑＝下一趟，往右滑＝上一趟）
   setupSoloSwipe();
@@ -400,8 +406,10 @@ function onGpsUpdate(pos) {
       haversine(last, { lat, lng }) / Math.max(1, (Date.now() - last.t) / 1000) > 50;
 
     if (!badAcc && !isJump) {
-      // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）
-      activePolyline.addLatLng([lat, lng]);
+      // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）。
+      // 縮放/手勢期間先不畫（否則整條線會飛走），結束後 resyncLiveLine 一次補上
+      if (_mapZooming || _mapTouching) _lineResyncPending = true;
+      else activePolyline.addLatLng([lat, lng]);
 
       // 每 GPS_RECORD_MS 才存一個座標點（節省儲存空間）
       if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
@@ -920,10 +928,21 @@ async function snapLiveRoute() {
   const snapped = await snapToRoads(snapshot);
   activeSnapPending = false;
   if (!snapped || !activePolyline || !activeTrip) return;
+  if (_mapZooming || _mapTouching) { _lineResyncPending = true; return; }  // 縮放中不改線
   // 重建折線：貼合段 + 貼合後新增的原始 GPS 尾段
   const latlngs = snapped.map(c => [c.lat, c.lng]);
   activeTrip.coords.slice(snapshot.length).forEach(c => latlngs.push([c.lat, c.lng]));
   activePolyline.setLatLngs(latlngs);
+}
+
+// 縮放/手勢結束後：把期間累積、沒畫進去的點一次補上（整條線從記錄座標重建）
+function resyncLiveLine() {
+  if (!_lineResyncPending) return;
+  if (_mapZooming || _mapTouching) return;   // 還在動，等真正結束
+  _lineResyncPending = false;
+  if (activePolyline && activeTrip && activeTrip.coords.length) {
+    activePolyline.setLatLngs(activeTrip.coords.map(c => [c.lat, c.lng]));
+  }
 }
 
 // 兩趟之間的連接曲線座標（二次 Bezier，向外彎一點）
