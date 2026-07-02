@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.193';
+const APP_VERSION  = '1.1.194';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -873,26 +873,42 @@ async function snapToRoads(coords) {
   }
 
   const coordStr = pts.map(c => `${c.lng},${c.lat}`).join(';');
-  const radii    = pts.map(() => '50').join(';');   // 都市 GPS 誤差可達 40m，30 太嚴會整段配不上
-  // 時間戳有助於貼路品質，但舊資料（壓實後）可能沒有 → 沒有就省略該參數
   const hasT = pts.every(c => typeof c.t === 'number' && isFinite(c.t));
-  const tsParam = hasT ? `&timestamps=${pts.map(c => Math.floor(c.t / 1000)).join(';')}` : '';
-  const url = `https://router.project-osrm.org/match/v1/driving/${coordStr}` +
-    `?radiuses=${radii}${tsParam}&geometries=geojson&overview=full&annotations=false`;
+  const tsStr = hasT ? pts.map(c => Math.floor(c.t / 1000)).join(';') : null;
 
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) { window._snapErr = 'HTTP' + res.status; return null; }
-    const data = await res.json();
-    if (data.code === 'Ok' && data.matchings?.length) {
-      window._snapErr = null;
-      return data.matchings.flatMap(m =>
-        m.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
-      );
+  // 依序嘗試多組參數（半徑 / 有無時間戳）：伺服器嫌哪個參數都能自動降級成功。
+  // 失敗時把「回應內文的錯誤碼」記進 _snapErr，診斷提示會顯示真正原因。
+  const attempts = [
+    { r: 50, ts: !!tsStr },
+    { r: 50, ts: false },
+    { r: 30, ts: false }
+  ];
+  for (const a of attempts) {
+    const radii = pts.map(() => String(a.r)).join(';');
+    const tsParam = (a.ts && tsStr) ? `&timestamps=${tsStr}` : '';
+    const url = `https://router.project-osrm.org/match/v1/driving/${coordStr}` +
+      `?radiuses=${radii}${tsParam}&geometries=geojson&overview=full&annotations=false`;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) {
+        let detail = '';
+        try { const body = await res.json(); detail = body.code || body.message || ''; } catch (_) {}
+        window._snapErr = 'HTTP' + res.status + (detail ? ':' + detail : '');
+        continue;   // 換下一組參數
+      }
+      const data = await res.json();
+      if (data.code === 'Ok' && data.matchings?.length) {
+        window._snapErr = null;
+        return data.matchings.flatMap(m =>
+          m.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
+        );
+      }
+      window._snapErr = data.code || 'NoMatch';
+      // NoMatch 換參數也難救，但半徑不同仍值得一試 → 繼續
+    } catch (e) {
+      window._snapErr = (e && e.name === 'TimeoutError') ? '逾時' : '網路錯誤';
+      break;   // 網路層問題，換參數無意義
     }
-    window._snapErr = data.code || 'NoMatch';
-  } catch (e) {
-    window._snapErr = (e && e.name === 'TimeoutError') ? '逾時' : '網路錯誤';
   }
   return null;
 }
