@@ -24,7 +24,7 @@ let lastHeading = 0, headingRefPos = null;
 let deviceCompassOn = false, lastMoveSpeed = 0;
 let myHeading = null;           // 我的位置朝向（GPS 行進方向 / 羅盤），供方向光束用
 let activeSnapPending = false;
-let autoStartTimer = null, autoStartShown = false, lastKnownPos = null;
+let autoStartTimer = null, autoStartShown = false, autoStartResetTimer = null, lastKnownPos = null;
 let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
 let pendingFareTrip = null;      // 由浮窗結束、等待數字鍵盤輸入車資的那趟
 let lastHeartbeat = 0;           // 上次替鎖屏方塊「續命」的時間戳
@@ -345,8 +345,9 @@ function onGpsUpdate(pos) {
     // 每 GPS_RECORD_MS 才存一個座標點（節省儲存空間）
     const last = activeTrip.coords.at(-1);
     if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
+      if (last) activeTrip._dist = activeDist() + haversine(last, { lat, lng });  // 增量累加距離
       activeTrip.coords.push({ lat, lng, t: Date.now() });
-      saveActiveTrip();   // 每存一個座標就更新復原暫存
+      saveActiveTrip();   // 每存一個座標就更新復原暫存（內部節流 5 秒）
       // 定期把累積軌跡貼合到道路上（即時更新折線）
       const n = activeTrip.coords.length;
       if (n >= 4 && n % LIVE_SNAP_PTS === 0 && !activeSnapPending) {
@@ -371,6 +372,10 @@ function checkArrival(speed) {
     clearTimeout(stoppedTimer);
     stoppedTimer = null;
     hideArrivalBanner();
+  } else if (speed >= STOPPED_SPEED_MS) {
+    // 慢速蠕行（塞車 1~4 m/s）：不算停車，取消倒數，避免誤跳「已抵達」
+    clearTimeout(stoppedTimer);
+    stoppedTimer = null;
   } else if (speed < STOPPED_SPEED_MS && wasMoving && !arrivalBannerShown) {
     if (stoppedTimer) return; // 已在倒數中，不重複設定
     stoppedTimer = setTimeout(() => {
@@ -421,6 +426,16 @@ function checkAutoStart(speed) {
   } else {
     clearTimeout(autoStartTimer);
     autoStartTimer = null;
+  }
+  // 「略過」後：停止移動連續 2 分鐘即重置，下次出發能再次提示
+  if (autoStartShown && speed < STOPPED_SPEED_MS) {
+    if (!autoStartResetTimer) autoStartResetTimer = setTimeout(() => {
+      autoStartResetTimer = null;
+      autoStartShown = false;
+    }, 120000);
+  } else if (autoStartResetTimer) {
+    clearTimeout(autoStartResetTimer);
+    autoStartResetTimer = null;
   }
 }
 
@@ -501,12 +516,19 @@ function widgetHeartbeat() {
   lastHeartbeat = now;
   if (activeTrip) {
     const elapsed  = Math.floor((now - activeTrip.startTime) / 1000);
-    const distance = Math.round(calcTotalDist(activeTrip.coords));
+    const distance = Math.round(activeDist());
     liveAct()?.updateTrip({ elapsed, distance });
     floatWin()?.update({ elapsed, distance }).catch(() => {});
   } else {
     liveAct()?.heartbeat?.();
   }
+}
+
+// 記錄中的累計距離（增量維護，長行程不必每秒全量重算）
+function activeDist() {
+  if (!activeTrip) return 0;
+  if (activeTrip._dist == null) activeTrip._dist = calcTotalDist(activeTrip.coords);
+  return activeTrip._dist;
 }
 
 function setAutoFollow(on) {
@@ -590,6 +612,10 @@ function endTrip(fromFloat) {
   // 釋放螢幕常亮鎖
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 
+  // 先立即落盤（fare=0）：從此刻起這趟就安全了，即使車資輸入前
+  // App 被殺/重載也不會遺失；車資與貼路稍後用更新的方式補上。
+  saveTripFinal(trip);
+
   if (fromFloat) {
     // 由浮窗結束：記住這趟，叫出浮窗數字鍵盤輸入車資（見 saveFloatFare）
     pendingFareTrip = trip;
@@ -600,15 +626,47 @@ function endTrip(fromFloat) {
   }
 }
 
+// 更新「已落盤」的行程：補車資 / 付款方式 / 貼路座標，並重畫該趟路線
+async function finalizeSavedTrip(trip, fare, paymentMethod, label) {
+  trip.fare = fare;
+  trip.paymentMethod = paymentMethod;
+  if (label !== undefined) trip.label = label || '';
+  saveTodayToStorage();   // 車資先存（貼路是慢速網路操作，成功與否不影響金額）
+  updateTopBar();
+  const road = await snapToRoads(trip.coords);
+  if (road) {
+    trip.roadCoords = road;
+    // 重畫這趟的路線（換成貼路座標）
+    const idx = todayTrips.indexOf(trip);
+    if (idx >= 0 && trip._layers) {
+      trip._layers.forEach(l => {
+        try { map.removeLayer(l); } catch (_) {}
+        const j = allMapLayers.indexOf(l);
+        if (j >= 0) allMapLayers.splice(j, 1);
+      });
+      drawTripLine(trip, idx + 1);
+    }
+    saveTodayToStorage();
+  }
+  const ts = document.getElementById('trip-sheet');
+  if (ts && ts.style.display !== 'none') renderTripSheet();
+}
+
 // ===== 進行中行程的「當機／重載」復原 =====
 // 記錄中定期把 activeTrip 存本機；重開 App 若偵測到未結束的行程，自動接回繼續記錄。
-const ACTIVE_KEY = 'maptrip_active';
-function saveActiveTrip() {
+const ACTIVE_KEY = TEST_MODE_ON ? 'maptrip_active_test' : 'maptrip_active';
+let _lastActiveSave = 0;
+function saveActiveTrip(force) {
   if (!activeTrip) return;
+  // 節流：每 5 秒存一次即可（pagehide/beforeunload 會強制補存），
+  // 避免長行程每秒全量 JSON.stringify 造成不必要的耗電
+  const now = Date.now();
+  if (!force && now - _lastActiveSave < 5000) return;
+  _lastActiveSave = now;
   try {
     localStorage.setItem(ACTIVE_KEY, JSON.stringify({
       id: activeTrip.id, startTime: activeTrip.startTime,
-      coords: activeTrip.coords, savedAt: Date.now()
+      coords: activeTrip.coords, savedAt: now
     }));
   } catch (_) {}
 }
@@ -619,7 +677,23 @@ function restoreActiveTripIfAny() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(ACTIVE_KEY) || 'null'); } catch (_) {}
   if (!s || !Array.isArray(s.coords) || !s.coords.length) return;
-  if (s.savedAt && Date.now() - s.savedAt > 12 * 3600 * 1000) { clearActiveTrip(); return; }
+  if (s.savedAt && Date.now() - s.savedAt > 12 * 3600 * 1000) {
+    // 超過 12 小時不接回，但軌跡不丟：以最後一點時間存成完成行程（金額可補填）
+    clearActiveTrip();
+    try {
+      const last = s.coords[s.coords.length - 1];
+      const trip = { id: s.id, startTime: s.startTime, endTime: (last && last.t) || s.savedAt,
+                     coords: s.coords, totalDist: calcTotalDist(s.coords), fare: 0 };
+      const day = businessDayKey(trip.startTime);
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      (raw[day] = raw[day] || []).push(serializeTrip(trip));
+      raw[day].sort((a, b) => a.startTime - b.startTime);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+      if (window.MaptripSync) MaptripSync.syncDays([day]);
+      toast('已將中斷的行程存檔，金額可稍後補填');
+    } catch (_) {}
+    return;
+  }
   activeTrip = { id: s.id, startTime: s.startTime, coords: s.coords };
   activePolyline = L.polyline(s.coords.map(c => [c.lat, c.lng]),
     { color: '#1A73E8', weight: 5, opacity: 0.9 }).addTo(map);
@@ -643,15 +717,12 @@ function restoreActiveTripIfAny() {
   toast('已接回記錄中的行程');
 }
 
-// 浮窗數字鍵盤按「確定/略過」後：把車資存到剛結束的那趟，並貼合路線存檔
+// 浮窗數字鍵盤按「確定/略過」後：把車資補進「已落盤」的那趟並貼路
 async function saveFloatFare(fare, paymentMethod) {
   const trip = pendingFareTrip;
   pendingFareTrip = null;
   if (!trip) return;
-  trip.fare = fare;
-  trip.paymentMethod = paymentMethod || '';
-  trip.roadCoords = await snapToRoads(trip.coords);
-  saveTripFinal(trip);
+  await finalizeSavedTrip(trip, fare, paymentMethod || '');
 }
 
 // 背景結束：直接貼合道路並存檔（金額 0），不需 UI
@@ -676,20 +747,11 @@ function showFareDialog(trip) {
   const cardBtn = document.getElementById('fare-card');
   const skipBtn = document.getElementById('fare-skip');
 
-  const save = async (fare, paymentMethod, label) => {
-    trip.fare = fare;
-    trip.paymentMethod = paymentMethod;
-    trip.label = label || '';
-    cashBtn.textContent = '路線貼合中…'; cashBtn.disabled = true;
-    cardBtn.disabled = true; skipBtn.disabled = true;
-
-    trip.roadCoords = await snapToRoads(trip.coords);
-
+  const save = (fare, paymentMethod, label) => {
+    // 行程在 endTrip 時已落盤；這裡立即關閉對話框，車資與貼路在背景補上
     document.getElementById('fare-overlay').style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
-    cashBtn.textContent = '現金'; cashBtn.disabled = false;
-    cardBtn.disabled = false; skipBtn.disabled = false;
-    saveTripFinal(trip);
+    finalizeSavedTrip(trip, fare, paymentMethod, label || '');
   };
 
   cashBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'cash');
@@ -713,20 +775,21 @@ function saveTripFinal(trip) {
   todayTrips.push(trip);
   saveTodayToStorage(); updateTopBar();
   const fareStr = trip.fare ? `　NT$ ${trip.fare}` : '';
-  const roadTag = trip.roadCoords ? '' : '（直線）';
-  toast(`✓ 第 ${todayTrips.length} 趟　${fmtDur(trip.endTime - trip.startTime)}　${fmtDist(trip.totalDist)}${fareStr}${roadTag}`);
+  toast(`✓ 第 ${todayTrips.length} 趟　${fmtDur(trip.endTime - trip.startTime)}　${fmtDist(trip.totalDist)}${fareStr}`);
 }
 
 // OSRM Map Matching：將 GPS 座標貼合到道路上
 async function snapToRoads(coords) {
   if (coords.length < 2) return null;
 
-  // OSRM 公開服務最多 100 點，超過則均勻取樣
+  // OSRM 公開服務最多 100 點，超過則均勻取樣。
+  // step 用 ceil 才保證取樣後 ≤ MAX_PTS（floor 在 101~197 點時 step=1，全數保留 → 必定超限失敗）
   const MAX_PTS = 100;
   let pts = coords;
   if (pts.length > MAX_PTS) {
-    const step = Math.floor(pts.length / (MAX_PTS - 1));
+    const step = Math.ceil(pts.length / MAX_PTS);
     pts = coords.filter((_, i) => i % step === 0);
+    if (pts.length >= MAX_PTS) pts = pts.slice(0, MAX_PTS - 1);
     if (pts[pts.length - 1] !== coords[coords.length - 1])
       pts.push(coords[coords.length - 1]);
   }
@@ -1019,18 +1082,26 @@ function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
   if (effectiveSpeed > 0.8) setTargetBearing(-lastHeading);
 }
 
+let _uiDayKey = null;   // 目前 UI 顯示的營業日，跨 7:00 換日時用來觸發刷新
 function updateTopBar() {
   // 顯示「營業日」日期（07:00 之前仍算前一天）
   const d = new Date(Date.now() - DAY_SPLIT_HOUR * 3600 * 1000);
   document.getElementById('top-date').textContent =
     d.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' });
   document.getElementById('trip-count').textContent = todayTrips.length;
+  // App 長開跨過 7:00：自動把「今日」清單換成新營業日（記錄中不動，結束後會刷新）
+  const dk = todayKey();
+  if (_uiDayKey == null) _uiDayKey = dk;
+  else if (dk !== _uiDayKey && !activeTrip) {
+    _uiDayKey = dk;
+    if (typeof refreshAfterSync === 'function') refreshAfterSync();
+  }
 }
 
 function refreshRecBanner() {
   if (!activeTrip) return;
   const elapsed = Date.now() - activeTrip.startTime;
-  const dist    = calcTotalDist(activeTrip.coords);
+  const dist    = activeDist();
   document.getElementById('rec-time').textContent = fmtDur(elapsed);
   document.getElementById('rec-dist').textContent = fmtDist(dist);
   liveAct()?.updateTrip({ elapsed: Math.floor(elapsed / 1000), distance: Math.round(dist) });
@@ -1255,14 +1326,21 @@ function editHistoryFare(e, day, idx) {
     skipBtn.textContent = '其他';
   };
 
+  const tripId = trip.id;   // 用 id 定位，避免期間同步併入新趟造成索引位移
   const saveEdit = (paymentMethod) => {
+    const fare = parseInt(input.value) || 0;
     const cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    if (cur[day] && cur[day][idx]) {
-      cur[day][idx].fare = parseInt(input.value) || 0;
-      cur[day][idx].paymentMethod = paymentMethod;
+    const target = (cur[day] || []).find(t => t.id === tripId);
+    if (target) {
+      target.fare = fare;
+      target.paymentMethod = paymentMethod;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
       if (window.MaptripSync) MaptripSync.syncDays([day]);
     }
+    // 若編輯的是「今日」的趟，記憶體中的 todayTrips 也要同步，
+    // 否則下一次 saveTodayToStorage 合併會用舊值蓋回去
+    const mem = todayTrips.find(t => t.id === tripId);
+    if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; }
     close();
     renderHistorySheet();
   };
@@ -2508,12 +2586,17 @@ function saveTodayToStorage() {
     const merged = [...byId.values()].sort((a, b) => a.startTime - b.startTime);
     if (merged.length) raw[day] = merged; else delete raw[day];
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+  } catch (e) {
+    // 儲存空間滿：一定要讓使用者知道，否則之後每趟都靜默存不進去
+    toast('⚠ 本機儲存空間不足，行程可能無法保存！');
+  }
   if (window.MaptripSync) MaptripSync.syncDays([...affected]);
 }
 
 // 刪除墓碑：記住已刪除的趟 id，讓合併同步不會把它加回來
-const DELETED_KEY = 'maptrip_deleted';
+const DELETED_KEY = TEST_MODE_ON ? 'maptrip_deleted_test' : 'maptrip_deleted';
 function addDeletedId(id) {
   let arr;
   try { arr = JSON.parse(localStorage.getItem(DELETED_KEY) || '[]'); } catch (_) { arr = []; }
@@ -2545,7 +2628,8 @@ function removeTripFromStorage(id) {
 }
 
 function loadTodayFromStorage() {
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  let raw = {};
+  try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (_) {}
   const saved = raw[todayKey()] || [];
   if (!saved.length) return;
   saved.forEach((t, i) => {
@@ -2556,8 +2640,11 @@ function loadTodayFromStorage() {
       const gap = drawGapLine(prevCoords.at(-1), curCoords[0]);
       allMapLayers.push(gap);
     }
-    todayTrips.push({ ...t });
-    drawTripLine(t, i + 1);
+    // 用同一個物件入陣列並畫線：_layers 才會掛在 todayTrips 內的那份，
+    // 之後刪除該趟才能正確移除地圖上的線（否則會留幽靈路線）
+    const copy = { ...t };
+    todayTrips.push(copy);
+    drawTripLine(copy, i + 1);
   });
   updateTopBar();
 }
@@ -2619,7 +2706,7 @@ function fmtWork(ms) {
 }
 
 // 每日休息時間（分鐘）儲存，key = dayKey
-const REST_KEY = 'maptrip_rest';
+const REST_KEY = TEST_MODE_ON ? 'maptrip_rest_test' : 'maptrip_rest';
 function getRestMin(dayKey) {
   try { return JSON.parse(localStorage.getItem(REST_KEY) || '{}')[dayKey] || 0; }
   catch (_) { return 0; }
