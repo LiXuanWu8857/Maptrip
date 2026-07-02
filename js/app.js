@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.197';
+const APP_VERSION  = '1.1.198';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -102,24 +102,43 @@ function initMap() {
     L.Map.TouchGestures.__gLockPatched = true;
     const proto = L.Map.TouchGestures.prototype;
     const origStart = proto._onTouchStart, origMove = proto._onTouchMove, origEnd = proto._onTouchEnd;
-    proto._onTouchStart = function (e) { this._gLock = null; return origStart.call(this, e); };
+    proto._onTouchStart = function (e) {
+      this._gLock = null; this._gStartAng = null;
+      if (e.touches && e.touches.length === 2 && this._map) {
+        const p1 = this._map.mouseEventToContainerPoint(e.touches[0]);
+        const p2 = this._map.mouseEventToContainerPoint(e.touches[1]);
+        const v = p1.subtract(p2);
+        this._gStartAng = Math.atan2(v.y, v.x);
+      }
+      const ret = origStart.call(this, e);
+      // 預先給定 _center/_zoom：旋轉鎖定會跳過縮放分支（不算 _center），
+      // 少了這行 _move/_animateZoom 會拿到 undefined 而炸掉，地圖從此壞死（zoom=NaN、無法歸位）
+      if (this._map) { this._center = this._map.getCenter(); this._zoom = this._map.getZoom(); }
+      return ret;
+    };
     proto._onTouchMove = function (e) {
       if (e.touches && e.touches.length === 2 && this._zooming && this._rotating && this._gLock == null) {
         const m = this._map;
         const p1 = m.mouseEventToContainerPoint(e.touches[0]);
         const p2 = m.mouseEventToContainerPoint(e.touches[1]);
-        const scale = p1.distanceTo(p2) / this._startDist;
         const v = p1.subtract(p2);
-        let dB = (Math.atan(v.x / v.y) - this._startTheta) * 180 / Math.PI;
-        if (v.y < 0) dB += 180;
-        dB = ((dB + 540) % 360) - 180;
-        const zd = Math.abs(Math.log2(scale));
-        if (zd > 0.12)              { this._gLock = 'zoom';   this._rotating = false; }
-        else if (Math.abs(dB) > 12) { this._gLock = 'rotate'; this._zooming  = false; }
+        // 防禦：若 _onTouchStart 的包裝沒被呼叫到（handler 在打補丁前就綁好原始參考），
+        // 就在第一次 move 補記起始狀態，本幀不做鎖定判斷
+        if (this._gStartAng == null) {
+          this._gStartAng = Math.atan2(v.y, v.x);
+          if (this._center == null) { this._center = m.getCenter(); this._zoom = m.getZoom(); }
+        } else {
+          const scale = p1.distanceTo(p2) / this._startDist;
+          // 兩指連線的實際旋轉角（atan2 最短路徑；atan(x/y) 在 y<0 時會多出 ±180° 假旋轉，
+          // 導致純捏合被誤鎖成「旋轉」）
+          const dB = ((((Math.atan2(v.y, v.x) - this._gStartAng) * 180 / Math.PI) % 360) + 540) % 360 - 180;
+          if (Math.abs(Math.log2(scale)) > 0.12) { this._gLock = 'zoom';   this._rotating = false; }
+          else if (Math.abs(dB) > 12)            { this._gLock = 'rotate'; this._zooming  = false; }
+        }
       }
       return origMove.call(this, e);
     };
-    proto._onTouchEnd = function () { this._gLock = null; return origEnd.apply(this, arguments); };
+    proto._onTouchEnd = function () { this._gLock = null; this._gStartAng = null; return origEnd.apply(this, arguments); };
   }
 
   map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0,
@@ -167,12 +186,17 @@ function initMap() {
       currentTile === 'road' ? '🛰 衛星' : '🗺 地圖';
   });
 
-  // 使用者手動拖地圖時，暫停自動跟隨；5 秒沒再操作就自動飛回原位繼續跟隨
-  map.on('dragstart', () => {
+  // 使用者手動移動地圖時，暫停自動跟隨；5 秒沒再操作就自動飛回原位繼續跟隨。
+  // 用 movestart+手指在地圖上 判定「使用者手勢」：捏合縮放/雙指旋轉不會觸發 dragstart，
+  // 只掛 dragstart 的話捏合移走地圖就永遠不會歸位（停車沒 GPS 更新時尤其明顯）
+  const pauseFollowByUser = () => {
     if (autoFollow) { setAutoFollow(false); _wantFollowResume = true; }
-  });
+  };
+  map.on('dragstart', pauseFollowByUser);                                // 滑鼠拖曳（桌機）
+  map.on('movestart', () => { if (_mapTouching) pauseFollowByUser(); }); // 觸控手勢（拖、捏合、旋轉）
   map.on('dragend', scheduleFollowResume);
   map.on('zoomend', scheduleFollowResume);
+  map.on('moveend', () => { if (_wantFollowResume && !_mapTouching) scheduleFollowResume(); });
 
   // 手指在地圖上時（捏合縮放/旋轉「不會」觸發 dragstart！）：
   // 暫停自動 panTo 與自動旋轉、停掉旋轉動畫，否則手勢會被程式搶走、畫面亂跳
@@ -381,7 +405,16 @@ function onGpsUpdate(pos) {
   if (!myDotMarker) {
     const icon = L.divIcon({
       className: '',
-      html: '<div class="myloc"><div class="myloc-rot" style="display:none"><div class="myloc-beam"></div></div><div class="myloc-dot"></div></div>',
+      // 方向光束：從藍點向外展開的漸層扇形（Google 地圖風格，取代舊的生硬三角形）
+      html: '<div class="myloc"><div class="myloc-rot" style="display:none">' +
+        '<svg class="myloc-beam" viewBox="0 0 60 60" width="60" height="60">' +
+        '<defs><radialGradient id="mylocBeamGrad" cx="0.5" cy="0.5" r="0.5">' +
+        '<stop offset="0%" stop-color="#4285F4" stop-opacity="0.65"/>' +
+        '<stop offset="55%" stop-color="#4285F4" stop-opacity="0.35"/>' +
+        '<stop offset="100%" stop-color="#4285F4" stop-opacity="0"/>' +
+        '</radialGradient></defs>' +
+        '<path d="M30 30 L16.9 6.4 A27 27 0 0 1 43.1 6.4 Z" fill="url(#mylocBeamGrad)"/>' +
+        '</svg></div><div class="myloc-dot"></div></div>',
       iconSize: [60, 60], iconAnchor: [30, 30]
     });
     myDotMarker = L.marker([lat, lng], { icon, zIndexOffset: 1000 }).addTo(map);
