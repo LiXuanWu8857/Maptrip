@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.190';
+const APP_VERSION  = '1.1.191';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -92,7 +92,9 @@ function ensureBottomBarVisible() {
 
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0,
-                       preferCanvas: true,
+                       // 用 SVG 繪圖器：Canvas 與 leaflet-rotate 不相容，
+                       // 旋轉狀態下縮放時線條會錯位亂跑
+                       preferCanvas: false,
                        // leaflet-rotate：程式旋轉 + 雙指手勢旋轉
                        rotate: true, rotateControl: false, touchRotate: true,
                        shiftKeyRotate: false, bearing: 0 })
@@ -828,7 +830,7 @@ async function snapToRoads(coords) {
   }
 
   const coordStr = pts.map(c => `${c.lng},${c.lat}`).join(';');
-  const radii    = pts.map(() => '30').join(';');
+  const radii    = pts.map(() => '50').join(';');   // 都市 GPS 誤差可達 40m，30 太嚴會整段配不上
   // 時間戳有助於貼路品質，但舊資料（壓實後）可能沒有 → 沒有就省略該參數
   const hasT = pts.every(c => typeof c.t === 'number' && isFinite(c.t));
   const tsParam = hasT ? `&timestamps=${pts.map(c => Math.floor(c.t / 1000)).join(';')}` : '';
@@ -2594,7 +2596,12 @@ function _simplifyPath(pts, tol) {
 }
 
 function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label }) {
-  const slimCoords = (coords || []).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng), t: c.t }));
+  // 注意：t 可能不存在（壓實後的舊資料）。絕不能寫成 t: undefined —
+  // Firestore 會以 invalid-argument 拒收整份文件，導致雲端備份失敗。
+  const slimCoords = (coords || []).map(c =>
+    (typeof c.t === 'number' && isFinite(c.t))
+      ? { lat: _r5(c.lat), lng: _r5(c.lng), t: c.t }
+      : { lat: _r5(c.lat), lng: _r5(c.lng) });
   let slimRoad = null;
   if (roadCoords) {
     slimRoad = _simplifyPath(roadCoords, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));

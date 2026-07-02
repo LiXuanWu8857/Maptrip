@@ -208,7 +208,7 @@
       const ref = daysCol().doc(day);
       const snap = await ref.get();
       if (!snap.exists) return;
-      const trips = (snap.data().trips || []).filter(t => t.id !== id);
+      const trips = JSON.parse(JSON.stringify((snap.data().trips || []).filter(t => t.id !== id)));
       if (trips.length) await ref.set({ trips, updatedAt: Date.now() });
       else await ref.delete();
     } catch (e) { log('delTrip fail ' + day + ' ' + (e && e.code)); }
@@ -245,7 +245,9 @@
       let cloud = [];
       try { const snap = await ref.get(); if (snap.exists) cloud = snap.data().trips || []; } catch (_) {}
       const merged = mergeTrips(local, cloud);
-      if (merged.length) await ref.set({ trips: merged, updatedAt: Date.now() });
+      // JSON 往返去掉 undefined 欄位（Firestore 會以 invalid-argument 拒收 undefined）
+      const clean = JSON.parse(JSON.stringify(merged));
+      if (clean.length) await ref.set({ trips: clean, updatedAt: Date.now() });
       // 不再自動刪除雲端整天資料，避免本機異常把雲端清空（資料安全優先）
       warnedDays.delete(day);
     } catch (e) {
