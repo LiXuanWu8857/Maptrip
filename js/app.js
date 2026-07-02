@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.188';
+const APP_VERSION  = '1.1.189';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -346,20 +346,29 @@ function onGpsUpdate(pos) {
   if (autoFollow) map.panTo([lat, lng], { animate: true, duration: 0.5 });
 
   if (activeTrip) {
-    // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）
-    activePolyline.addLatLng([lat, lng]);
-
-    // 每 GPS_RECORD_MS 才存一個座標點（節省儲存空間）
+    // GPS 品質閘門：都市峽谷/高架下的反射訊號會產生亂飄的點，
+    // (1) 水平精度太差（>40m）不記錄；(2) 相對上一點為物理上不可能的瞬移（>50 m/s）不記錄。
+    // 過濾掉的點也不畫進即時折線，畫面與存檔一致（藍點仍照常移動）。
     const last = activeTrip.coords.at(-1);
-    if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
-      if (last) activeTrip._dist = activeDist() + haversine(last, { lat, lng });  // 增量累加距離
-      activeTrip.coords.push({ lat, lng, t: Date.now() });
-      saveActiveTrip();   // 每存一個座標就更新復原暫存（內部節流 5 秒）
-      // 定期把累積軌跡貼合到道路上（即時更新折線）
-      const n = activeTrip.coords.length;
-      if (n >= 4 && n % LIVE_SNAP_PTS === 0 && !activeSnapPending) {
-        activeSnapPending = true;
-        snapLiveRoute();
+    const badAcc = acc != null && acc > 40;
+    const isJump = last &&
+      haversine(last, { lat, lng }) / Math.max(1, (Date.now() - last.t) / 1000) > 50;
+
+    if (!badAcc && !isJump) {
+      // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）
+      activePolyline.addLatLng([lat, lng]);
+
+      // 每 GPS_RECORD_MS 才存一個座標點（節省儲存空間）
+      if (!last || Date.now() - last.t >= GPS_RECORD_MS) {
+        if (last) activeTrip._dist = activeDist() + haversine(last, { lat, lng });  // 增量累加距離
+        activeTrip.coords.push({ lat, lng, t: Date.now() });
+        saveActiveTrip();   // 每存一個座標就更新復原暫存（內部節流 5 秒）
+        // 定期把累積軌跡貼合到道路上（即時更新折線）
+        const n = activeTrip.coords.length;
+        if (n >= 4 && n % LIVE_SNAP_PTS === 0 && !activeSnapPending) {
+          activeSnapPending = true;
+          snapLiveRoute();
+        }
       }
     }
     checkArrival(effectiveSpeed);
