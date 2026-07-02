@@ -13,6 +13,20 @@
   var VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
   var uid = 0;
 
+  // 關鍵 CSS 內建保險：maplibre-gl.css 若從 CDN 載入失敗，
+  // 少了 touch-action:none 這條，iOS 會把手勢當成頁面捲動 → 地圖完全不能拖/縮。
+  // 這裡直接注入最必要的規則，CDN 掛了地圖照樣可操作。
+  (function injectEssentialCss() {
+    var st = document.createElement('style');
+    st.textContent =
+      '.maplibregl-map{position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent}' +
+      '.maplibregl-canvas-container{touch-action:none;-webkit-user-select:none;user-select:none}' +
+      '.maplibregl-canvas{position:absolute;left:0;top:0;touch-action:none}' +
+      '.maplibregl-marker{position:absolute;top:0;left:0;will-change:transform}' +
+      '.maplibregl-control-container{display:none}';
+    document.head.appendChild(st);
+  })();
+
   function toLngLat(ll) {
     if (Array.isArray(ll)) return [ll[1], ll[0]];
     return [ll.lng, ll.lat];

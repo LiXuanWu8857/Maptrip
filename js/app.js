@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.183';
+const APP_VERSION  = '1.1.184';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -2227,7 +2227,8 @@ function renderSyncPanel() {
   } else {
     const c = st.cloud || { days: 0, trips: 0 };
     statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>'
-      + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟</span>';
+      + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟'
+      + '　本機：' + (storageBytes() / 1048576).toFixed(1) + ' MB</span>';
     actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>';
   }
 }
@@ -2589,10 +2590,55 @@ function saveTodayToStorage() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
   } catch (e) {
-    // 儲存空間滿：一定要讓使用者知道，否則之後每趟都靜默存不進去
-    toast('⚠ 本機儲存空間不足，行程可能無法保存！');
+    // 儲存空間滿：先壓實歷史資料再重試一次，仍失敗才提示
+    compactStorage(true);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+      toast('儲存空間已自動整理');
+    } catch (e2) {
+      toast('⚠ 本機儲存空間不足，行程可能無法保存！');
+    }
   }
   if (window.MaptripSync) MaptripSync.syncDays([...affected]);
+}
+
+// ===== 儲存空間壓實 =====
+// 歷史行程重新序列化（座標降精度＋路線簡化）；aggressive=true 時，
+// 已有貼路線的行程原始 GPS 座標只留頭尾（畫圖/回放本來就優先用 roadCoords）。
+// 解決「localStorage 滿 → 每次存檔靜默失敗 → 重整後行程消失」的根本問題。
+function compactStorage(aggressive) {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (!s) return true;
+    const raw = JSON.parse(s);                       // 解析失敗直接進 catch，不會覆寫
+    const cutoff = businessDayKey(Date.now() - 30 * 864e5);
+    const tk = todayKey();
+    Object.keys(raw).forEach(day => {
+      raw[day] = (raw[day] || []).map(t => {
+        const slim = serializeTrip(t);
+        // 30 天前（或緊急模式時非今日）且已有貼路線 → 原始座標只留頭尾
+        if (slim.roadCoords && slim.coords && slim.coords.length > 2 &&
+            (day < cutoff || (aggressive && day !== tk))) {
+          slim.coords = [slim.coords[0], slim.coords[slim.coords.length - 1]];
+        }
+        return slim;
+      });
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+    return true;
+  } catch (e) { return false; }
+}
+
+// 本機儲存用量（bytes，UTF-16 估算）
+function storageBytes() {
+  let n = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      n += k.length + (localStorage.getItem(k) || '').length;
+    }
+  } catch (_) {}
+  return n * 2;
 }
 
 // 刪除墓碑：記住已刪除的趟 id，讓合併同步不會把它加回來
@@ -2931,6 +2977,18 @@ function boot() {
   } catch (e) {}
 
   document.body.classList.add('platform-' + nativePlatform());
+  // 一次性儲存壓實（每個壓實版本只跑一次）：釋放舊全精度資料佔用的空間，
+  // 避免 localStorage 滿載導致存檔靜默失敗
+  try {
+    if (localStorage.getItem('maptrip_compacted') !== 'v1') {
+      const before = storageBytes();
+      if (compactStorage(false)) {
+        localStorage.setItem('maptrip_compacted', 'v1');
+        const freed = before - storageBytes();
+        if (freed > 200000) setTimeout(() => toast(`已整理儲存空間，釋放 ${(freed / 1048576).toFixed(1)} MB`), 1500);
+      }
+    }
+  } catch (_) {}
   initMap();
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
