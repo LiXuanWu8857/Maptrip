@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.186';
+const APP_VERSION  = '1.1.187';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -2574,6 +2574,25 @@ function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCo
   return { id, startTime, endTime, coords: slimCoords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(label ? { label } : {}), ...(slimRoad ? { roadCoords: slimRoad } : {}) };
 }
 
+// 給 sync.js 用：雲端資料「進入本機前」先瘦身。
+// 沒有這層的話，雲端殘留的胖資料（壓實前的全量座標）會在同步時
+// 把剛壓實的本機資料再灌肥回去（2MB → 10MB 的元兇）。
+window.slimTripForStorage = function (t) {
+  try {
+    const slim = serializeTrip(t);
+    const day = businessDayKey(slim.startTime);
+    if (day !== todayKey()) {
+      if (slim.roadCoords && slim.coords && slim.coords.length > 2) {
+        slim.coords = [slim.coords[0], slim.coords[slim.coords.length - 1]]
+          .map(c => ({ lat: c.lat, lng: c.lng }));
+      } else if (slim.coords && slim.coords.length > 20) {
+        slim.coords = _simplifyPath(slim.coords.map(c => ({ lat: c.lat, lng: c.lng })), 0.00004);
+      }
+    }
+    return slim;
+  } catch (_) { return t; }
+};
+
 // 合併式存檔：以趟 id 為鍵，todayTrips（目前/編輯後）優先覆蓋；
 // localStorage 既有、但 todayTrips 這次沒帶到的趟「保留」，
 // 這樣即使 todayTrips 一時不完整，也絕不會把本機既有的行程弄丟。
@@ -3001,10 +3020,10 @@ function boot() {
   // 一次性儲存壓實（每個壓實版本只跑一次）：釋放舊全精度資料佔用的空間，
   // 避免 localStorage 滿載導致存檔靜默失敗
   try {
-    if (localStorage.getItem('maptrip_compacted') !== 'v3') {
+    if (localStorage.getItem('maptrip_compacted') !== 'v4') {
       const before = storageBytes();
       if (compactStorage(false)) {
-        localStorage.setItem('maptrip_compacted', 'v3');
+        localStorage.setItem('maptrip_compacted', 'v4');
         const freed = before - storageBytes();
         if (freed > 200000) setTimeout(() => toast(`已整理儲存空間，釋放 ${(freed / 1048576).toFixed(1)} MB`), 1500);
       }

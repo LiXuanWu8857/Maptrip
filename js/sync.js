@@ -188,9 +188,13 @@
   function mergeTrips(a, b) {
     const map = new Map();
     const dead = deletedIdSet();
-    const score = x => (x.fare ? 1 : 0) + (x.roadCoords ? 2 : 0) + ((x.coords || []).length / 1e6);
+    // 每筆先過瘦身（app.js 提供）：雲端殘留的胖資料不會再把本機灌肥
+    const slim = (typeof window.slimTripForStorage === 'function')
+      ? window.slimTripForStorage : (t => t);
+    const score = x => (x.fare ? 1 : 0) + (x.roadCoords ? 2 : 0);
     [...(a || []), ...(b || [])].forEach(t => {
       if (!t || t.id == null || dead.has(t.id)) return;   // 排除墓碑
+      t = slim(t);
       const ex = map.get(t.id);
       if (!ex || score(t) > score(ex)) map.set(t.id, t);
     });
@@ -217,9 +221,8 @@
     const days = new Set([...Object.keys(local), ...Object.keys(cloud)]);
     days.forEach(day => {
       const merged = mergeTrips(local[day], cloud[day]);
-      // 本地有、雲端沒有的趟 → 之後推上去
-      const cloudIds = new Set((cloud[day] || []).map(t => t.id));
-      if ((local[day] || []).some(t => !cloudIds.has(t.id))) toPush.push(day);
+      // 雲端與瘦身後的合併結果不同（缺趟或仍是胖資料）→ 回推，雲端也跟著瘦身
+      if (JSON.stringify(merged) !== JSON.stringify(cloud[day] || [])) toPush.push(day);
       if (JSON.stringify(merged) !== JSON.stringify(local[day] || [])) {
         if (merged.length) local[day] = merged; else delete local[day];
         changed = true;
