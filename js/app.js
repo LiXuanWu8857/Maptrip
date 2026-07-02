@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.199';
+const APP_VERSION  = '1.1.200';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -435,6 +435,9 @@ function onGpsUpdate(pos) {
       fillOpacity: 0.06, weight: 1, opacity: 0.25
     }).addTo(map);
     map.setView([lat, lng], 16);
+    // 開機拿到第一筆定位就進入跟隨：地圖才會立刻朝車頭旋轉
+    // （旋轉被 autoFollow 擋著，否則預設朝車頭要等按定位鈕/開始記錄才生效）
+    setAutoFollow(true);
   } else {
     myDotMarker.setLatLng([lat, lng]);
     accuracyCircle.setLatLng([lat, lng]).setRadius(acc);
