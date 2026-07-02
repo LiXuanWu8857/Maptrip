@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.187';
+const APP_VERSION  = '1.1.188';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -643,6 +643,11 @@ async function finalizeSavedTrip(trip, fare, paymentMethod, label) {
   const road = await snapToRoads(trip.coords);
   if (road) {
     trip.roadCoords = road;
+    // 貼路成功 → 原始 GPS 座標只留頭尾（畫線/回放/截圖一律用 roadCoords，
+    // 縮掉可大幅省儲存空間；貼路失敗的趟保留完整座標，開機時會自動重試）
+    if (trip.coords && trip.coords.length > 2) {
+      trip.coords = [trip.coords[0], trip.coords[trip.coords.length - 1]];
+    }
     // 重畫這趟的路線（換成貼路座標）
     const idx = todayTrips.indexOf(trip);
     if (idx >= 0 && trip._layers) {
@@ -803,9 +808,11 @@ async function snapToRoads(coords) {
 
   const coordStr = pts.map(c => `${c.lng},${c.lat}`).join(';');
   const radii    = pts.map(() => '30').join(';');
-  const ts       = pts.map(c => Math.floor(c.t / 1000)).join(';');
+  // 時間戳有助於貼路品質，但舊資料（壓實後）可能沒有 → 沒有就省略該參數
+  const hasT = pts.every(c => typeof c.t === 'number' && isFinite(c.t));
+  const tsParam = hasT ? `&timestamps=${pts.map(c => Math.floor(c.t / 1000)).join(';')}` : '';
   const url = `https://router.project-osrm.org/match/v1/driving/${coordStr}` +
-    `?radiuses=${radii}&timestamps=${ts}&geometries=geojson&overview=full&annotations=false`;
+    `?radiuses=${radii}${tsParam}&geometries=geojson&overview=full&annotations=false`;
 
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
@@ -2669,6 +2676,36 @@ function compactStorage(aggressive) {
   } catch (e) { return false; }
 }
 
+// 開機補貼路：歷史上貼路失敗的趟重試貼路，成功後把原始座標縮成頭尾。
+// 每次開機最多處理 maxTrips 趟（對公用 OSRM 客氣一點），失敗的下次再試。
+async function retrySnapBacklog(maxTrips = 5) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const jobs = [];
+    Object.keys(raw).forEach(day => (raw[day] || []).forEach(t => {
+      if (!t.roadCoords && t.coords && t.coords.length > 20) jobs.push({ day, id: t.id });
+    }));
+    if (!jobs.length) return;
+    let done = 0;
+    for (const j of jobs) {
+      if (done >= maxTrips || activeTrip) break;   // 記錄中不佔用網路
+      const cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');  // 重讀避免蓋掉期間變動
+      const trip = (cur[j.day] || []).find(t => t.id === j.id);
+      if (!trip || trip.roadCoords) continue;
+      const road = await snapToRoads(trip.coords);
+      if (!road) continue;
+      trip.roadCoords = _simplifyPath(road, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));
+      trip.coords = [trip.coords[0], trip.coords[trip.coords.length - 1]]
+        .map(c => ({ lat: c.lat, lng: c.lng }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
+      if (window.MaptripSync) MaptripSync.syncDays([j.day]);
+      done++;
+      await new Promise(r => setTimeout(r, 800));   // 節流
+    }
+    if (done) dbg('retrySnap done ' + done);
+  } catch (_) {}
+}
+
 // 本機儲存用量（bytes，UTF-16 估算）
 function storageBytes() {
   let n = 0;
@@ -3035,6 +3072,8 @@ function boot() {
   if (glBtn) glBtn.textContent = window.MAPTRIP_GL ? '🗺 換回標準地圖' : '🧪 新地圖引擎（Beta）';
   // 開機自動嘗試啟用羅盤（先前授權過就生效），方向光束一開始就會顯示
   setTimeout(() => { try { enableDeviceCompass(true); } catch (_) {} }, 800);
+  // 開機 10 秒後補貼路（未在記錄中才跑），逐步把「直線趟」修成真實路線
+  setTimeout(() => { if (!activeTrip) retrySnapBacklog(); }, 10000);
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
