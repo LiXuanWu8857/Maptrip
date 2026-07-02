@@ -295,10 +295,9 @@
       pitchWithRotate: false,
       maxZoom: 20
     });
-    // 關掉手勢旋轉/傾斜（旋轉由程式控制，與 Leaflet 版行為一致）
+    // 允許雙指旋轉手勢；關掉傾斜（保持 2D）
     try {
       this.gl.dragRotate.disable();
-      this.gl.touchZoomRotate.disableRotation();
       this.gl.touchPitch.disable();
       this.gl.keyboard.disableRotation();
     } catch (e) {}
@@ -324,7 +323,7 @@
       disable: function () { self.gl.dragPan.disable(); }
     };
     this.touchZoom = {
-      enable: function () { self.gl.touchZoomRotate.enable(); self.gl.touchZoomRotate.disableRotation(); },
+      enable: function () { self.gl.touchZoomRotate.enable(); },
       disable: function () { self.gl.touchZoomRotate.disable(); }
     };
     this.doubleClickZoom = {

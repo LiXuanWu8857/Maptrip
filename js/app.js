@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.185';
+const APP_VERSION  = '1.1.186';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 const MIN_ACCURACY_M = 60;
@@ -93,8 +93,8 @@ function ensureBottomBarVisible() {
 function initMap() {
   map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0,
                        preferCanvas: true,
-                       // leaflet-rotate：允許程式旋轉，但關掉手勢旋轉（避免誤觸）
-                       rotate: true, rotateControl: false, touchRotate: false,
+                       // leaflet-rotate：程式旋轉 + 雙指手勢旋轉
+                       rotate: true, rotateControl: false, touchRotate: true,
                        shiftKeyRotate: false, bearing: 0 })
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
@@ -102,7 +102,14 @@ function initMap() {
   // 地圖旋轉時，讓指北針的針頭永遠指向真正的北方
   if (map.setBearing) {
     document.getElementById('compass-btn').style.display = 'flex';
-    map.on('rotate', () => { updateCompassNeedle(); updateMyHeadingArrow(); });
+    map.on('rotate', () => {
+      updateCompassNeedle();
+      updateMyHeadingArrow();
+      // 手動雙指旋轉時，同步平滑旋轉器的內部角度（動畫中則不干預）
+      if (_bearingRAF == null) {
+        _animBearing = _targetBearing = ((map.getBearing() % 360) + 360) % 360;
+      }
+    });
     updateCompassNeedle();
   }
 
@@ -930,6 +937,8 @@ function centerOnMe() {
   setAutoFollow(true);
   enableDeviceCompass();   // 開啟羅盤：停著也能顯示方向光束
   map.setView([currentPos.lat, currentPos.lng], 16);
+  // 朝車頭模式：恢復跟隨的同時也恢復自動旋轉
+  if (headingUp && lastHeading) setTargetBearing(-lastHeading);
 }
 
 // 兩點間方位角（度，正北為 0，順時針）
@@ -1064,11 +1073,13 @@ function onDeviceOrient(e) {
     myHeading = h;                                // 停/慢速：羅盤朝向 = 我的朝向
     updateMyHeadingArrow();
     lastHeading = h;
-    if (headingUp && map.setBearing) setTargetBearing(-h);
+    if (headingUp && map.setBearing && autoFollow) setTargetBearing(-h);   // 拖動瀏覽中不搶地圖
   }
 }
 
-// 記錄中每筆 GPS：若開啟朝車頭，讓地圖旋轉到行進方向
+// 記錄中每筆 GPS：若開啟朝車頭，讓地圖旋轉到行進方向。
+// 使用者拖動地圖（autoFollow 關閉）時暫停自動旋轉，地圖可自由移動；
+// 按「我的位置」恢復跟隨後旋轉才繼續（同 Google 地圖行為）。
 function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
   lastMoveSpeed = effectiveSpeed || 0;
   if (!headingUp || !map.setBearing) return;
@@ -1079,6 +1090,7 @@ function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
     else heading = lastHeading;
   }
   if (effectiveSpeed > 1) { lastHeading = heading; headingRefPos = { lat, lng }; }
+  if (!autoFollow) return;                        // 使用者正在自由瀏覽 → 不搶地圖
   if (effectiveSpeed > 0.8) setTargetBearing(-lastHeading);
 }
 
@@ -2625,6 +2637,10 @@ function compactStorage(aggressive) {
         if (slim.roadCoords && slim.coords && slim.coords.length > 2 &&
             (day < dropCut || (aggressive && day !== tk))) {
           slim.coords = [slim.coords[0], slim.coords[slim.coords.length - 1]];
+        } else if (!slim.roadCoords && day !== tk && slim.coords && slim.coords.length > 20) {
+          // 沒有貼路線的舊行程（歷史上貼路失敗的）：座標本身做路徑簡化，
+          // 形狀不變、點數大減（距離統計早已存好，不受影響）
+          slim.coords = _simplifyPath(slim.coords, 0.00004);
         }
         return slim;
       });
@@ -2985,10 +3001,10 @@ function boot() {
   // 一次性儲存壓實（每個壓實版本只跑一次）：釋放舊全精度資料佔用的空間，
   // 避免 localStorage 滿載導致存檔靜默失敗
   try {
-    if (localStorage.getItem('maptrip_compacted') !== 'v2') {
+    if (localStorage.getItem('maptrip_compacted') !== 'v3') {
       const before = storageBytes();
       if (compactStorage(false)) {
-        localStorage.setItem('maptrip_compacted', 'v2');
+        localStorage.setItem('maptrip_compacted', 'v3');
         const freed = before - storageBytes();
         if (freed > 200000) setTimeout(() => toast(`已整理儲存空間，釋放 ${(freed / 1048576).toFixed(1)} MB`), 1500);
       }
