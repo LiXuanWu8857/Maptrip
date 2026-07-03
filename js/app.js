@@ -1,6 +1,10 @@
-const APP_VERSION  = '1.1.200';
+const APP_VERSION  = '1.1.201';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
+// 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
+// 同步介面、記憶體快取，開機時 boot 之前完成初始化與舊資料搬移
+function loadTrips() { return TripStore.getAll(); }
+function saveTrips(raw) { TripStore.setAll(raw); }
 const MIN_ACCURACY_M = 60;
 const GPS_RECORD_MS  = 1000;   // 每秒存一點，路線更細緻
 const LIVE_SNAP_PTS  = 30;     // 每累積 30 點（約 30 秒）即時貼合一次道路
@@ -842,10 +846,10 @@ function restoreActiveTripIfAny() {
       const trip = { id: s.id, startTime: s.startTime, endTime: (last && last.t) || s.savedAt,
                      coords: s.coords, totalDist: calcTotalDist(s.coords), fare: 0 };
       const day = businessDayKey(trip.startTime);
-      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      const raw = loadTrips();
       (raw[day] = raw[day] || []).push(serializeTrip(trip));
       raw[day].sort((a, b) => a.startTime - b.startTime);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+      saveTrips(raw);
       if (window.MaptripSync) MaptripSync.syncDays([day]);
       toast('已將中斷的行程存檔，金額可稍後補填');
     } catch (_) {}
@@ -1495,7 +1499,7 @@ function editFare(e, idx) {
 // 編輯「歷史」某趟的金額 / 現金刷卡
 function editHistoryFare(e, day, idx) {
   e.stopPropagation();
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const trip = (raw[day] || [])[idx];
   if (!trip) return;
 
@@ -1527,12 +1531,12 @@ function editHistoryFare(e, day, idx) {
   const tripId = trip.id;   // 用 id 定位，避免期間同步併入新趟造成索引位移
   const saveEdit = (paymentMethod) => {
     const fare = parseInt(input.value) || 0;
-    const cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const cur = loadTrips();
     const target = (cur[day] || []).find(t => t.id === tripId);
     if (target) {
       target.fare = fare;
       target.paymentMethod = paymentMethod;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
+      saveTrips(cur);
       if (window.MaptripSync) MaptripSync.syncDays([day]);
     }
     // 若編輯的是「今日」的趟，記憶體中的 todayTrips 也要同步，
@@ -1566,7 +1570,7 @@ function showSoloTripFromToday(idx) {
 
 // 從歷史某日點某趟 → 進入可左右切換的單趟顯示（限定在那一天的趟次內切換）
 function showHistoryTrip(day, idx) {
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   if (!raw[day]?.length) return;
   soloFromHistory = true;
   closeHistory();
@@ -1792,7 +1796,7 @@ function closeHistory() {
 
 function renderHistorySheet() {
   const body = document.getElementById('history-body');
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const days = Object.keys(raw).sort().reverse().filter(d => raw[d]?.length > 0);
   if (!days.length) { body.innerHTML = '<div class="empty-state">尚無歷史紀錄</div>'; return; }
 
@@ -1863,7 +1867,7 @@ function renderHistorySheet() {
 function setHistoryRest(day, hoursStr) {
   const hr = Math.max(0, parseFloat(hoursStr) || 0);
   setRestMin(day, Math.round(hr * 60));
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const wEl = document.getElementById('work-' + day);
   if (wEl) wEl.textContent = fmtWork(workMs(raw[day] || [], getRestMin(day)));
   const mk = day.slice(0, 7);
@@ -1894,7 +1898,7 @@ function toggleDay(day) {
 let dayPreviewLayers = [], dayPreviewKey = null, dayPreviewTile = null;
 
 function previewDay(dayKey) {
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const trips = raw[dayKey] || [];
   if (!trips.length) { toast('該日無行程'); return; }
   resetBearingNow();   // 日預覽固定指北
@@ -1980,7 +1984,7 @@ function _loadTile(url) {
 async function captureTripsScreenshot(dayKey) {
   let trips, dateLabel;
   if (dayKey) {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const raw = loadTrips();
     trips = raw[dayKey] || [];
     dateLabel = dayKeyToLabel(dayKey);
   } else {
@@ -2244,7 +2248,7 @@ function captureTodayTripShot(e, i) {
 
 function captureHistoryTripShot(e, dayKey, i) {
   e.stopPropagation();
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const trip = (raw[dayKey] || [])[i];
   if (trip) captureSingleTripScreenshot(trip);
 }
@@ -2426,7 +2430,7 @@ function renderSyncPanel() {
     const c = st.cloud || { days: 0, trips: 0 };
     statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>'
       + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟'
-      + '　本機：' + (storageBytes() / 1048576).toFixed(1) + ' MB</span>';
+      + '　本機：' + (TripStore.bytes() / 1048576).toFixed(1) + ' MB（' + TripStore.mode() + '）</span>';
     actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>';
   }
 }
@@ -2477,7 +2481,7 @@ function openReplay() {
 // 回放歷史任一天：載入該日行程、臨時畫出路線、開始回放
 function replayDay(dayKey) {
   exitDayPreview();
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const trips = raw[dayKey] || [];
   if (!trips.length) { toast('該日無行程可回放'); return; }
   replaySet = trips;
@@ -2793,7 +2797,7 @@ function _deletedIdSet() {
   catch (_) { return new Set(); }
 }
 function saveTodayToStorage() {
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const dead = _deletedIdSet();
   const affected = new Set([todayKey()]);
   const grouped = {};
@@ -2810,12 +2814,12 @@ function saveTodayToStorage() {
     if (merged.length) raw[day] = merged; else delete raw[day];
   });
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+    saveTrips(raw);
   } catch (e) {
     // 儲存空間滿：先壓實歷史資料再重試一次，仍失敗才提示
     compactStorage(true);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+      saveTrips(raw);
       toast('儲存空間已自動整理');
     } catch (e2) {
       toast('⚠ 本機儲存空間不足，行程可能無法保存！');
@@ -2830,9 +2834,8 @@ function saveTodayToStorage() {
 // 解決「localStorage 滿 → 每次存檔靜默失敗 → 重整後行程消失」的根本問題。
 function compactStorage(aggressive) {
   try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    if (!s) return true;
-    const raw = JSON.parse(s);                       // 解析失敗直接進 catch，不會覆寫
+    const raw = loadTrips();
+    if (!Object.keys(raw).length) return true;
     const dropCut = businessDayKey(Date.now() - 7 * 864e5);   // 7 天前
     const tk = todayKey();
     Object.keys(raw).forEach(day => {
@@ -2855,7 +2858,7 @@ function compactStorage(aggressive) {
         return slim;
       });
     });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+    saveTrips(raw);
     return true;
   } catch (e) { return false; }
 }
@@ -2864,7 +2867,7 @@ function compactStorage(aggressive) {
 // 每次開機最多處理 maxTrips 趟（對公用 OSRM 客氣一點），失敗的下次再試。
 async function retrySnapBacklog(maxTrips = 5) {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const raw = loadTrips();
     const jobs = [];
     Object.keys(raw).forEach(day => (raw[day] || []).forEach(t => {
       if (!t.roadCoords && t.coords && t.coords.length > 20) jobs.push({ day, id: t.id });
@@ -2873,7 +2876,7 @@ async function retrySnapBacklog(maxTrips = 5) {
     let done = 0, failed = 0;
     for (const j of jobs) {
       if (done + failed >= maxTrips || activeTrip) break;   // 記錄中不佔用網路
-      const cur = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');  // 重讀避免蓋掉期間變動
+      const cur = loadTrips();  // 重讀避免蓋掉期間變動
       const trip = (cur[j.day] || []).find(t => t.id === j.id);
       if (!trip || trip.roadCoords) continue;
       const road = await snapToRoads(trip.coords);
@@ -2881,7 +2884,7 @@ async function retrySnapBacklog(maxTrips = 5) {
       trip.roadCoords = _simplifyPath(road, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));
       trip.coords = [trip.coords[0], trip.coords[trip.coords.length - 1]]
         .map(c => ({ lat: c.lat, lng: c.lng }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cur));
+      saveTrips(cur);
       if (window.MaptripSync) MaptripSync.syncDays([j.day]);
       // 今日清單中的趟 → 同步記憶體並立即重畫成貼路線
       const memT = todayTrips.find(t => t.id === j.id);
@@ -2932,7 +2935,7 @@ function addDeletedId(id) {
 // 明確從本機移除某趟（供刪除使用，不會被合併存檔／雲端救回）
 function removeTripFromStorage(id) {
   addDeletedId(id);   // 先立墓碑，避免同步又加回來
-  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const raw = loadTrips();
   const affected = [];
   Object.keys(raw).forEach(day => {
     if (!Array.isArray(raw[day])) return;
@@ -2941,7 +2944,7 @@ function removeTripFromStorage(id) {
     if (raw[day].length !== before) affected.push(day);
     if (!raw[day].length) delete raw[day];
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+  saveTrips(raw);
   // 從雲端移除該趟 + 把刪除名單推上雲端（跨裝置生效）
   if (window.MaptripSync) {
     if (MaptripSync.deleteTripFromCloud) affected.forEach(day => MaptripSync.deleteTripFromCloud(day, id));
@@ -2951,7 +2954,7 @@ function removeTripFromStorage(id) {
 
 function loadTodayFromStorage() {
   let raw = {};
-  try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch (_) {}
+  try { raw = loadTrips(); } catch (_) {}
   const saved = raw[todayKey()] || [];
   if (!saved.length) return;
   saved.forEach((t, i) => {
@@ -3292,10 +3295,14 @@ function boot() {
   if (window.MaptripSync) { try { MaptripSync.init(); } catch (e) {} }
 }
 
+// 先完成儲存層初始化（IndexedDB 開啟＋舊資料搬移）再 boot，
+// boot 內所有 loadTrips() 才讀得到資料。init 內部已處理所有失敗（退回 localStorage），不會 reject。
+function startApp() { TripStore.init(STORAGE_KEY).then(boot); }
+
 // app.js 由 index.html 的 loader 動態載入，可能在 window load 之後才進來，
 // 那時 'load' 事件已過、不會再觸發，因此要依 readyState 判斷是否立即啟動。
 if (document.readyState === 'complete') {
-  boot();
+  startApp();
 } else {
-  window.addEventListener('load', boot);
+  window.addEventListener('load', startApp);
 }

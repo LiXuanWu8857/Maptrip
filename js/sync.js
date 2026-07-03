@@ -133,7 +133,7 @@
       if (!localDays[day].length) delete localDays[day];
     });
     if (changed) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(localDays));
+      TripStore.setAll(localDays);
       if (window.refreshAfterSync) window.refreshAfterSync();
     }
 
@@ -175,7 +175,7 @@
     } catch (e) { log('listen failed'); }
   }
 
-  function getLocal() { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+  function getLocal() { return TripStore.getAll(); }   // 行程儲存改走 IndexedDB（js/store.js）
 
   // 已刪除的趟 id（墓碑）：合併時要排除，避免刪掉的又被同步加回來
   function deletedIdSet() {
@@ -229,7 +229,7 @@
       }
     });
     if (changed) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+      TripStore.setAll(local);
       if (window.refreshAfterSync) window.refreshAfterSync();
     }
     toPush.forEach(syncDay);

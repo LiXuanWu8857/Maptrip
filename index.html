@@ -19,7 +19,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.200';</script>
+<script>window.INDEX_VERSION = '1.1.201';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -340,6 +340,7 @@ if (!sessionStorage.getItem('booted')) {
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="js/firebase-config.js"></script>
+<script>document.write('<scr' + 'ipt src="js/store.js?t=' + Date.now() + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/sync.js?t=' + Date.now() + '"></scr' + 'ipt>');</script>
 
 <!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，
