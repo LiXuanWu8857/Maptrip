@@ -25,7 +25,7 @@ window.TripStore = (function () {
       req.onupgradeneeded = () => { req.result.createObjectStore('days'); };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error || new Error('idb open error'));
-      setTimeout(() => reject(new Error('idb open timeout')), 4000);   // onblocked 等不到就退回
+      setTimeout(() => reject(new Error('idb open timeout')), 8000);   // onblocked 等不到就退回
     });
   }
 
@@ -62,18 +62,47 @@ window.TripStore = (function () {
       db = await openDb(storageKey);          // DB 名稱=儲存鍵：正式/測試模式自然隔離
       cache = await idbReadAll();
 
-      // 一次性搬移：IndexedDB 還是空的、localStorage 有舊資料 → 搬過去並重讀核對筆數
+      // 只要 localStorage 還有行程資料，每次開機都做「聯集合併」（以趟 id 為鍵，永不減少）。
+      // 不是一次性搬移：這樣不論是 (a) 搬移被開機自動 reload 攔腰打斷留下半套資料、
+      // (b) 某場次 IndexedDB 開太慢退回 localStorage 模式、行程寫在 localStorage、
+      // (c) 系統把 IndexedDB 清掉，下次開機都會自動把兩邊資料補齊，不會有缺趟。
       const legacy = localStorage.getItem(storageKey);
-      if (!Object.keys(cache).length && legacy) {
+      if (legacy) {
         const old = JSON.parse(legacy);
-        await idbWrite(old, []);
-        const check = await idbReadAll();
-        if (countTrips(check) !== countTrips(old)) throw new Error('migrate verify fail');
-        cache = check;
-        try { localStorage.setItem(storageKey + '_migrated', String(Date.now())); } catch (_) {}
+        // 墓碑（使用者刪除的趟 id）：備份裡可能還留著已刪的趟，合併時必須排除，否則刪掉的會復活
+        let dead = new Set();
+        try {
+          const delKey = storageKey.indexOf('test') >= 0 ? 'maptrip_deleted_test' : 'maptrip_deleted';
+          dead = new Set(JSON.parse(localStorage.getItem(delKey) || '[]')
+            .map(d => d && d.id).filter(v => v != null));
+        } catch (_) {}
+        const puts = {};
+        let recovered = 0;
+        Object.keys(old).forEach(day => {
+          const byId = new Map();
+          (cache[day] || []).forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
+          let added = 0;
+          (old[day] || []).forEach(t => {
+            if (t && t.id != null && !byId.has(t.id) && !dead.has(t.id)) { byId.set(t.id, t); added++; }
+          });
+          if (added) {
+            puts[day] = [...byId.values()].sort((a, b) => a.startTime - b.startTime);
+            recovered += added;
+          }
+        });
+        if (Object.keys(puts).length) {
+          await idbWrite(puts, []);
+          const check = await idbReadAll();              // 重讀逐日核對：寫進去的必須讀得回來
+          Object.keys(puts).forEach(day => {
+            if (JSON.stringify(check[day]) !== JSON.stringify(puts[day])) throw new Error('merge verify fail');
+          });
+          cache = check;
+          try { localStorage.setItem(storageKey + '_migrated', String(Date.now())); } catch (_) {}
+          window._storeMerged = recovered;               // 開機提示用（app.js 讀取）
+        }
       }
 
-      // 搬移滿 7 天且 IndexedDB 有資料 → 移除 localStorage 舊備份（釋放空間）
+      // 合併狀態穩定滿 7 天 → 移除 localStorage 舊備份（釋放空間；期間都是雙保險）
       try {
         const mig = +localStorage.getItem(storageKey + '_migrated') || 0;
         if (mig && Date.now() - mig > 7 * 864e5 &&
@@ -130,5 +159,8 @@ window.TripStore = (function () {
 
   function mode() { return useLS ? 'localStorage' : 'IndexedDB'; }
 
-  return { init, getAll, setAll, flush, bytes, mode };
+  // 某日趟數（不做深拷貝，供每秒更新的 UI 使用）
+  function dayCount(day) { return (cache[day] || []).length; }
+
+  return { init, getAll, setAll, flush, bytes, mode, dayCount };
 })();

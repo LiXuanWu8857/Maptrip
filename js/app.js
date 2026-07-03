@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.202';
+const APP_VERSION  = '1.1.203';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -2443,9 +2443,19 @@ function submitSyncLogin() {
 
 // 雲端把新資料併進 localStorage 後呼叫：重繪今日 + 更新開啟中的清單
 function refreshAfterSync() {
-  // 記錄中／單趟檢視／預覽／回放時，先不動畫面（資料已存好，下次正常載入會顯示）
+  // 記錄中／單趟檢視／預覽／回放時不動地圖圖層（下次正常載入會重畫），
+  // 但仍把儲存中多出來的趟「補進」今日清單，頂列趟數與清單才會即時正確
   if (activeTrip || (typeof soloSet !== 'undefined' && soloSet.length) ||
-      dayPreviewKey || replayRAF) { updateTopBar(); return; }
+      dayPreviewKey || replayRAF) {
+    try {
+      const saved = loadTrips()[todayKey()] || [];
+      const have = new Set(todayTrips.map(t => t.id));
+      let added = false;
+      saved.forEach(t => { if (t && t.id != null && !have.has(t.id)) { todayTrips.push(t); added = true; } });
+      if (added) todayTrips.sort((a, b) => a.startTime - b.startTime);
+    } catch (_) {}
+    updateTopBar(); return;
+  }
   allMapLayers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
   allMapLayers = [];
   todayTrips = [];
@@ -3309,7 +3319,14 @@ function boot() {
 
 // 先完成儲存層初始化（IndexedDB 開啟＋舊資料搬移）再 boot，
 // boot 內所有 loadTrips() 才讀得到資料。init 內部已處理所有失敗（退回 localStorage），不會 reject。
-function startApp() { TripStore.init(STORAGE_KEY).then(boot); }
+function startApp() {
+  if (window.__mtReloadPending) return;   // 冷啟動自動 reload 即將發生：這一次絕不啟動
+  TripStore.init(STORAGE_KEY).then(() => {
+    boot();
+    // 開機合併有從備份撿回行程 → 讓使用者知道
+    if (window._storeMerged > 0) setTimeout(() => toast(`已從備份補回 ${window._storeMerged} 趟行程`), 1200);
+  });
+}
 
 // app.js 由 index.html 的 loader 動態載入，可能在 window load 之後才進來，
 // 那時 'load' 事件已過、不會再觸發，因此要依 readyState 判斷是否立即啟動。
