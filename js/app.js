@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.205';
+const APP_VERSION  = '1.1.206';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -487,7 +487,12 @@ function onGpsUpdate(pos) {
   try { applyHeadingUp(lat, lng, effectiveSpeed, pos.coords.heading); } catch (_) {}
 }
 
+// 自動偵測彈窗（行駛中→問開始、停車→問結束)已依使用者要求停用：行程一律手動開始/結束。
+// 想恢復把這個開關改回 true 即可。
+const AUTO_PROMPTS = false;
+
 function checkArrival(speed) {
+  if (!AUTO_PROMPTS) return;
   if (speed == null || isNaN(speed) || speed < 0) return;
   if (speed > MOVING_SPEED_MS) {
     wasMoving = true;
@@ -534,6 +539,7 @@ function arrivalDismiss() {
 }
 
 function checkAutoStart(speed) {
+  if (!AUTO_PROMPTS) return;
   if (activeTrip || autoStartShown) return;
   if (speed == null || isNaN(speed) || speed < 0) return;
   if (speed > AUTO_START_SPEED_MS) {
