@@ -46,19 +46,32 @@
     return null;
   }
 
-  var TW_COLORS = {
-    national:   { bg: '#1a7a3c', fg: '#ffffff' },   // 綠
-    expressway: { bg: '#d0021b', fg: '#ffffff' },   // 紅
-    provincial: { bg: '#1565c0', fg: '#ffffff' },   // 藍
-    county:     { bg: '#f4c400', fg: '#1a1a1a' }    // 黃
+  // 依交通部實際圖示：省道=白底藍框倒三角、快速=暗紅倒三角白字、
+  //                    國道=白梅花綠框黑字、縣道=白底黑框方形
+  var TW_STYLE = {
+    provincial: { shape: 'pick',   fill: '#ffffff', line: '#12489e', text: '#12489e', dbl: true },
+    expressway: { shape: 'pick',   fill: '#8f1d20', line: '#ffffff', text: '#ffffff' },
+    national:   { shape: 'plum',   fill: '#ffffff', line: '#1a7a3c', text: '#111111' },
+    county:     { shape: 'square', fill: '#ffffff', line: '#111111', text: '#111111' }
   };
   function _cv(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-  function _roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  function _num(ctx, t, x, y, fs, color) {
+    ctx.fillStyle = color;
+    ctx.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(t, x, y);
   }
+  // 盾形（上寬圓、中段仍寬、底部收成圓尖）—— 省道/快速用
+  function _pick(ctx, x, y, w, h) {
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.5, y);
+    ctx.bezierCurveTo(x + w * 0.98, y,        x + w,        y + h * 0.30, x + w * 0.85, y + h * 0.56);
+    ctx.bezierCurveTo(x + w * 0.73, y + h * 0.80, x + w * 0.57, y + h * 0.95, x + w * 0.5,  y + h);
+    ctx.bezierCurveTo(x + w * 0.43, y + h * 0.95, x + w * 0.27, y + h * 0.80, x + w * 0.15, y + h * 0.56);
+    ctx.bezierCurveTo(x,            y + h * 0.30, x + w * 0.02, y,            x + w * 0.5,  y);
+    ctx.closePath();
+  }
+  // 梅花（5 瓣）— 用單一 fill 顏色畫；白花綠框靠先綠後白內縮兩層達成
   function _blossom(ctx, cx, cy, R, fill) {
     ctx.fillStyle = fill;
     var pr = R * 0.46;
@@ -68,35 +81,46 @@
       ctx.arc(cx + Math.cos(a) * (R - pr), cy + Math.sin(a) * (R - pr), pr, 0, 2 * Math.PI);
       ctx.fill();
     }
-    ctx.beginPath(); ctx.arc(cx, cy, R * 0.52, 0, 2 * Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.54, 0, 2 * Math.PI); ctx.fill();
   }
   // 產生一張盾牌圖（pixelRatio 2），回傳 ImageData 供 gl.addImage 用
   function drawTwShield(type, ref) {
-    var col = TW_COLORS[type];
-    if (!col) return null;
+    var s = TW_STYLE[type];
+    if (!s) return null;
     var num = String(ref == null ? '' : ref).replace(/\D/g, '') || '?';
-    var P = 2, fs = 15 * P, ctx;
+    var P = 2, fs = 16 * P, ctx, c;
     var probe = _cv(4, 4).getContext('2d');
     probe.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
     var tw = Math.ceil(probe.measureText(num).width);
-    if (type === 'national') {
-      var S = Math.max(24 * P, tw + 16 * P);
-      var cn = _cv(S, S); ctx = cn.getContext('2d');
-      _blossom(ctx, S / 2, S / 2, S / 2 * 0.96, col.bg);
-      ctx.fillStyle = col.fg; ctx.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(num, S / 2, S / 2 + P);
+
+    if (s.shape === 'plum') {                       // 國道：白梅花 + 綠框
+      var S = Math.max(28 * P, tw + 20 * P);
+      c = _cv(S, S); ctx = c.getContext('2d');
+      _blossom(ctx, S / 2, S / 2, S / 2 * 0.97, s.line);          // 綠外框
+      _blossom(ctx, S / 2, S / 2, S / 2 * 0.97 - 2.4 * P, s.fill); // 白內填
+      _num(ctx, num, S / 2, S / 2, fs, s.text);
       return ctx.getImageData(0, 0, S, S);
     }
-    var h = 22 * P, w = Math.max(h, tw + 12 * P);
-    var c = _cv(w, h); ctx = c.getContext('2d');
-    _roundRect(ctx, 1.5 * P, 1.5 * P, w - 3 * P, h - 3 * P, 4 * P);
-    ctx.fillStyle = col.bg; ctx.fill();
-    ctx.lineWidth = 1.5 * P; ctx.strokeStyle = '#ffffff'; ctx.stroke();
-    ctx.fillStyle = col.fg; ctx.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(num, w / 2, h / 2 + P * 0.5);
-    return ctx.getImageData(0, 0, w, h);
+    if (s.shape === 'square') {                     // 縣道：白底黑框方形
+      var h = 26 * P, w = Math.max(h, tw + 12 * P), lw = 2 * P;
+      c = _cv(w, h); ctx = c.getContext('2d');
+      ctx.fillStyle = s.fill; ctx.fillRect(lw / 2, lw / 2, w - lw, h - lw);
+      ctx.lineWidth = lw; ctx.strokeStyle = s.line; ctx.strokeRect(lw / 2, lw / 2, w - lw, h - lw);
+      _num(ctx, num, w / 2, h / 2, fs, s.text);
+      return ctx.getImageData(0, 0, w, h);
+    }
+    // 省道 / 快速：盾形（數字在上半寬處）
+    var pw = Math.max(30 * P, tw + 20 * P), ph = Math.round(pw * 1.16), pad = 2 * P;
+    c = _cv(pw, ph); ctx = c.getContext('2d');
+    _pick(ctx, pad, pad, pw - 2 * pad, ph - 2 * pad);
+    ctx.fillStyle = s.fill; ctx.fill();
+    ctx.lineWidth = 2.4 * P; ctx.strokeStyle = s.line; ctx.lineJoin = 'round'; ctx.stroke();
+    if (s.dbl) {                                     // 省道：內側細藍線（雙框效果）
+      _pick(ctx, pad + 3.4 * P, pad + 3 * P, pw - 2 * pad - 6.8 * P, ph - 2 * pad - 7 * P);
+      ctx.lineWidth = 1 * P; ctx.strokeStyle = s.line; ctx.stroke();
+    }
+    _num(ctx, num, pw / 2, ph * 0.42, fs, s.text);  // 數字置上半寬處（避開下方圓尖）
+    return ctx.getImageData(0, 0, pw, ph);
   }
   var _blankPx = { width: 1, height: 1, data: new Uint8Array(4) };
 
