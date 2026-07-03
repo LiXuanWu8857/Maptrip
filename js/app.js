@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.210';
+const APP_VERSION  = '1.1.211';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -154,6 +154,15 @@ function initMap() {
                        shiftKeyRotate: false, bearing: 0 })
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
+
+  // 今日行程專用 pane：歷史檢視（單趟/日預覽/回放）時整組隱藏，
+  // 不再依賴逐一追蹤 allMapLayers（漏追蹤就會像使用者遇到的「今日點外漏」）
+  try {
+    if (map.createPane) {
+      if (!map.getPane('todayLines')) { map.createPane('todayLines'); map.getPane('todayLines').style.zIndex = 410; }
+      if (!map.getPane('todayMarks')) { map.createPane('todayMarks'); map.getPane('todayMarks').style.zIndex = 620; }
+    }
+  } catch (_) {}
 
   // 地圖旋轉時，讓指北針的針頭永遠指向真正的北方
   if (map.setBearing) {
@@ -1054,7 +1063,24 @@ function bezierGapPoints(from, to) {
 
 function drawGapLine(from, to) {
   return L.polyline(bezierGapPoints(from, to),
-    { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5' }).addTo(map);
+    { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5', pane: _todayPane('todayLines') }).addTo(map);
+}
+
+// 回傳存在的 today pane 名稱；不存在（GL 模式或建立失敗）回 undefined → 用預設 pane
+function _todayPane(name) {
+  try { if (map.getPane && map.getPane(name)) return name; } catch (_) {}
+  return undefined;
+}
+// 整組顯示/隱藏今日行程圖層（pane 一次搞定，不漏任何一個標記/線）
+function showTodayLayers(on) {
+  ['todayLines', 'todayMarks'].forEach(p => {
+    try { const pane = map.getPane && map.getPane(p); if (pane) pane.style.display = on ? '' : 'none'; } catch (_) {}
+  });
+  // GL 模式或未進 pane 的圖層：用不透明度保險（維持舊行為）
+  allMapLayers.forEach(l => {
+    if (l.setStyle) { try { l.setStyle({ opacity: on ? 0.85 : 0 }); } catch (_) {} }
+    else if (l.setOpacity) { try { l.setOpacity(on ? 1 : 0); } catch (_) {} }
+  });
 }
 
 // 取一趟的可畫路徑：極舊雲端資料可能沒有座標，一律回傳陣列（可能為空），
@@ -1068,7 +1094,7 @@ function drawTripLine(trip, idx) {
   // 優先用道路貼合座標，否則退回 GPS 直線
   const latlngs = tripPath(trip).map(c => [c.lat, c.lng]);
   if (!latlngs.length) { trip._layers = []; return; }   // 無座標的舊趟：不畫線，清單/金額照常
-  const line = L.polyline(latlngs, { color: '#1A73E8', weight: 5, opacity: 0.85 }).addTo(map);
+  const line = L.polyline(latlngs, { color: '#1A73E8', weight: 5, opacity: 0.85, pane: _todayPane('todayLines') }).addTo(map);
   // 點該行程路徑 → 進入該趟的單趟預覽（今日）
   line.on('click', () => {
     const k = todayTrips.indexOf(trip);
@@ -1076,8 +1102,8 @@ function drawTripLine(trip, idx) {
     soloFromHistory = false;
     openSoloTrip(todayTrips, k, i => `第 ${i + 1} 趟 / 共 ${todayTrips.length} 趟`);
   });
-  const startMk = L.marker(latlngs[0], { icon: makeNumberIcon(idx, '#34A853'), zIndexOffset: 10 }).addTo(map);
-  const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon() }).addTo(map);
+  const startMk = L.marker(latlngs[0], { icon: makeNumberIcon(idx, '#34A853'), zIndexOffset: 10, pane: _todayPane('todayMarks') }).addTo(map);
+  const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon(), pane: _todayPane('todayMarks') }).addTo(map);
   allMapLayers.push(line, startMk, endMk);
   trip._layers = [line, startMk, endMk];
 }
@@ -1670,11 +1696,16 @@ function renderSoloTrip() {
   soloLayers = [];
   clearReplayTempLayers();
 
-  // 淡化今日所有路線 layer（只在今日清單情境下有 allMapLayers）
-  allMapLayers.forEach(l => {
-    if (l.setStyle) l.setStyle({ opacity: 0.12 });
-    else if (l.setOpacity) l.setOpacity(0.15);
-  });
+  if (soloFromHistory) {
+    // 從歷史進單趟：今日行程整組隱藏（不外漏今日的點/線）
+    showTodayLayers(false);
+  } else {
+    // 今日清單內看單趟：把其他趟淡化當背景（保留脈絡）
+    allMapLayers.forEach(l => {
+      if (l.setStyle) l.setStyle({ opacity: 0.12 });
+      else if (l.setOpacity) l.setOpacity(0.15);
+    });
+  }
 
   // 畫選中行程的路線（歷史模式：黑色 Uber 風格；今日模式：藍色）
   const coords = tripPath(trip).map(c => [c.lat, c.lng]);
@@ -1752,10 +1783,7 @@ function exitSoloMode() {
     TILE_LAYERS[currentTile].addTo(map);
   }
   soloSet = []; soloIdx = 0; soloLabelFn = null; soloFromHistory = false;
-  allMapLayers.forEach(l => {
-    if (l.setStyle) l.setStyle({ opacity: 0.85 });
-    else if (l.setOpacity) l.setOpacity(1);
-  });
+  showTodayLayers(true);   // 還原今日行程圖層（pane 顯示 + 不透明度）
   // 恢復地圖拖曳
   map.dragging.enable();
   map.touchZoom.enable();
@@ -1978,11 +2006,8 @@ function previewDay(dayKey) {
     { subdomains: 'abcd', maxZoom: 20 }).addTo(map);
   dayPreviewTile.bringToBack();
 
-  // 隱藏當日行程圖層
-  allMapLayers.forEach(l => {
-    if (l.setStyle) l.setStyle({ opacity: 0, fillOpacity: 0 });
-    else if (l.setOpacity) l.setOpacity(0);
-  });
+  // 隱藏當日行程圖層（整組 pane，不漏任何標記/線）
+  showTodayLayers(false);
 
   if (allCoords.length) fitMapToRoute(allCoords, 'day-preview-bar');
 }
@@ -2000,10 +2025,7 @@ function exitDayPreview() {
   if (dayPreviewTile) { map.removeLayer(dayPreviewTile); dayPreviewTile = null; }
   TILE_LAYERS[currentTile].addTo(map);
   // 還原當日行程圖層
-  allMapLayers.forEach(l => {
-    if (l.setStyle) l.setStyle({ opacity: 0.85 });
-    else if (l.setOpacity) l.setOpacity(1);
-  });
+  showTodayLayers(true);
 }
 
 // ===== 里程截圖 =====
@@ -2183,11 +2205,11 @@ async function captureSingleTripScreenshot(trip) {
   // 左：去背 LOGO
   _drawBrand(c, 20, 28, 42);
   // 右上：一般行程 → 日期（上）+ 行程時間（下）；
-  //       「其他」行程（有備注）→ 開始-結束時間（上）+ 備注（下）
+  //       「其他」行程（有備注）→ 日期 開始-結束時間（上）+ 備注（下）
   const _note = (trip.label || '').trim();
   if (trip.paymentMethod === 'other' && _note) {
     _drawRightTwoLines(c, W - 20,
-      `${fmtTime(trip.startTime)}-${fmtTime(trip.endTime)}`, '13px system-ui, sans-serif', '#e8eaed', 46,
+      `${dateLabel}　${fmtTime(trip.startTime)}-${fmtTime(trip.endTime)}`, '12px system-ui, sans-serif', '#e8eaed', 46,
       _note, '12px system-ui, sans-serif', '#9aa0a6', 66);
   } else {
     _drawRightTwoLines(c, W - 20,
@@ -2565,11 +2587,8 @@ function replayDay(dayKey) {
     closeHistory(); closeSheet();
     clearReplayTempLayers();
     // 歷史回放：把「今日」的路線與標記全部隱藏（含記錄中的即時線），關閉回放時還原
-    allMapLayers.forEach(l => {
-      if (l.setStyle) l.setStyle({ opacity: 0 });
-      else if (l.setOpacity) l.setOpacity(0);
-    });
-    if (activePolyline) activePolyline.setStyle({ opacity: 0 });
+    showTodayLayers(false);
+    if (activePolyline) { try { activePolyline.setStyle({ opacity: 0 }); } catch (_) {} }
     _replayHidToday = true;
     trips.forEach((t, i) => {
       const cur = tripPath(t);
@@ -2775,11 +2794,8 @@ function closeReplay() {
   // 還原被歷史回放隱藏的今日路線/標記
   if (_replayHidToday) {
     _replayHidToday = false;
-    allMapLayers.forEach(l => {
-      if (l.setStyle) l.setStyle({ opacity: 0.85 });
-      else if (l.setOpacity) l.setOpacity(1);
-    });
-    if (activePolyline) activePolyline.setStyle({ opacity: 0.9 });
+    showTodayLayers(true);
+    if (activePolyline) { try { activePolyline.setStyle({ opacity: 0.9 }); } catch (_) {} }
   }
   document.getElementById('replay-panel').classList.remove('show');
   // 回放結束:5 秒後自動飛回目前位置、恢復跟隨
