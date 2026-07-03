@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.208';
+const APP_VERSION  = '1.1.209';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1069,8 +1069,13 @@ function drawTripLine(trip, idx) {
   const latlngs = tripPath(trip).map(c => [c.lat, c.lng]);
   if (!latlngs.length) { trip._layers = []; return; }   // 無座標的舊趟：不畫線，清單/金額照常
   const line = L.polyline(latlngs, { color: '#1A73E8', weight: 5, opacity: 0.85 }).addTo(map);
-  line.on('click', () =>
-    toast(`行程 ${idx}｜${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}｜${fmtDur(trip.endTime - trip.startTime)}｜${fmtDist(trip.totalDist)}`));
+  // 點該行程路徑 → 進入該趟的單趟預覽（今日）
+  line.on('click', () => {
+    const k = todayTrips.indexOf(trip);
+    if (k < 0) return;
+    soloFromHistory = false;
+    openSoloTrip(todayTrips, k, i => `第 ${i + 1} 趟 / 共 ${todayTrips.length} 趟`);
+  });
   const startMk = L.marker(latlngs[0], { icon: makeNumberIcon(idx, '#34A853'), zIndexOffset: 10 }).addTo(map);
   const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon() }).addTo(map);
   allMapLayers.push(line, startMk, endMk);
@@ -1698,7 +1703,7 @@ function renderSoloTrip() {
   document.getElementById('solo-info').innerHTML =
     `<div class="solo-line1">${label}</div>` +
     `<div class="solo-line2">${info}</div>` +
-    (soloFromHistory ? `<div class="solo-hint">按兩下離開歷史模式</div>` : '');
+    `<div class="solo-hint">${soloFromHistory ? '按兩下地圖離開歷史模式' : '按兩下地圖回全部行程'}</div>`;
 
   // 首尾趟把箭頭變淡（沒有上一趟/下一趟）
   const prevBtn = document.getElementById('solo-prev');
@@ -1729,6 +1734,12 @@ function setupSoloSwipe() {
       else        soloPrev();   // 往右滑 → 上一趟
     }
   }, { passive: true });
+}
+
+// 單趟預覽的「截圖」：截目前顯示的那一趟
+function captureSoloShot() {
+  const trip = soloSet[soloIdx];
+  if (trip) captureSingleTripScreenshot(trip);
 }
 
 function exitSoloMode() {
@@ -2118,7 +2129,7 @@ async function captureTripsScreenshot(dayKey) {
   const spanLabel = fmtWork(workMs(trips, restMin));
   _drawRightTwoLines(c, W - 20,
     _fullDateLabel(firstStart), '13px system-ui, sans-serif', '#e8eaed', 46,
-    '工作 ' + spanLabel, '12px system-ui, sans-serif', '#9aa0a6', 66);
+    spanLabel, '12px system-ui, sans-serif', '#9aa0a6', 66);
 
   // 統計
   const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
@@ -2171,10 +2182,18 @@ async function captureSingleTripScreenshot(trip) {
 
   // 左：去背 LOGO
   _drawBrand(c, 20, 28, 42);
-  // 右上：日期（上）+ 行程時間（下），兩行互相置中
-  _drawRightTwoLines(c, W - 20,
-    _fullDateLabel(trip.startTime), '13px system-ui, sans-serif', '#e8eaed', 46,
-    fmtWork(trip.endTime - trip.startTime), '12px system-ui, sans-serif', '#9aa0a6', 66);
+  // 右上：一般行程 → 日期（上）+ 行程時間（下）；
+  //       「其他」行程（有備注）→ 開始-結束時間（上）+ 備注（下）
+  const _note = (trip.label || '').trim();
+  if (trip.paymentMethod === 'other' && _note) {
+    _drawRightTwoLines(c, W - 20,
+      `${fmtTime(trip.startTime)}-${fmtTime(trip.endTime)}`, '13px system-ui, sans-serif', '#e8eaed', 46,
+      _note, '12px system-ui, sans-serif', '#9aa0a6', 66);
+  } else {
+    _drawRightTwoLines(c, W - 20,
+      _fullDateLabel(trip.startTime), '13px system-ui, sans-serif', '#e8eaed', 46,
+      fmtWork(trip.endTime - trip.startTime), '12px system-ui, sans-serif', '#9aa0a6', 66);
+  }
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
