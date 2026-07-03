@@ -27,6 +27,146 @@
     document.head.appendChild(st);
   })();
 
+  // ================= 台灣公路盾牌（依交通部現行圖示） =================
+  // OpenFreeMap Liberty 用 OpenMapTiles schema：道路編號在 transportation_name
+  // 圖層，欄位 class（等級）與 ref（編號）。Liberty 內建的是國際通用盾牌，
+  // 這裡改成台灣式：國道=綠梅花、快速=紅盾、省道=藍盾、縣道=黃牌。
+  // 依台灣公路編號範圍分類（國道1-10 / 快速台61-88 / 省道台1-39 / 縣道101-299）。
+  function classifyTwRoad(cls, ref) {
+    cls = String(cls == null ? '' : cls);
+    var raw = String(ref == null ? '' : ref);
+    if (!/\d/.test(raw)) return null;                        // 無數字（純名稱）→ 不掛盾
+    var n = parseInt((raw.match(/\d+/) || ['0'])[0], 10);
+    if (cls === 'motorway') return 'national';               // 國道（先判等級）
+    // 鄉道/區道等地名字首（北37、南113、竹35…）→ 跳過（台/臺/國/省/縣/道/號 不算地名）
+    if (/[一-鿿]/.test(raw) && !/[台臺國省縣道號]/.test(raw)) return null;
+    if (n >= 61 && n <= 88) return 'expressway';             // 快速公路 台61-88
+    if (n >= 100 && n <= 299) return 'county';               // 縣道 三位數
+    if (n >= 1 && n <= 39) return 'provincial';              // 省道 台1-39
+    return null;
+  }
+
+  var TW_COLORS = {
+    national:   { bg: '#1a7a3c', fg: '#ffffff' },   // 綠
+    expressway: { bg: '#d0021b', fg: '#ffffff' },   // 紅
+    provincial: { bg: '#1565c0', fg: '#ffffff' },   // 藍
+    county:     { bg: '#f4c400', fg: '#1a1a1a' }    // 黃
+  };
+  function _cv(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function _blossom(ctx, cx, cy, R, fill) {
+    ctx.fillStyle = fill;
+    var pr = R * 0.46;
+    for (var i = 0; i < 5; i++) {
+      var a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * (R - pr), cy + Math.sin(a) * (R - pr), pr, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.52, 0, 2 * Math.PI); ctx.fill();
+  }
+  // 產生一張盾牌圖（pixelRatio 2），回傳 ImageData 供 gl.addImage 用
+  function drawTwShield(type, ref) {
+    var col = TW_COLORS[type];
+    if (!col) return null;
+    var num = String(ref == null ? '' : ref).replace(/\D/g, '') || '?';
+    var P = 2, fs = 15 * P, ctx;
+    var probe = _cv(4, 4).getContext('2d');
+    probe.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
+    var tw = Math.ceil(probe.measureText(num).width);
+    if (type === 'national') {
+      var S = Math.max(24 * P, tw + 16 * P);
+      var cn = _cv(S, S); ctx = cn.getContext('2d');
+      _blossom(ctx, S / 2, S / 2, S / 2 * 0.96, col.bg);
+      ctx.fillStyle = col.fg; ctx.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(num, S / 2, S / 2 + P);
+      return ctx.getImageData(0, 0, S, S);
+    }
+    var h = 22 * P, w = Math.max(h, tw + 12 * P);
+    var c = _cv(w, h); ctx = c.getContext('2d');
+    _roundRect(ctx, 1.5 * P, 1.5 * P, w - 3 * P, h - 3 * P, 4 * P);
+    ctx.fillStyle = col.bg; ctx.fill();
+    ctx.lineWidth = 1.5 * P; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    ctx.fillStyle = col.fg; ctx.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(num, w / 2, h / 2 + P * 0.5);
+    return ctx.getImageData(0, 0, w, h);
+  }
+  var _blankPx = { width: 1, height: 1, data: new Uint8Array(4) };
+
+  function _firstVectorSource(style) {
+    var s = (style && style.sources) || {};
+    for (var id in s) { if (s[id] && s[id].type === 'vector') return id; }
+    return null;
+  }
+  // 在 GL 地圖套用台灣盾牌（樣式載入後呼叫）
+  function installTwShields(gl) {
+    try {
+      var style = gl.getStyle();
+      var src = _firstVectorSource(style);
+      if (!src) return false;
+      // 需要的盾牌圖即時畫、即時加入（id 內含 class 與 ref）
+      gl.on('styleimagemissing', function (e) {
+        var id = e && e.id;
+        if (!id || id.indexOf('tw|') !== 0) return;
+        if (gl.hasImage && gl.hasImage(id)) return;
+        var p = id.split('|');                     // tw|<class>|<ref…>
+        var ref = p.slice(2).join('|');
+        var type = classifyTwRoad(p[1], ref);
+        var img = type ? drawTwShield(type, ref) : _blankPx;
+        try { gl.addImage(id, img || _blankPx, { pixelRatio: 2 }); } catch (_) {}
+      });
+      // 隱藏 Liberty 內建的國際通用路牌盾（保留純街名文字層）
+      (style.layers || []).forEach(function (ly) {
+        if (ly.type === 'symbol' && ly['source-layer'] === 'transportation_name') {
+          var lo = ly.layout || {};
+          if (lo['icon-image']) { try { gl.setLayoutProperty(ly.id, 'visibility', 'none'); } catch (_) {} }
+        }
+      });
+      // 疊上台灣盾牌層
+      gl.addLayer({
+        id: 'maptrip-tw-shields', type: 'symbol', source: src,
+        'source-layer': 'transportation_name', minzoom: 6,
+        filter: ['all', ['has', 'ref'], ['!=', ['coalesce', ['get', 'ref'], ''], '']],
+        layout: {
+          'symbol-placement': 'line', 'symbol-spacing': 300,
+          'icon-image': ['concat', 'tw|', ['coalesce', ['get', 'class'], ''], '|', ['coalesce', ['get', 'ref'], '']],
+          'icon-size': 0.5, 'icon-rotation-alignment': 'viewport',
+          'icon-allow-overlap': false, 'icon-padding': 2
+        }
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  // 診斷：取樣目前畫面載入到的道路 class/ref/network（上機校準用）
+  function sampleTwRoads(gl) {
+    try {
+      var src = _firstVectorSource(gl.getStyle());
+      if (!src) return [];
+      var fs = gl.querySourceFeatures(src, { sourceLayer: 'transportation_name' }) || [];
+      var seen = {}, out = [];
+      fs.forEach(function (f) {
+        var p = f.properties || {};
+        var key = (p.class || '') + '|' + (p.ref || '');
+        if (p.ref && !seen[key]) {
+          seen[key] = 1;
+          out.push({ cls: p.class, ref: p.ref, network: p.network, type: classifyTwRoad(p.class, p.ref) });
+        }
+      });
+      return out;
+    } catch (e) { return []; }
+  }
+  window.MaptripTwShields = {
+    classify: classifyTwRoad, draw: drawTwShield,
+    install: installTwShields, sample: sampleTwRoads
+  };
+
   function toLngLat(ll) {
     if (Array.isArray(ll)) return [ll[1], ll[0]];
     return [ll.lng, ll.lat];
@@ -313,6 +453,7 @@
 
     this.gl.on('load', function () {
       self._ready = true;
+      try { installTwShields(self.gl); } catch (e) {}   // 台灣公路盾牌
       var q = self._queue; self._queue = [];
       q.forEach(function (fn) { try { fn(); } catch (e) {} });
     });
