@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.211';
+const APP_VERSION  = '1.1.212';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -2205,12 +2205,14 @@ async function captureSingleTripScreenshot(trip) {
   // 左：去背 LOGO
   _drawBrand(c, 20, 28, 42);
   // 右上：一般行程 → 日期（上）+ 行程時間（下）；
-  //       「其他」行程（有備注）→ 日期 開始-結束時間（上）+ 備注（下）
+  //       「其他」行程（有備注）→ 日期（上）/ 開始-結束時間（中）/ 備注（下）
   const _note = (trip.label || '').trim();
   if (trip.paymentMethod === 'other' && _note) {
-    _drawRightTwoLines(c, W - 20,
-      `${dateLabel}　${fmtTime(trip.startTime)}-${fmtTime(trip.endTime)}`, '12px system-ui, sans-serif', '#e8eaed', 46,
-      _note, '12px system-ui, sans-serif', '#9aa0a6', 66);
+    _drawRightThreeLines(c, W - 20, [
+      { t: dateLabel, f: '13px system-ui, sans-serif', c: '#e8eaed', y: 38 },
+      { t: `${fmtTime(trip.startTime)}-${fmtTime(trip.endTime)}`, f: '12px system-ui, sans-serif', c: '#c8ccd2', y: 56 },
+      { t: _note, f: '12px system-ui, sans-serif', c: '#9aa0a6', y: 74 }
+    ]);
   } else {
     _drawRightTwoLines(c, W - 20,
       _fullDateLabel(trip.startTime), '13px system-ui, sans-serif', '#e8eaed', 46,
@@ -2422,6 +2424,17 @@ function _drawRightTwoLines(c, rightX, l1, f1, c1, y1, l2, f2, c2, y2) {
   const cx = rightX - Math.max(w1, w2) / 2;
   c.fillStyle = c1; c.font = f1; c.fillText(l1, cx, y1);
   c.fillStyle = c2; c.font = f2; c.fillText(l2, cx, y2);
+  c.restore();
+}
+
+// 右上角三行（共用相同水平中心，右對齊）
+function _drawRightThreeLines(c, rightX, rows) {
+  c.save();
+  c.textAlign = 'center';
+  let maxW = 0;
+  rows.forEach(r => { c.font = r.f; maxW = Math.max(maxW, c.measureText(r.t).width); });
+  const cx = rightX - maxW / 2;
+  rows.forEach(r => { c.fillStyle = r.c; c.font = r.f; c.fillText(r.t, cx, r.y); });
   c.restore();
 }
 
