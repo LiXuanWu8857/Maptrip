@@ -49,6 +49,15 @@
     });
     this.bbox = [[minLng, minLat], [maxLng, maxLat]];
   }
+  // Leaflet LatLngBounds 介面（回放/取景會用到；缺了會 throw "getCenter is not a function"）
+  LatLngBounds.prototype.getCenter = function () {
+    return { lat: (this.bbox[0][1] + this.bbox[1][1]) / 2,
+             lng: (this.bbox[0][0] + this.bbox[1][0]) / 2 };
+  };
+  LatLngBounds.prototype.isValid = function () {
+    return isFinite(this.bbox[0][0]) && isFinite(this.bbox[0][1]) &&
+           isFinite(this.bbox[1][0]) && isFinite(this.bbox[1][1]);
+  };
 
   // ---------- Polyline ----------
   function Polyline(latlngs, style) {
