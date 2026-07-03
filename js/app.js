@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.212';
+const APP_VERSION  = '1.1.213';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -2043,7 +2043,7 @@ function _loadTile(url) {
   });
 }
 
-async function captureTripsScreenshot(dayKey) {
+async function captureTripsScreenshot(dayKey, includeOther) {
   let trips, dateLabel;
   if (dayKey) {
     const raw = loadTrips();
@@ -2054,6 +2054,13 @@ async function captureTripsScreenshot(dayKey) {
     dateLabel = dayKeyToLabel(todayKey());
   }
   if (!trips.length) { toast('無行程可截圖'); return; }
+  // 若當天有「其他」行程，第一次先問要不要包含（不影響已存的資料，只影響這張截圖）
+  const hasOther = trips.some(t => t.paymentMethod === 'other');
+  if (hasOther && includeOther === undefined) {
+    includeOther = confirm('截圖要包含「其他」行程嗎？\n（確定＝包含、取消＝排除）');
+  }
+  if (includeOther === false) trips = trips.filter(t => t.paymentMethod !== 'other');
+  if (!trips.length) { toast('排除「其他」後無行程可截圖'); return; }
 
   const W = 390, H = 485;
   const canvas = document.createElement('canvas');
