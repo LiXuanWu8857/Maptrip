@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.201';
+const APP_VERSION  = '1.1.202';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -222,7 +222,7 @@ function initMap() {
     if (_mapTouching !== 0) return;
     resyncLiveLine();
     // 沒在跟隨時，手指離開地圖也排一次 5 秒歸位（檢視單趟/日預覽時除外）
-    if (!autoFollow && !soloSet.length && !dayPreviewKey && currentPos) _wantFollowResume = true;
+    if (!autoFollow && !soloSet.length && !dayPreviewKey && !isReplaying() && currentPos) _wantFollowResume = true;
     scheduleFollowResume();
   };
   mapEl.addEventListener('touchend', mapTouchDone, { passive: true });
@@ -448,7 +448,7 @@ function onGpsUpdate(pos) {
   }
   updateMyHeadingArrow();
 
-  if (autoFollow && !_mapTouching) map.panTo([lat, lng], { animate: true, duration: 0.5 });
+  if (autoFollow && !_mapTouching && !isReplaying()) map.panTo([lat, lng], { animate: true, duration: 0.5 });
 
   if (activeTrip) {
     // GPS 品質閘門：都市峽谷/高架下的反射訊號會產生亂飄的點，
@@ -672,7 +672,7 @@ function scheduleFollowResume() {
   _resumeFollowTimer = setTimeout(() => {
     if (!_wantFollowResume) return;
     // 還在操作 / 在單趟檢視 / 日預覽中 → 延後再試
-    if (_mapTouching || soloSet.length || dayPreviewKey) { scheduleFollowResume(); return; }
+    if (_mapTouching || soloSet.length || dayPreviewKey || isReplaying()) { scheduleFollowResume(); return; }
     _wantFollowResume = false;
     if (!currentPos) return;
     setAutoFollow(true);
@@ -1263,7 +1263,7 @@ function onDeviceOrient(e) {
     myHeading = h;                                // 停/慢速：羅盤朝向 = 我的朝向
     updateMyHeadingArrow();
     lastHeading = h;
-    if (headingUp && map.setBearing && autoFollow && !_mapTouching) setTargetBearing(-h);   // 拖動/手勢中不搶地圖
+    if (headingUp && map.setBearing && autoFollow && !_mapTouching && !isReplaying()) setTargetBearing(-h);   // 拖動/手勢/回放中不搶地圖
   }
 }
 
@@ -1273,7 +1273,7 @@ function onDeviceOrient(e) {
 function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
   lastMoveSpeed = effectiveSpeed || 0;
   if (!headingUp || !map.setBearing) return;
-  if (soloSet.length || dayPreviewKey) return;   // 預覽/單趟模式不旋轉
+  if (soloSet.length || dayPreviewKey || isReplaying()) return;   // 預覽/單趟/回放模式不旋轉
   let heading = gpsHeading;
   if (heading == null || isNaN(heading) || heading < 0) {
     if (headingRefPos && effectiveSpeed > 1) heading = bearingBetween(headingRefPos, { lat, lng });
@@ -2469,6 +2469,13 @@ const REPLAY_CLOSE_ZOOM = 16.5; // 跟隨時的近距離縮放層級
 let replaySet = [];            // 目前回放的行程陣列（今日或歷史某日）
 let replayTempLayers = [];     // 回放歷史日時臨時畫上的路線，關閉時清除
 
+// 回放進行中(面板開著):所有自動運鏡(GPS 跟隨/旋轉/5 秒歸位)都要讓路,
+// 否則每秒的 GPS 更新會把鏡頭從回放點拉回目前位置,回放看起來就是壞的
+function isReplaying() {
+  const p = document.getElementById('replay-panel');
+  return !!(p && p.classList.contains('show'));
+}
+
 function openReplay() {
   if (!todayTrips.length) { toast('今日尚無行程可回放'); return; }
   replaySet = todayTrips;
@@ -2685,6 +2692,11 @@ function closeReplay() {
   stopReplay();
   clearReplayTempLayers();
   document.getElementById('replay-panel').classList.remove('show');
+  // 回放結束:5 秒後自動飛回目前位置、恢復跟隨
+  if (currentPos && !soloSet.length && !dayPreviewKey) {
+    _wantFollowResume = true;
+    scheduleFollowResume();
+  }
 }
 
 function finishReplay() {
