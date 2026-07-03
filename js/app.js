@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.207';
+const APP_VERSION  = '1.1.208';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -194,7 +194,8 @@ function initMap() {
   // 用 movestart+手指在地圖上 判定「使用者手勢」：捏合縮放/雙指旋轉不會觸發 dragstart，
   // 只掛 dragstart 的話捏合移走地圖就永遠不會歸位（停車沒 GPS 更新時尤其明顯）
   const pauseFollowByUser = () => {
-    if (autoFollow) { setAutoFollow(false); _wantFollowResume = true; }
+    // 歷史檢視（單趟/日預覽/回放）中不武裝自動歸位：使用者是在看過去的行程，不該被拉回目前位置
+    if (autoFollow && !inBrowsingMode()) { setAutoFollow(false); _wantFollowResume = true; }
   };
   map.on('dragstart', pauseFollowByUser);                                // 滑鼠拖曳（桌機）
   map.on('movestart', () => { if (_mapTouching) pauseFollowByUser(); }); // 觸控手勢（拖、捏合、旋轉）
@@ -221,8 +222,8 @@ function initMap() {
     trackTouch(e);
     if (_mapTouching !== 0) return;
     resyncLiveLine();
-    // 沒在跟隨時，手指離開地圖也排一次 5 秒歸位（檢視單趟/日預覽時除外）
-    if (!autoFollow && !soloSet.length && !dayPreviewKey && !isReplaying() && currentPos) _wantFollowResume = true;
+    // 沒在跟隨時，手指離開地圖也排一次 5 秒歸位（歷史檢視時除外）
+    if (!autoFollow && !inBrowsingMode() && currentPos) _wantFollowResume = true;
     scheduleFollowResume();
   };
   mapEl.addEventListener('touchend', mapTouchDone, { passive: true });
@@ -448,7 +449,7 @@ function onGpsUpdate(pos) {
   }
   updateMyHeadingArrow();
 
-  if (autoFollow && !_mapTouching && !isReplaying()) map.panTo([lat, lng], { animate: true, duration: 0.5 });
+  if (autoFollow && !_mapTouching && !inBrowsingMode()) map.panTo([lat, lng], { animate: true, duration: 0.5 });
 
   if (activeTrip) {
     // GPS 品質閘門：都市峽谷/高架下的反射訊號會產生亂飄的點，
@@ -670,6 +671,12 @@ function setAutoFollow(on) {
   if (btn) btn.classList.toggle('follow-active', on);
 }
 
+// 歷史檢視模式（單趟 / 日預覽 / 回放）：這些是在看過去的行程，自動歸位一律停用
+function inBrowsingMode() {
+  return (typeof soloSet !== 'undefined' && soloSet.length) ||
+         dayPreviewKey || (typeof isReplaying === 'function' && isReplaying());
+}
+
 // 拖動暫停跟隨後：5 秒無操作自動飛回目前位置、恢復跟隨（含朝車頭旋轉）
 let _resumeFollowTimer = null, _wantFollowResume = false;
 function scheduleFollowResume() {
@@ -677,8 +684,10 @@ function scheduleFollowResume() {
   clearTimeout(_resumeFollowTimer);
   _resumeFollowTimer = setTimeout(() => {
     if (!_wantFollowResume) return;
-    // 還在操作 / 在單趟檢視 / 日預覽中 → 延後再試
-    if (_mapTouching || soloSet.length || dayPreviewKey || isReplaying()) { scheduleFollowResume(); return; }
+    // 進入歷史檢視 → 直接取消歸位（不再拉回目前位置）
+    if (inBrowsingMode()) { _wantFollowResume = false; return; }
+    // 手指還在地圖上（手勢進行中）→ 延後再試
+    if (_mapTouching) { scheduleFollowResume(); return; }
     _wantFollowResume = false;
     if (!currentPos) return;
     setAutoFollow(true);
@@ -1278,7 +1287,7 @@ function onDeviceOrient(e) {
     myHeading = h;                                // 停/慢速：羅盤朝向 = 我的朝向
     updateMyHeadingArrow();
     lastHeading = h;
-    if (headingUp && map.setBearing && autoFollow && !_mapTouching && !isReplaying()) setTargetBearing(-h);   // 拖動/手勢/回放中不搶地圖
+    if (headingUp && map.setBearing && autoFollow && !_mapTouching && !inBrowsingMode()) setTargetBearing(-h);   // 拖動/手勢/歷史檢視中不搶地圖
   }
 }
 
@@ -1622,6 +1631,7 @@ function fitMapToRoute(coords, bottomElId, opts = {}) {
 // 設定要顯示的趟次集合與起始索引，然後渲染
 function openSoloTrip(set, idx, labelFn) {
   if (!set?.length) return;
+  setAutoFollow(false);   // 歷史檢視：關閉跟隨與 5 秒歸位
   resetBearingNow();   // 單趟檢視固定指北
   exitDayPreview();
   // 歷史模式：換成無標示底圖（CartoDB），退出時還原
@@ -1918,6 +1928,7 @@ function previewDay(dayKey) {
   const raw = loadTrips();
   const trips = raw[dayKey] || [];
   if (!trips.length) { toast('該日無行程'); return; }
+  setAutoFollow(false);   // 歷史檢視：關閉跟隨與 5 秒歸位
   resetBearingNow();   // 日預覽固定指北
   exitDayPreview();
   dayPreviewKey = dayKey;
@@ -2160,10 +2171,10 @@ async function captureSingleTripScreenshot(trip) {
 
   // 左：去背 LOGO
   _drawBrand(c, 20, 28, 42);
-  // 右上：日期（上）+ 工作時間（下），兩行互相置中
+  // 右上：日期（上）+ 行程時間（下），兩行互相置中
   _drawRightTwoLines(c, W - 20,
     _fullDateLabel(trip.startTime), '13px system-ui, sans-serif', '#e8eaed', 46,
-    '工作 ' + fmtWork(trip.endTime - trip.startTime), '12px system-ui, sans-serif', '#9aa0a6', 66);
+    fmtWork(trip.endTime - trip.startTime), '12px system-ui, sans-serif', '#9aa0a6', 66);
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
