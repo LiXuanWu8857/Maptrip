@@ -466,7 +466,11 @@
       zoom: 14,
       attributionControl: false,
       pitchWithRotate: false,
-      maxZoom: 20
+      maxZoom: 20,
+      // 中日韓文字用「裝置系統字型」就地繪製（不下載 CJK glyph）：
+      // iOS = PingFang、Android = Noto Sans CJK，和 App 內部 system-ui 一致。
+      // 英數仍走樣式內建 SDF 字型（Noto Sans，接近系統無襯線）。
+      localIdeographFontFamily: '-apple-system, "PingFang TC", "PingFang SC", "Heiti TC", "Microsoft JhengHei", system-ui, sans-serif'
     });
     // 允許雙指旋轉手勢；關掉傾斜（保持 2D）
     try {
@@ -486,7 +490,8 @@
     this.gl.on('error', function () { hadError = true; });
     setTimeout(function () {
       if (!self._ready && hadError) {
-        try { localStorage.removeItem('maptrip_gl'); } catch (e) {}
+        // 只退回這次 session（保留使用者「預設向量」偏好），下次啟動再試
+        try { sessionStorage.setItem('gl_fail', '1'); } catch (e) {}
         location.reload();
       }
     }, 20000);

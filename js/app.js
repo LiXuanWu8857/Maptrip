@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.214';
+const APP_VERSION  = '1.1.215';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1413,9 +1413,10 @@ function _menuTouchEnd(e) {
 // 切換地圖引擎：向量（MapLibre GL，旋轉時文字保持正立）↔ 標準（Leaflet）
 function toggleGlEngine() {
   if (activeTrip) { toast('行程記錄中，請先結束再切換地圖引擎'); return; }
-  const on = localStorage.getItem('maptrip_gl') === '1';
-  if (on) localStorage.removeItem('maptrip_gl');
-  else localStorage.setItem('maptrip_gl', '1');
+  // 依「目前實際引擎」切換：向量預設開啟，'0'=強制標準、'1'=強制向量
+  if (window.MAPTRIP_GL) localStorage.setItem('maptrip_gl', '0');   // 目前向量 → 換標準
+  else localStorage.setItem('maptrip_gl', '1');                     // 目前標準 → 換向量
+  try { sessionStorage.removeItem('gl_fail'); } catch (_) {}         // 清除本次失敗旗標，重新嘗試
   location.reload();
 }
 

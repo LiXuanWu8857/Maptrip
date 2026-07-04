@@ -22,7 +22,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.214';</script>
+<script>window.INDEX_VERSION = '1.1.215';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -382,9 +382,13 @@ if (!sessionStorage.getItem('booted')) {
     loadScript(LEAFLET_CDNS[i], loadApp, function () { tryLeaflet(i + 1); });
   }
 
-  // 向量地圖引擎（Beta）：選單開啟後才啟用；失敗自動退回標準 Leaflet
-  var useGL = false;
-  try { useGL = localStorage.getItem('maptrip_gl') === '1'; } catch (e) {}
+  // 向量地圖引擎：現在是「預設引擎」，除非使用者明確切回標準（maptrip_gl='0'），
+  // 或本次啟動 GL 載入失敗過（gl_fail，僅這次 session 退回標準，下次再試 GL）。
+  var useGL = true;
+  try {
+    useGL = (localStorage.getItem('maptrip_gl') !== '0') &&
+            (sessionStorage.getItem('gl_fail') !== '1');
+  } catch (e) {}
   if (useGL) {
     // CSS：unpkg 失敗自動換 jsdelivr（關鍵規則另有內建保險，見 gl-compat.js）
     var css = document.createElement('link');
@@ -396,7 +400,8 @@ if (!sessionStorage.getItem('booted')) {
     };
     document.head.appendChild(css);
     var glFail = function () {
-      try { localStorage.removeItem('maptrip_gl'); } catch (e) {}
+      // 只退回這次 session（保留使用者偏好），下次啟動再試 GL
+      try { sessionStorage.setItem('gl_fail', '1'); } catch (e) {}
       tryLeaflet(0);
     };
     var startGlApp = function () {
