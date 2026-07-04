@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.213';
+const APP_VERSION  = '1.1.214';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1404,6 +1404,7 @@ function _menuTouchEnd(e) {
   const action = hit ? hit.getAttribute('data-menu') : null;
   closeTopMenu();
   if (action === 'today') toggleTripList();
+  else if (action === 'finance') { closeSheet(); if (window.openFinance) window.openFinance(); }
   else if (action === 'history') showHistory();
   else if (action === 'sync') openSyncDialog();
   else if (action === 'glmap') toggleGlEngine();
@@ -1457,6 +1458,7 @@ function closeActiveSheet() {
 // 回到主頁（地圖）：關掉所有覆蓋層（今日紀錄 / 歷史 / 回放 / 地圖預覽）
 function goHome() {
   try { closeSheet(); } catch (_) {}
+  try { if (window.closeFinance) closeFinance(); } catch (_) {}
   try { closeHistory(); } catch (_) {}
   try { if (document.getElementById('replay-panel')?.classList.contains('show')) closeReplay(); } catch (_) {}
   try { if (document.body.classList.contains('day-preview-active')) exitDayPreview(); } catch (_) {}
