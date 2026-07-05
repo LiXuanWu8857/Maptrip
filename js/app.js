@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.216';
+const APP_VERSION  = '1.1.217';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1842,6 +1842,26 @@ function deleteTodayTrip(e, idx) {
   toast(`已刪除第 ${idx + 1} 趟`);
 }
 
+// 刪除「歷史」某趟（含雲端與墓碑，同今日刪除的安全機制）
+function deleteHistoryTrip(e, day, idx) {
+  e.stopPropagation();
+  const raw = loadTrips();
+  const trip = (raw[day] || [])[idx];
+  if (!trip) return;
+  if (!confirm(`刪除 ${day} 第 ${idx + 1} 趟行程？`)) return;
+  // 若剛好是今日的趟：同步清掉記憶體與地圖圖層
+  const mem = todayTrips.find(t => t.id === trip.id);
+  if (mem) {
+    if (mem._layers) mem._layers.forEach(l => { try { map.removeLayer(l); } catch (_) {} });
+    const mi = todayTrips.indexOf(mem);
+    if (mi >= 0) todayTrips.splice(mi, 1);
+    updateTopBar();
+  }
+  removeTripFromStorage(trip.id);   // 儲存+雲端+墓碑
+  renderHistorySheet();
+  toast('已刪除該趟行程');
+}
+
 function confirmClearDay() {
   if (!todayTrips.length) { toast('今日無行程可清除'); return; }
   if (!confirm(`確定清除今日全部 ${todayTrips.length} 趟行程？`)) return;
@@ -1911,6 +1931,7 @@ function renderHistorySheet() {
           </div>
           <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${i})">✏</span>
           <span class="trip-shot" onclick="captureHistoryTripShot(event,'${day}',${i})">📷</span>
+          <span class="trip-del" onclick="deleteHistoryTrip(event,'${day}',${i})">🗑</span>
           <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
         </div>`).join('');
       return `<div class="history-day" onclick="toggleDay('${day}')">
