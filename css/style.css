@@ -584,6 +584,20 @@ html, body {
   font-weight: 700; color: #202124; outline: none; font-family: inherit;
 }
 #fare-input::placeholder { color: #dadce0; font-weight: 400; font-size: 1rem; }
+/* 抽成 / 叫車費（記錄公司抽成用，可留空） */
+#fare-extra-row { display: flex; gap: 10px; margin-bottom: 16px; }
+.fare-extra {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  background: #f8f9fa; border: 1.5px solid rgba(0,0,0,0.12);
+  border-radius: 12px; padding: 9px 12px;
+}
+.fare-extra:focus-within { border-color: #1a73e8; background: #fff; }
+.fare-extra > span { font-size: 0.82rem; color: #5f6368; white-space: nowrap; }
+.fare-extra input {
+  width: 100%; min-width: 0; border: none; background: none; text-align: right;
+  font-size: 1.05rem; font-weight: 700; color: #202124; outline: none; font-family: inherit;
+}
+.fare-extra input::placeholder { color: #dadce0; font-weight: 400; }
 #fare-btns { display: flex; gap: 10px; }
 #fare-skip {
   flex: 1; background: #f1f3f4; border: none; color: #5f6368;
@@ -602,6 +616,10 @@ html, body {
 .pay-cash { background: rgba(52,168,83,0.12); color: #34a853; }
 .pay-card { background: rgba(26,115,232,0.12); color: #1a73e8; }
 .pay-other { background: rgba(255,152,0,0.14); color: #e67e00; }
+.extra-tag { display: inline-block; font-size: 0.68rem; font-weight: 600;
+  padding: 1px 5px; border-radius: 5px; vertical-align: middle;
+  background: rgba(217,48,37,0.10); color: #c5221f; }
+@media (prefers-color-scheme: dark) { .extra-tag { background: rgba(242,139,130,0.16); color: #f28b82; } }
 
 .day-summary {
   display: flex; flex-direction: column; gap: 5px;
@@ -830,6 +848,10 @@ html, body {
   #fare-input-row:focus-within { border-color: #6ab4ff; background: #1e1e1e; }
   #fare-currency { color: #9aa0a6; }
   #fare-input { color: #e8eaed; }
+  .fare-extra { background: #252525; border-color: rgba(255,255,255,0.12); }
+  .fare-extra:focus-within { border-color: #6ab4ff; background: #1e1e1e; }
+  .fare-extra > span { color: #9aa0a6; }
+  .fare-extra input { color: #e8eaed; }
   #fare-skip { background: #252525; color: #9aa0a6; }
   .pay-cash { background: rgba(52,168,83,0.18); }
   .pay-card { background: rgba(26,115,232,0.18); }

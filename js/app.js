@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.219';
+const APP_VERSION  = '1.1.220';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -797,10 +797,12 @@ function endTrip(fromFloat) {
 // 更新「已落盤」的行程：補車資 / 付款方式 / 貼路座標，並重畫該趟路線。
 // 注意：貼路是慢速網路操作，期間畫面可能被雲端同步刷新（todayTrips 換成新物件），
 // 所以寫回時一律用「行程 id」重新定位，不依賴物件同一性，否則結果會寫到孤兒物件上遺失。
-async function finalizeSavedTrip(trip, fare, paymentMethod, label) {
+async function finalizeSavedTrip(trip, fare, paymentMethod, label, commission, dispatch) {
   const apply = (t) => {
     t.fare = fare;
     t.paymentMethod = paymentMethod;
+    if (commission !== undefined) t.commission = commission || 0;   // 抽成
+    if (dispatch !== undefined) t.dispatch = dispatch || 0;         // 叫車費
     if (label !== undefined) t.label = label || '';
   };
   apply(trip);
@@ -917,12 +919,25 @@ async function saveTripBackground(trip) {
   toast('✓ 行程已結束，金額可稍後在清單補填');
 }
 
+// 讀 / 寫車資對話框的「抽成 / 叫車費」欄位
+function _readFareExtra() {
+  return {
+    commission: parseInt(document.getElementById('fare-commission').value) || 0,
+    dispatch: parseInt(document.getElementById('fare-dispatch').value) || 0
+  };
+}
+function _setFareExtra(commission, dispatch) {
+  document.getElementById('fare-commission').value = commission || '';
+  document.getElementById('fare-dispatch').value = dispatch || '';
+}
+
 function showFareDialog(trip) {
   document.getElementById('fs-start').textContent  = fmtTime(trip.startTime);
   document.getElementById('fs-end').textContent    = fmtTime(trip.endTime);
   document.getElementById('fs-dur').textContent    = fmtDur(trip.endTime - trip.startTime);
   document.getElementById('fs-dist').textContent   = fmtDist(trip.totalDist);
   document.getElementById('fare-input').value = '';
+  _setFareExtra(0, 0);
 
   document.getElementById('fare-overlay').style.display = 'block';
   document.getElementById('fare-dialog').classList.add('show');
@@ -934,9 +949,10 @@ function showFareDialog(trip) {
 
   const save = (fare, paymentMethod, label) => {
     // 行程在 endTrip 時已落盤；這裡立即關閉對話框，車資與貼路在背景補上
+    const ex = _readFareExtra();
     document.getElementById('fare-overlay').style.display = 'none';
     document.getElementById('fare-dialog').classList.remove('show');
-    finalizeSavedTrip(trip, fare, paymentMethod, label || '');
+    finalizeSavedTrip(trip, fare, paymentMethod, label || '', ex.commission, ex.dispatch);
   };
 
   cashBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'cash');
@@ -1496,7 +1512,7 @@ function renderTripSheet() {
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
         <div class="trip-stats">
           ${fmtDist(t.totalDist)}
-          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}
+          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}
           <button class="fare-edit-btn" onclick="editFare(event,${i})">${(t.fare || t.paymentMethod === 'other') ? '✏' : '＋金額'}</button>
         </div>
       </div>
@@ -1527,6 +1543,7 @@ function editFare(e, idx) {
   const cardBtn = document.getElementById('fare-card');
   const skipBtn = document.getElementById('fare-skip');
   input.value = trip.fare || '';
+  _setFareExtra(trip.commission, trip.dispatch);
   cashBtn.disabled = false; cardBtn.disabled = false;
   skipBtn.textContent = '取消'; skipBtn.disabled = false;
 
@@ -1542,8 +1559,11 @@ function editFare(e, idx) {
   };
 
   const saveEdit = (paymentMethod) => {
+    const ex = _readFareExtra();
     trip.fare = parseInt(input.value) || 0;
     trip.paymentMethod = paymentMethod;
+    trip.commission = ex.commission;
+    trip.dispatch = ex.dispatch;
     if (paymentMethod !== 'other') trip.label = '';   // 由「其他」轉成付費 → 清掉備注
     close();
     saveTodayToStorage();
@@ -1573,6 +1593,7 @@ function editHistoryFare(e, day, idx) {
   const cardBtn = document.getElementById('fare-card');
   const skipBtn = document.getElementById('fare-skip');
   input.value = trip.fare || '';
+  _setFareExtra(trip.commission, trip.dispatch);
   cashBtn.disabled = false; cardBtn.disabled = false;
   skipBtn.textContent = '取消'; skipBtn.disabled = false;
 
@@ -1590,11 +1611,14 @@ function editHistoryFare(e, day, idx) {
   const tripId = trip.id;   // 用 id 定位，避免期間同步併入新趟造成索引位移
   const saveEdit = (paymentMethod) => {
     const fare = parseInt(input.value) || 0;
+    const ex = _readFareExtra();
     const cur = loadTrips();
     const target = (cur[day] || []).find(t => t.id === tripId);
     if (target) {
       target.fare = fare;
       target.paymentMethod = paymentMethod;
+      target.commission = ex.commission;
+      target.dispatch = ex.dispatch;
       if (paymentMethod !== 'other') target.label = '';   // 由「其他」轉成付費 → 清掉備注
       saveTrips(cur);
       if (window.MaptripSync) MaptripSync.syncDays([day]);
@@ -1602,7 +1626,7 @@ function editHistoryFare(e, day, idx) {
     // 若編輯的是「今日」的趟，記憶體中的 todayTrips 也要同步，
     // 否則下一次 saveTodayToStorage 合併會用舊值蓋回去
     const mem = todayTrips.find(t => t.id === tripId);
-    if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; if (paymentMethod !== 'other') mem.label = ''; }
+    if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; mem.commission = ex.commission; mem.dispatch = ex.dispatch; if (paymentMethod !== 'other') mem.label = ''; }
     close();
     renderHistorySheet();
   };
@@ -1927,7 +1951,7 @@ function renderHistorySheet() {
           <div class="trip-num">${i + 1}</div>
           <div class="trip-meta">
             <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-            <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}</div>
+            <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
           </div>
           <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${i})">✏</span>
           <span class="trip-del" onclick="deleteHistoryTrip(event,'${day}',${i})">🗑</span>
@@ -2918,7 +2942,7 @@ function _simplifyPath(pts, tol) {
   return out;
 }
 
-function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label }) {
+function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label, commission, dispatch }) {
   // 注意：t 可能不存在（壓實後的舊資料）。絕不能寫成 t: undefined —
   // Firestore 會以 invalid-argument 拒收整份文件，導致雲端備份失敗。
   const slimCoords = (coords || []).map(c =>
@@ -2929,7 +2953,11 @@ function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCo
   if (roadCoords) {
     slimRoad = _simplifyPath(roadCoords, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));
   }
-  return { id, startTime, endTime, coords: slimCoords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '', ...(label ? { label } : {}), ...(slimRoad ? { roadCoords: slimRoad } : {}) };
+  return { id, startTime, endTime, coords: slimCoords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '',
+    ...(label ? { label } : {}),
+    ...(commission ? { commission } : {}),   // 抽成
+    ...(dispatch ? { dispatch } : {}),        // 叫車費
+    ...(slimRoad ? { roadCoords: slimRoad } : {}) };
 }
 
 // 給 sync.js 用：雲端資料「進入本機前」先瘦身。
@@ -3164,6 +3192,13 @@ function _payTag(pm) {
 function _otherTag(t) {
   if (t.paymentMethod === 'other') return `<span class="pay-tag pay-other">${t.label || '其他'}</span>`;
   return '';
+}
+// 抽成 / 叫車費標籤（記錄公司抽成用）
+function _extraTag(t) {
+  let s = '';
+  if (t.commission) s += `　<span class="extra-tag">抽成 ${t.commission}</span>`;
+  if (t.dispatch)   s += `　<span class="extra-tag">叫車 ${t.dispatch}</span>`;
+  return s;
 }
 // 統計一組行程的刷卡 / 現金 / 總計金額
 function _fareStats(trips) {

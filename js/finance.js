@@ -32,18 +32,19 @@
   // 某月營收（載客車資，排除「其他」）＋里程＋趟數＋現金/刷卡
   function revenueOfMonth(month) {
     var raw = (window.loadTrips ? loadTrips() : {}) || {};
-    var fare = 0, cash = 0, card = 0, dist = 0, trips = 0, workMs = 0;
+    var fare = 0, cash = 0, card = 0, dist = 0, trips = 0, workMs = 0, comm = 0, disp = 0;
     Object.keys(raw).forEach(function (day) {
       if (monthOf(day) !== month) return;
       var arr = raw[day] || [];
       arr.forEach(function (t) {
         if (t.paymentMethod === 'other') return;
         var f = t.fare || 0; fare += f; dist += t.totalDist || 0; trips++;
+        comm += t.commission || 0; disp += t.dispatch || 0;   // 抽成 / 叫車費
         if (t.paymentMethod === 'card') card += f; else cash += f;
       });
       if (window.workMs && window.getRestMin) workMs += workMs0(arr, getRestMin(day));
     });
-    return { fare: fare, cash: cash, card: card, dist: dist, trips: trips, workMs: workMs };
+    return { fare: fare, cash: cash, card: card, dist: dist, trips: trips, workMs: workMs, comm: comm, disp: disp };
   }
   function workMs0(arr, restMin) { try { return workMs(arr, restMin); } catch (_) { return 0; } }
 
@@ -181,14 +182,16 @@
   function renderIO() {
     var rev = revenueOfMonth(_month);
     var exp = expensesOfMonth(_month);
-    var net = rev.fare - exp.total;
+    var deduct = rev.comm + rev.disp;   // 抽成 + 叫車費（公司抽走）
+    var net = rev.fare - deduct - exp.total;
     var h = '';
-    h += '<div class="fin-net"><div class="lbl">淨收入（營收 − 支出）</div>' +
+    h += '<div class="fin-net"><div class="lbl">淨收入（營收 − 抽成 − 支出）</div>' +
       '<div class="val">NT$ ' + nf(net) + '</div>' +
       '<div class="sub"><span>現金 ' + nf(rev.cash) + '</span><span>刷卡 ' + nf(rev.card) + '</span>' +
       '<span>' + rev.trips + ' 趟</span></div></div>';
     h += '<div class="fin-row2">' +
       '<div class="fin-card"><div class="lbl">營收</div><div class="val rev">' + nf(rev.fare) + '</div></div>' +
+      '<div class="fin-card"><div class="lbl">抽成/叫車</div><div class="val exp">' + nf(deduct) + '</div></div>' +
       '<div class="fin-card"><div class="lbl">支出</div><div class="val exp">' + nf(exp.total) + '</div></div></div>';
 
     h += '<div class="fin-sec">支出分類</div><div class="fin-catgrid">';
@@ -240,7 +243,7 @@
   function renderAnalytics() {
     var rev = revenueOfMonth(_month);
     var exp = expensesOfMonth(_month);
-    var net = rev.fare - exp.total;
+    var net = rev.fare - rev.comm - rev.disp - exp.total;
     var a = analyze(_month);
     var workH = rev.workMs / 3600000;
     var perHour = workH > 0.05 ? net / workH : 0;
