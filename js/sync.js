@@ -39,11 +39,36 @@
 
   function onAuth(u) {
     updateUI();
-    if (u) { pullAndListen(); }
+    if (u) { pullAndListen(); loadProfile(); }
     else {
+      profileName = ''; needsName = false;
       if (unsub) { unsub(); unsub = null; }
       if (unsubDel) { unsubDel(); unsubDel = null; }
     }
+  }
+
+  // ===== 使用者顯示名稱（記帳者/司機互相辨識用）=====
+  let profileName = '', needsName = false;
+  function profileDoc() { return db.collection('users').doc(user.uid).collection('meta').doc('profile'); }
+  async function loadProfile() {
+    needsName = false; profileName = '';
+    try {
+      const snap = await profileDoc().get();
+      const nm = snap.exists && snap.data() && snap.data().name;
+      if (nm) profileName = nm;
+      else needsName = true;                 // 成功讀到、但沒名字 → 要求輸入
+    } catch (_) {
+      needsName = false;                      // 讀取失敗（網路）→ 不強制，避免把人鎖在外面
+    }
+    updateUI();
+  }
+  function setName(name) {
+    name = (name || '').trim();
+    if (!ready || !user || !name) return;
+    profileName = name; needsName = false;
+    try { profileDoc().set({ name: name, updatedAt: Date.now() }, { merge: true }).catch(function () {}); } catch (_) {}
+    try { if (user.updateProfile) user.updateProfile({ displayName: name }).catch(function () {}); } catch (_) {}
+    updateUI();
   }
 
   // Email + 密碼登入：純 API、不靠彈窗/轉址，在 App 內嵌瀏覽器 100% 可用。
@@ -265,10 +290,10 @@
   function status() {
     if (!cfgValid(window.FIREBASE_CONFIG) || typeof firebase === 'undefined') return { state: 'unconfigured' };
     if (!user) return { state: 'signedout' };
-    return { state: 'signedin', email: user.email, name: user.displayName, cloud: cloudInfo };
+    return { state: 'signedin', email: user.email, name: profileName || user.displayName || '', needsName: needsName, cloud: cloudInfo };
   }
 
   function updateUI() { if (window.renderSyncPanel) window.renderSyncPanel(); }
 
-  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud, pushDeleted };
+  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud, pushDeleted, setName: setName };
 })();

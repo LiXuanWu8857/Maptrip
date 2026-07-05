@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.220';
+const APP_VERSION  = '1.1.221';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -2542,10 +2542,24 @@ function submitGateLogin() {
   MaptripSync.signIn(email, pw);
 }
 
+let _nameAsking = false;
+// 登入後若沒設定名字 → 要求輸入（取消/留空直接登出）。記帳者辨識用。
+function maybeAskName(st) {
+  if (!st || !st.needsName || _nameAsking) return;
+  _nameAsking = true;
+  setTimeout(() => {
+    const name = (prompt('請輸入你的名字\n（讓記帳者辨識，例如：阿明）', '') || '').trim();
+    if (!name) { MaptripSync.signOut(); toast('未輸入名字，已登出'); }
+    else { MaptripSync.setName(name); toast('名字已設定：' + name); }
+    _nameAsking = false;
+  }, 150);
+}
+
 function renderSyncPanel() {
   if (!window.MaptripSync) return;
   const st = MaptripSync.status();
   applyLoginGate(st.state);
+  maybeAskName(st);
   const statusEl = document.getElementById('sync-status');
   const actEl = document.getElementById('sync-actions');
   if (!statusEl) return;
