@@ -116,7 +116,10 @@
       '.fin-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}' +
       '.fin-chip{padding:7px 11px;border-radius:999px;border:1px solid rgba(0,0,0,.12);background:#fff;font-size:.8rem;color:#3c4043;cursor:pointer}' +
       '.fin-chip.on{background:#1a73e8;color:#fff;border-color:#1a73e8}' +
-      '.fin-inp{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(0,0,0,.15);border-radius:10px;font-size:1rem;font-family:inherit;margin-bottom:8px;background:#fff}' +
+      '.fin-inp{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(0,0,0,.15);border-radius:10px;font-size:1rem;line-height:1.3;font-family:inherit;margin-bottom:8px;background:#fff}' +
+      // iOS 的 type=date 會用原生尺寸（較高、置中）→ 關掉原生外觀，讓它和金額/備註一致
+      'input.fin-inp[type=date]{-webkit-appearance:none;appearance:none;text-align:left;min-height:0;height:auto}' +
+      'input.fin-inp[type=date]::-webkit-date-and-time-value{text-align:left;margin:0}' +
       '.fin-form-btns{display:flex;gap:8px}.fin-form-btns button{flex:1;padding:11px;border:none;border-radius:10px;font-size:.9rem;font-weight:600;font-family:inherit;cursor:pointer}' +
       '.fin-ok{background:#1a73e8;color:#fff}.fin-cancel{background:#e8eaed;color:#3c4043}' +
       '.fin-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}' +
