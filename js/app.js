@@ -1,10 +1,38 @@
-const APP_VERSION  = '1.1.221';
+const APP_VERSION  = '1.1.222';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
 // 同步介面、記憶體快取，開機時 boot 之前完成初始化與舊資料搬移
 function loadTrips() { return TripStore.getAll(); }
 function saveTrips(raw) { TripStore.setAll(raw); }
+
+// 把「抽成集合」的某趟抽成套回本機行程（記帳者在雲端改抽成 → 司機本機同步）。
+// 回傳 true 表示有變動（呼叫端據以重繪）。
+function applyCommission(tripId, commission, dispatch) {
+  try {
+    const id = isNaN(+tripId) ? tripId : +tripId;   // 趟 id 通常是數字
+    const raw = loadTrips();
+    let changed = false;
+    Object.keys(raw).forEach(day => {
+      (raw[day] || []).forEach(t => {
+        if (t && (t.id === id || String(t.id) === String(tripId))) {
+          if ((t.commission || 0) !== (commission || 0) || (t.dispatch || 0) !== (dispatch || 0)) {
+            t.commission = commission || 0; t.dispatch = dispatch || 0; changed = true;
+          }
+        }
+      });
+    });
+    if (changed) {
+      saveTrips(raw);
+      // 記憶體中的今日清單也同步
+      todayTrips.forEach(t => {
+        if (t && (t.id === id || String(t.id) === String(tripId))) { t.commission = commission || 0; t.dispatch = dispatch || 0; }
+      });
+    }
+    return changed;
+  } catch (_) { return false; }
+}
+window.applyCommission = applyCommission;
 const MIN_ACCURACY_M = 60;
 const GPS_RECORD_MS  = 1000;   // 每秒存一點，路線更細緻
 const LIVE_SNAP_PTS  = 30;     // 每累積 30 點（約 30 秒）即時貼合一次道路
@@ -809,6 +837,7 @@ async function finalizeSavedTrip(trip, fare, paymentMethod, label, commission, d
   let mem = todayTrips.find(t => t.id === trip.id);
   if (mem && mem !== trip) apply(mem);
   saveTodayToStorage();   // 車資先存（貼路成功與否不影響金額）
+  if (commission || dispatch) _pushCommission(trip.id, commission, dispatch);   // 抽成上雲
   updateTopBar();
 
   const road = await snapToRoads(trip.coords);
@@ -917,6 +946,14 @@ async function saveTripBackground(trip) {
   trip.roadCoords = await snapToRoads(trip.coords);
   saveTripFinal(trip);
   toast('✓ 行程已結束，金額可稍後在清單補填');
+}
+
+// 把某趟的抽成/叫車費寫進雲端「抽成集合」（司機本人；記帳者才看得到，也是雙向來源）
+function _pushCommission(tripId, commission, dispatch) {
+  try {
+    if (window.MaptripSync && MaptripSync.writeCommission && MaptripSync.myUid && MaptripSync.myUid())
+      MaptripSync.writeCommission(MaptripSync.myUid(), tripId, commission, dispatch).catch(() => {});
+  } catch (_) {}
 }
 
 // 讀 / 寫車資對話框的「抽成 / 叫車費」欄位
@@ -1421,6 +1458,7 @@ function _menuTouchEnd(e) {
   closeTopMenu();
   if (action === 'today') toggleTripList();
   else if (action === 'finance') { closeSheet(); if (window.openFinance) window.openFinance(); }
+  else if (action === 'bookkeeper') { closeSheet(); if (window.openBookkeeper) window.openBookkeeper(); }
   else if (action === 'history') showHistory();
   else if (action === 'sync') openSyncDialog();
   else if (action === 'glmap') toggleGlEngine();
@@ -1476,6 +1514,7 @@ function closeActiveSheet() {
 function goHome() {
   try { closeSheet(); } catch (_) {}
   try { if (window.closeFinance) closeFinance(); } catch (_) {}
+  try { if (window.closeBookkeeper) closeBookkeeper(); } catch (_) {}
   try { closeHistory(); } catch (_) {}
   try { if (document.getElementById('replay-panel')?.classList.contains('show')) closeReplay(); } catch (_) {}
   try { if (document.body.classList.contains('day-preview-active')) exitDayPreview(); } catch (_) {}
@@ -1567,6 +1606,7 @@ function editFare(e, idx) {
     if (paymentMethod !== 'other') trip.label = '';   // 由「其他」轉成付費 → 清掉備注
     close();
     saveTodayToStorage();
+    _pushCommission(trip.id, ex.commission, ex.dispatch);
     renderTripSheet();
   };
 
@@ -1627,6 +1667,7 @@ function editHistoryFare(e, day, idx) {
     // 否則下一次 saveTodayToStorage 合併會用舊值蓋回去
     const mem = todayTrips.find(t => t.id === tripId);
     if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; mem.commission = ex.commission; mem.dispatch = ex.dispatch; if (paymentMethod !== 'other') mem.label = ''; }
+    _pushCommission(tripId, ex.commission, ex.dispatch);
     close();
     renderHistorySheet();
   };

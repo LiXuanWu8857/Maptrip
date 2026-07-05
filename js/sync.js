@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  let auth = null, db = null, user = null, unsub = null, unsubDel = null, ready = false;
+  let auth = null, db = null, user = null, unsub = null, unsubDel = null, unsubComm = null, ready = false;
   let cloudInfo = { days: 0, trips: 0, at: 0 };   // 雲端資料摘要（診斷用）
   const warnedDays = new Set();                    // 已提示過備份失敗的日期（避免重複跳提示）
 
@@ -39,11 +39,12 @@
 
   function onAuth(u) {
     updateUI();
-    if (u) { pullAndListen(); loadProfile(); }
+    if (u) { pullAndListen(); loadProfile(); setTimeout(processInviteClaims, 1500); }
     else {
       profileName = ''; needsName = false;
       if (unsub) { unsub(); unsub = null; }
       if (unsubDel) { unsubDel(); unsubDel = null; }
+      if (unsubComm) { unsubComm(); unsubComm = null; }
     }
   }
 
@@ -69,6 +70,118 @@
     try { profileDoc().set({ name: name, updatedAt: Date.now() }, { merge: true }).catch(function () {}); } catch (_) {}
     try { if (user.updateProfile) user.updateProfile({ displayName: name }).catch(function () {}); } catch (_) {}
     updateUI();
+  }
+
+  // ===== 記帳者模式（設計 X：記帳者只能讀行程、讀寫抽成）=====
+  function myUid() { return user ? user.uid : null; }
+  function myName() { return profileName || (user && user.displayName) || ''; }
+  function _randCode() {
+    var s = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', c = '';
+    for (var i = 0; i < 6; i++) c += s[Math.floor(Math.random() * s.length)];
+    return c;
+  }
+  // 司機：產生邀請碼
+  async function createInvite() {
+    if (!ready || !user) throw new Error('尚未登入');
+    for (var t = 0; t < 6; t++) {
+      var code = _randCode();
+      var ref = db.collection('invites').doc(code);
+      var snap = await ref.get();
+      if (snap.exists) continue;
+      await ref.set({ driverUid: user.uid, driverName: myName(), createdAt: Date.now(), exp: Date.now() + 30 * 864e5 });
+      return code;
+    }
+    throw new Error('請再試一次');
+  }
+  // 記帳者：輸入邀請碼綁定
+  async function redeemInvite(code) {
+    if (!ready || !user) throw new Error('尚未登入');
+    code = (code || '').trim().toUpperCase();
+    if (!code) throw new Error('請輸入邀請碼');
+    var ref = db.collection('invites').doc(code);
+    var snap = await ref.get();
+    if (!snap.exists) throw new Error('邀請碼不存在');
+    var d = snap.data();
+    if (d.exp && d.exp < Date.now()) throw new Error('邀請碼已過期');
+    if (d.driverUid === user.uid) throw new Error('不能加入自己');
+    await ref.set({ claimedBy: user.uid, claimedName: myName() }, { merge: true });   // 回填 → 司機端自動授權
+    await db.collection('users').doc(user.uid).collection('linkedDrivers').doc(d.driverUid)
+      .set({ name: d.driverName || '', since: Date.now() }, { merge: true });
+    return { driverUid: d.driverUid, driverName: d.driverName || '' };
+  }
+  // 司機：把已被兌換的邀請 → 加進授權清單（自己產生的碼＝已同意，自動處理）
+  async function processInviteClaims() {
+    if (!ready || !user) return;
+    try {
+      var q = await db.collection('invites').where('driverUid', '==', user.uid).get();
+      var accessRef = db.collection('users').doc(user.uid).collection('meta').doc('access');
+      var accSnap = await accessRef.get();
+      var bk = (accSnap.exists && accSnap.data().bookkeepers) || {};
+      var changed = false;
+      q.forEach(function (doc) {
+        var d = doc.data();
+        if (d.claimedBy && bk[d.claimedBy] === undefined) { bk[d.claimedBy] = d.claimedName || ''; changed = true; }
+      });
+      if (changed) { await accessRef.set({ bookkeepers: bk }, { merge: true }); updateUI(); }
+    } catch (_) {}
+  }
+  // 司機：目前授權的記帳者清單
+  async function listBookkeepers() {
+    if (!ready || !user) return [];
+    try {
+      var snap = await db.collection('users').doc(user.uid).collection('meta').doc('access').get();
+      var bk = (snap.exists && snap.data().bookkeepers) || {};
+      return Object.keys(bk).map(function (uid) { return { uid: uid, name: bk[uid] || '' }; });
+    } catch (_) { return []; }
+  }
+  // 司機：移除某記帳者授權
+  async function removeBookkeeper(uid) {
+    if (!ready || !user) return;
+    var ref = db.collection('users').doc(user.uid).collection('meta').doc('access');
+    var snap = await ref.get();
+    var bk = (snap.exists && snap.data().bookkeepers) || {};
+    delete bk[uid];
+    await ref.set({ bookkeepers: bk }, { merge: true });
+    updateUI();
+  }
+  // 記帳者：我協助記帳的司機清單
+  async function listLinkedDrivers() {
+    if (!ready || !user) return [];
+    var out = [];
+    try {
+      var q = await db.collection('users').doc(user.uid).collection('linkedDrivers').get();
+      q.forEach(function (doc) { out.push({ driverUid: doc.id, name: (doc.data() || {}).name || '' }); });
+    } catch (_) {}
+    return out;
+  }
+  // 記帳者：取消一位司機（只移除自己這邊的清單；司機端可自行撤銷授權）
+  async function unlinkDriver(driverUid) {
+    if (!ready || !user) return;
+    try { await db.collection('users').doc(user.uid).collection('linkedDrivers').doc(driverUid).delete(); } catch (_) {}
+  }
+  // 記帳者：讀某司機的行程 + 抽成 + 名稱
+  async function readDriverData(driverUid) {
+    var res = { days: {}, commissions: {}, name: '' };
+    if (!ready || !user) return res;
+    try {
+      var p = await db.collection('users').doc(driverUid).collection('meta').doc('profile').get();
+      res.name = (p.exists && p.data().name) || '';
+    } catch (_) {}
+    try {
+      var q = await db.collection('users').doc(driverUid).collection('days').get();
+      q.forEach(function (doc) { res.days[doc.id] = (doc.data() || {}).trips || []; });
+    } catch (e) { throw e; }   // 讀行程失敗（多半是還沒授權）→ 讓上層提示
+    try {
+      var cq = await db.collection('users').doc(driverUid).collection('commissions').get();
+      cq.forEach(function (doc) { res.commissions[doc.id] = doc.data() || {}; });
+    } catch (_) {}
+    return res;
+  }
+  // 司機本人或記帳者：寫某司機某趟的抽成
+  async function writeCommission(driverUid, tripId, commission, dispatch) {
+    if (!ready || !user) throw new Error('尚未登入');
+    await db.collection('users').doc(driverUid).collection('commissions').doc(String(tripId))
+      .set({ commission: commission || 0, dispatch: dispatch || 0, updatedAt: Date.now(), by: user.uid }, { merge: true });
   }
 
   // Email + 密碼登入：純 API、不靠彈窗/轉址，在 App 內嵌瀏覽器 100% 可用。
@@ -179,6 +292,18 @@
   function pullAndListen() {
     if (unsub) unsub();
     if (unsubDel) unsubDel();
+    if (unsubComm) unsubComm();
+    try {
+      // 監聽自己的「抽成」集合：記帳者改的抽成會即時同步回司機本機
+      unsubComm = db.collection('users').doc(user.uid).collection('commissions').onSnapshot(snap => {
+        let changed = false;
+        snap.forEach(doc => {
+          const c = doc.data() || {};
+          if (window.applyCommission && window.applyCommission(doc.id, c.commission || 0, c.dispatch || 0)) changed = true;
+        });
+        if (changed && window.refreshAfterSync) window.refreshAfterSync();
+      }, err => log('comm snapshot err ' + (err && err.code)));
+    } catch (_) {}
     try {
       // 先訂閱刪除名單（墓碑），確保天資料抵達前就知道哪些趟已刪除
       unsubDel = deletedDoc().onSnapshot(snap => {
@@ -295,5 +420,10 @@
 
   function updateUI() { if (window.renderSyncPanel) window.renderSyncPanel(); }
 
-  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud, pushDeleted, setName: setName };
+  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud, pushDeleted, setName: setName,
+    myUid: myUid, myName: myName,
+    createInvite: createInvite, redeemInvite: redeemInvite, processInviteClaims: processInviteClaims,
+    listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,
+    listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
+    readDriverData: readDriverData, writeCommission: writeCommission };
 })();
