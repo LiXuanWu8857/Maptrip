@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.215';
+const APP_VERSION  = '1.1.216';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1544,6 +1544,7 @@ function editFare(e, idx) {
   const saveEdit = (paymentMethod) => {
     trip.fare = parseInt(input.value) || 0;
     trip.paymentMethod = paymentMethod;
+    if (paymentMethod !== 'other') trip.label = '';   // 由「其他」轉成付費 → 清掉備注
     close();
     saveTodayToStorage();
     renderTripSheet();
@@ -1594,13 +1595,14 @@ function editHistoryFare(e, day, idx) {
     if (target) {
       target.fare = fare;
       target.paymentMethod = paymentMethod;
+      if (paymentMethod !== 'other') target.label = '';   // 由「其他」轉成付費 → 清掉備注
       saveTrips(cur);
       if (window.MaptripSync) MaptripSync.syncDays([day]);
     }
     // 若編輯的是「今日」的趟，記憶體中的 todayTrips 也要同步，
     // 否則下一次 saveTodayToStorage 合併會用舊值蓋回去
     const mem = todayTrips.find(t => t.id === tripId);
-    if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; }
+    if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; if (paymentMethod !== 'other') mem.label = ''; }
     close();
     renderHistorySheet();
   };
