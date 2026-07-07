@@ -492,15 +492,38 @@
       var q = self._queue; self._queue = [];
       q.forEach(function (fn) { try { fn(); } catch (e) {} });
     });
-    // 向量樣式載入失敗 → 自動切回標準（Leaflet）引擎，App 不會卡白畫面
+    // 向量樣式載入失敗 → 自動切回標準（Leaflet）引擎，App 不會卡白畫面。
+    // 重要：任何一片圖磚/字型在行動網路上暫時失敗都會觸發 error 事件，
+    // 而 load 事件可能被個別資源拖住 —— 不能只憑「有 error 且 load 未發」就重載，
+    // 否則地圖明明可用卻每 ~30 秒重載一次（20s 看門狗 + 開機時間）。
     var hadError = false;
     this.gl.on('error', function () { hadError = true; });
+    var readyFallback = function () {
+      // 樣式其實已可用（load 被個別資源拖住）→ 直接視為就緒，絕不重載
+      if (self._ready) return true;
+      var styleOk = false;
+      try { styleOk = self.gl.isStyleLoaded(); } catch (e) {}
+      if (!styleOk) return false;
+      self._ready = true;
+      try { localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (e) {}
+      try { installTwShields(self.gl); } catch (e) {}
+      var q = self._queue; self._queue = [];
+      q.forEach(function (fn) { try { fn(); } catch (e) {} });
+      return true;
+    };
     setTimeout(function () {
-      if (!self._ready && hadError) {
-        // 記下失敗時間（localStorage，reload 後保留）→ 接下來 3 小時走標準地圖；用防迴圈重載
-        try { localStorage.setItem('mt_glfail', String(Date.now())); } catch (e) {}
-        (window.__mtSafeReload || location.reload.bind(location))();
-      }
+      if (readyFallback()) return;          // 20 秒：樣式可用就放行
+      setTimeout(function () {
+        if (readyFallback()) return;        // 40 秒：再給一次機會
+        if (hadError) {
+          // 真的載不起來 → 記下失敗（3 小時走標準地圖）＋原因，用防迴圈重載
+          try {
+            localStorage.setItem('mt_glfail', String(Date.now()));
+            localStorage.setItem('mt_glfail_reason', 'loadfail');
+          } catch (e) {}
+          (window.__mtSafeReload || location.reload.bind(location))();
+        }
+      }, 20000);
     }, 20000);
 
     // Leaflet 風格 handler 物件

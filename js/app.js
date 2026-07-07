@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.224';
+const APP_VERSION  = '1.1.225';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -3502,11 +3502,15 @@ function boot() {
   try { localStorage.removeItem('mt_rl'); } catch (_) {}
   // 穩定執行 90 秒 → 清掉「崩潰迴圈計數」（撐不過 90 秒就被砍＝疑似記憶體迴圈，計數保留累積）
   setTimeout(() => { try { localStorage.removeItem('mt_run'); } catch (_) {} }, 90000);
-  // 若剛因崩潰迴圈被切回標準地圖 → 告知使用者原因
+  // 若剛因異常被切回標準地圖 → 告知使用者原因（診斷關鍵：知道是哪條路徑觸發）
   try {
-    if (localStorage.getItem('mt_glfail_reason') === 'crashloop' && !window.MAPTRIP_GL) {
+    const reason = localStorage.getItem('mt_glfail_reason');
+    if (reason && !window.MAPTRIP_GL) {
       localStorage.removeItem('mt_glfail_reason');
-      setTimeout(() => toast('向量地圖在此裝置記憶體不足，已暫時改用標準地圖（3 小時後自動再試）'), 2000);
+      const msg = reason === 'crashloop' ? '向量地圖不穩定（疑似記憶體），已暫時改用標準地圖（3 小時後自動再試）'
+        : reason === 'reloadloop' ? '偵測到重載迴圈，已暫時改用標準地圖（3 小時後自動再試）'
+        : '向量地圖載入失敗，已暫時改用標準地圖（3 小時後自動再試）';
+      setTimeout(() => toast(msg), 2000);
     }
   } catch (_) {}
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，

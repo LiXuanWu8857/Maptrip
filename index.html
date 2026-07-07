@@ -6,15 +6,18 @@
      讓 reload-fix CSS（top:0）正確消除動態島下方多餘間距。
      sessionStorage 旗標確保每個 session 只 reload 一次，不會無限迴圈。 -->
 <script>
-// 自動重載防迴圈：30 秒內自動重載超過 4 次 → 判定為迴圈，停止重載並強制走標準地圖
-// （避免向量地圖在某些裝置上「一直重新整理」；旗標用 localStorage，reload 後必定保留）
+// 自動重載防迴圈：3 分鐘內自動重載超過 4 次 → 判定為迴圈，停止重載並強制走標準地圖
+// （窗要夠長：~30 秒一輪的迴圈在 30 秒窗內永遠攔不到；旗標用 localStorage，reload 後必定保留）
 window.__mtSafeReload = function () {
   try {
     var now = Date.now(), g = null;
     try { g = JSON.parse(localStorage.getItem('mt_rl') || 'null'); } catch (e) {}
-    if (!g || (now - g.t0) > 30000) g = { n: 0, t0: now };
+    if (!g || (now - g.t0) > 180000) g = { n: 0, t0: now };
     g.n++; localStorage.setItem('mt_rl', JSON.stringify(g));
-    if (g.n > 4) { try { localStorage.setItem('mt_glfail', String(now)); } catch (e) {} return; }
+    if (g.n > 4) {
+      try { localStorage.setItem('mt_glfail', String(now)); localStorage.setItem('mt_glfail_reason', 'reloadloop'); } catch (e) {}
+      return;
+    }
   } catch (e) {}
   location.reload();
 };
@@ -50,7 +53,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.224';</script>
+<script>window.INDEX_VERSION = '1.1.225';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -439,7 +442,7 @@ if (!sessionStorage.getItem('booted')) {
     document.head.appendChild(css);
     var glFail = function () {
       // 記下失敗時間（localStorage，reload 後保留）；接下來 3 小時走標準地圖，之後再試 GL
-      try { localStorage.setItem('mt_glfail', String(Date.now())); } catch (e) {}
+      try { localStorage.setItem('mt_glfail', String(Date.now())); localStorage.setItem('mt_glfail_reason', 'loadfail'); } catch (e) {}
       tryLeaflet(0);
     };
     var startGlApp = function () {
