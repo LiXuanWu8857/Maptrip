@@ -481,6 +481,8 @@
 
     this.gl.on('load', function () {
       self._ready = true;
+      // 成功載入 → 清掉「最近失敗」與「重載計數」，回到健康狀態
+      try { localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (e) {}
       try { installTwShields(self.gl); } catch (e) {}   // 台灣公路盾牌
       var q = self._queue; self._queue = [];
       q.forEach(function (fn) { try { fn(); } catch (e) {} });
@@ -490,9 +492,9 @@
     this.gl.on('error', function () { hadError = true; });
     setTimeout(function () {
       if (!self._ready && hadError) {
-        // 只退回這次 session（保留使用者「預設向量」偏好），下次啟動再試
-        try { sessionStorage.setItem('gl_fail', '1'); } catch (e) {}
-        location.reload();
+        // 記下失敗時間（localStorage，reload 後保留）→ 接下來 3 小時走標準地圖；用防迴圈重載
+        try { localStorage.setItem('mt_glfail', String(Date.now())); } catch (e) {}
+        (window.__mtSafeReload || location.reload.bind(location))();
       }
     }, 20000);
 

@@ -6,12 +6,24 @@
      讓 reload-fix CSS（top:0）正確消除動態島下方多餘間距。
      sessionStorage 旗標確保每個 session 只 reload 一次，不會無限迴圈。 -->
 <script>
+// 自動重載防迴圈：30 秒內自動重載超過 4 次 → 判定為迴圈，停止重載並強制走標準地圖
+// （避免向量地圖在某些裝置上「一直重新整理」；旗標用 localStorage，reload 後必定保留）
+window.__mtSafeReload = function () {
+  try {
+    var now = Date.now(), g = null;
+    try { g = JSON.parse(localStorage.getItem('mt_rl') || 'null'); } catch (e) {}
+    if (!g || (now - g.t0) > 30000) g = { n: 0, t0: now };
+    g.n++; localStorage.setItem('mt_rl', JSON.stringify(g));
+    if (g.n > 4) { try { localStorage.setItem('mt_glfail', String(now)); } catch (e) {} return; }
+  } catch (e) {}
+  location.reload();
+};
 if (!sessionStorage.getItem('booted')) {
   sessionStorage.setItem('booted', '1');
   // 標記「即將 reload」：reload() 之後頁面還會繼續載入一小段時間，
   // 這段期間絕不能啟動 App（否則儲存層初始化/搬移會被 reload 攔腰打斷）
   window.__mtReloadPending = true;
-  location.reload();
+  window.__mtSafeReload();
 }
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -22,7 +34,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.222';</script>
+<script>window.INDEX_VERSION = '1.1.223';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -380,10 +392,10 @@ if (!sessionStorage.getItem('booted')) {
   function tryLeaflet(i) {
     if (typeof L !== 'undefined') { loadApp(); return; }
     if (i >= LEAFLET_CDNS.length) {
-      // 所有 CDN 都失敗（多半是冷開機網路還沒就緒）→ 自動重載一次
+      // 所有 CDN 都失敗（多半是冷開機網路還沒就緒）→ 自動重載一次（走防迴圈）
       if (!sessionStorage.getItem('lfRetry')) {
         sessionStorage.setItem('lfRetry', '1');
-        setTimeout(function () { location.reload(); }, 1500);
+        setTimeout(function () { (window.__mtSafeReload || location.reload.bind(location))(); }, 1500);
       }
       return;
     }
@@ -391,11 +403,13 @@ if (!sessionStorage.getItem('booted')) {
   }
 
   // 向量地圖引擎：現在是「預設引擎」，除非使用者明確切回標準（maptrip_gl='0'），
-  // 或本次啟動 GL 載入失敗過（gl_fail，僅這次 session 退回標準，下次再試 GL）。
+  // 或最近載入失敗過（mt_glfail 時間戳，3 小時內先走標準，之後再試 GL）。
+  // 用 localStorage（reload 後必定保留），避免 sessionStorage 不保留造成無限重載。
   var useGL = true;
   try {
-    useGL = (localStorage.getItem('maptrip_gl') !== '0') &&
-            (sessionStorage.getItem('gl_fail') !== '1');
+    var _glf = +localStorage.getItem('mt_glfail') || 0;
+    var _recentFail = _glf && (Date.now() - _glf) < 3 * 3600 * 1000;
+    useGL = (localStorage.getItem('maptrip_gl') !== '0') && !_recentFail;
   } catch (e) {}
   if (useGL) {
     // CSS：unpkg 失敗自動換 jsdelivr（關鍵規則另有內建保險，見 gl-compat.js）
@@ -408,8 +422,8 @@ if (!sessionStorage.getItem('booted')) {
     };
     document.head.appendChild(css);
     var glFail = function () {
-      // 只退回這次 session（保留使用者偏好），下次啟動再試 GL
-      try { sessionStorage.setItem('gl_fail', '1'); } catch (e) {}
+      // 記下失敗時間（localStorage，reload 後保留）；接下來 3 小時走標準地圖，之後再試 GL
+      try { localStorage.setItem('mt_glfail', String(Date.now())); } catch (e) {}
       tryLeaflet(0);
     };
     var startGlApp = function () {

@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.222';
+const APP_VERSION  = '1.1.223';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1470,7 +1470,7 @@ function toggleGlEngine() {
   // 依「目前實際引擎」切換：向量預設開啟，'0'=強制標準、'1'=強制向量
   if (window.MAPTRIP_GL) localStorage.setItem('maptrip_gl', '0');   // 目前向量 → 換標準
   else localStorage.setItem('maptrip_gl', '1');                     // 目前標準 → 換向量
-  try { sessionStorage.removeItem('gl_fail'); } catch (_) {}         // 清除本次失敗旗標，重新嘗試
+  try { sessionStorage.removeItem('gl_fail'); localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (_) {}
   location.reload();
 }
 
@@ -3498,6 +3498,8 @@ function checkForUpdate() {
 }
 
 function boot() {
+  // App 成功啟動 → 清掉「自動重載計數」（健康狀態，避免殘留計數誤判為迴圈）
+  try { localStorage.removeItem('mt_rl'); } catch (_) {}
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
   if ('serviceWorker' in navigator) {
