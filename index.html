@@ -22,9 +22,11 @@ window.__mtSafeReload = function () {
   location.reload();
 };
 if (!sessionStorage.getItem('booted')) {
-  // 崩潰迴圈偵測：WKWebView 記憶體不足會把網頁行程砍掉重載（sessionStorage 消失＝全新開場）。
-  // 只在向量地圖模式計數「全新開場」；3 分鐘內超過 4 次 → 判定崩潰迴圈，
-  // 切回標準地圖 3 小時（並留原因給 App 顯示提示）。穩定執行 90 秒後計數歸零（見 app.js）。
+  // 崩潰迴圈偵測：WKWebView 把網頁行程砍掉重啟時 sessionStorage 消失＝全新開場。
+  // 只在向量地圖模式計數；3 分鐘內超過 4 次 → 判定崩潰迴圈，切回標準地圖 3 小時。
+  // 穩定執行 90 秒後計數歸零（見 app.js）。
+  // 注意：冷啟動「自動 reload」已移除 —— 頂列 safe-area 改由下方量測式修正處理，
+  // 開機不再載入兩次（省一半啟動時間，也不再有「一開就重新整理」的感覺）。
   try {
     if (localStorage.getItem('maptrip_gl') !== '0') {
       var _now = Date.now(), _g = null;
@@ -39,10 +41,6 @@ if (!sessionStorage.getItem('booted')) {
     }
   } catch (e) {}
   sessionStorage.setItem('booted', '1');
-  // 標記「即將 reload」：reload() 之後頁面還會繼續載入一小段時間，
-  // 這段期間絕不能啟動 App（否則儲存層初始化/搬移會被 reload 攔腰打斷）
-  window.__mtReloadPending = true;
-  window.__mtSafeReload();
 }
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -53,11 +51,12 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.225';</script>
+<script>window.INDEX_VERSION = '1.1.226';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
-<script>document.write('<link rel="stylesheet" href="css/style.css?t=' + Date.now() + '">');</script>
+<!-- 自家資源用「版本號」當快取鍵：平常直接用快取（省下每次重抓 ~280KB），升版時 URL 改變即更新 -->
+<script>document.write('<link rel="stylesheet" href="css/style.css?v=' + window.INDEX_VERSION + '">');</script>
 <!-- Inline critical CSS: overrides external CSS so it works even when style.css is stale-cached -->
 <style>
 /* 頂部安全區 + 頂列 + 地圖：style.css 靠網路才載入，但這裡是 inline 立即生效，
@@ -382,10 +381,10 @@ if (!sessionStorage.getItem('booted')) {
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="js/firebase-config.js"></script>
-<script>document.write('<scr' + 'ipt src="js/store.js?t=' + Date.now() + '"></scr' + 'ipt>');</script>
-<script>document.write('<scr' + 'ipt src="js/sync.js?t=' + Date.now() + '"></scr' + 'ipt>');</script>
-<script>document.write('<scr' + 'ipt src="js/finance.js?t=' + Date.now() + '"></scr' + 'ipt>');</script>
-<script>document.write('<scr' + 'ipt src="js/bookkeeper.js?t=' + Date.now() + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/store.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/sync.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/finance.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/bookkeeper.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 
 <!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，
      全部失敗才自動重載一次（避免「第一次開地圖掛掉、要按重置」）。 -->
@@ -405,7 +404,7 @@ if (!sessionStorage.getItem('booted')) {
   function loadApp() {
     sessionStorage.removeItem('lfRetry');
     // 先載地圖旋轉外掛（朝車頭功能）；載入失敗也照常啟動 App
-    var startApp = function () { loadScript('js/app.js?t=' + Date.now()); };
+    var startApp = function () { loadScript('js/app.js?v=' + window.INDEX_VERSION); };
     loadScript('https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js', startApp, startApp);
   }
   function tryLeaflet(i) {
@@ -446,9 +445,9 @@ if (!sessionStorage.getItem('booted')) {
       tryLeaflet(0);
     };
     var startGlApp = function () {
-      loadScript('js/gl-compat.js?t=' + Date.now(), function () {
+      loadScript('js/gl-compat.js?v=' + window.INDEX_VERSION, function () {
         sessionStorage.removeItem('lfRetry');
-        loadScript('js/app.js?t=' + Date.now());
+        loadScript('js/app.js?v=' + window.INDEX_VERSION);
       }, glFail);
     };
     loadScript('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', startGlApp, function () {
