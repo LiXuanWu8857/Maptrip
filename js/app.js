@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.223';
+const APP_VERSION  = '1.1.224';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1021,9 +1021,9 @@ function saveTripFinal(trip) {
 async function snapToRoads(coords) {
   if (coords.length < 2) return null;
 
-  // OSRM 公開服務最多 100 點，超過則均勻取樣。
-  // step 用 ceil 才保證取樣後 ≤ MAX_PTS（floor 在 101~197 點時 step=1，全數保留 → 必定超限失敗）
-  const MAX_PTS = 100;
+  // OSRM 公開服務上限 100 點；抓 95 留安全邊際（實測 100 點會被以 TooBig 拒絕）。
+  // step 用 ceil 才保證取樣後 ≤ MAX_PTS（floor 在臨界點時 step=1，全數保留 → 必定超限失敗）
+  const MAX_PTS = 95;
   let pts = coords;
   if (pts.length > MAX_PTS) {
     const step = Math.ceil(pts.length / MAX_PTS);
@@ -3500,6 +3500,15 @@ function checkForUpdate() {
 function boot() {
   // App 成功啟動 → 清掉「自動重載計數」（健康狀態，避免殘留計數誤判為迴圈）
   try { localStorage.removeItem('mt_rl'); } catch (_) {}
+  // 穩定執行 90 秒 → 清掉「崩潰迴圈計數」（撐不過 90 秒就被砍＝疑似記憶體迴圈，計數保留累積）
+  setTimeout(() => { try { localStorage.removeItem('mt_run'); } catch (_) {} }, 90000);
+  // 若剛因崩潰迴圈被切回標準地圖 → 告知使用者原因
+  try {
+    if (localStorage.getItem('mt_glfail_reason') === 'crashloop' && !window.MAPTRIP_GL) {
+      localStorage.removeItem('mt_glfail_reason');
+      setTimeout(() => toast('向量地圖在此裝置記憶體不足，已暫時改用標準地圖（3 小時後自動再試）'), 2000);
+    }
+  } catch (_) {}
   // Service Worker：攔截導覽請求，以 no-store 取得最新 index.html，
   // 永久解決 WKWebView 的 HTML 快取問題。註冊後「不」主動跳轉，避免脫離原生環境。
   if ('serviceWorker' in navigator) {

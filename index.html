@@ -19,6 +19,22 @@ window.__mtSafeReload = function () {
   location.reload();
 };
 if (!sessionStorage.getItem('booted')) {
+  // 崩潰迴圈偵測：WKWebView 記憶體不足會把網頁行程砍掉重載（sessionStorage 消失＝全新開場）。
+  // 只在向量地圖模式計數「全新開場」；3 分鐘內超過 4 次 → 判定崩潰迴圈，
+  // 切回標準地圖 3 小時（並留原因給 App 顯示提示）。穩定執行 90 秒後計數歸零（見 app.js）。
+  try {
+    if (localStorage.getItem('maptrip_gl') !== '0') {
+      var _now = Date.now(), _g = null;
+      try { _g = JSON.parse(localStorage.getItem('mt_run') || 'null'); } catch (e) {}
+      if (!_g || (_now - _g.t0) > 180000) _g = { n: 0, t0: _now };
+      _g.n++; localStorage.setItem('mt_run', JSON.stringify(_g));
+      if (_g.n > 4) {
+        localStorage.setItem('mt_glfail', String(_now));
+        localStorage.setItem('mt_glfail_reason', 'crashloop');
+        localStorage.removeItem('mt_run');
+      }
+    }
+  } catch (e) {}
   sessionStorage.setItem('booted', '1');
   // 標記「即將 reload」：reload() 之後頁面還會繼續載入一小段時間，
   // 這段期間絕不能啟動 App（否則儲存層初始化/搬移會被 reload 攔腰打斷）
@@ -34,7 +50,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.223';</script>
+<script>window.INDEX_VERSION = '1.1.224';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->

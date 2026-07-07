@@ -467,6 +467,11 @@
       attributionControl: false,
       pitchWithRotate: false,
       maxZoom: 20,
+      // 記憶體控管：WKWebView 記憶體超標會整頁被系統砍掉重載（≈30 秒一次的重整迴圈）。
+      // 3x 螢幕的畫布記憶體是 2x 的 2.25 倍 → 上限 2x；磁磚快取也設上限。
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      maxTileCacheSize: 64,
+      fadeDuration: 150,
       // 中日韓文字用「裝置系統字型」就地繪製（不下載 CJK glyph）：
       // iOS = PingFang、Android = Noto Sans CJK，和 App 內部 system-ui 一致。
       // 英數仍走樣式內建 SDF 字型（Noto Sans，接近系統無襯線）。
