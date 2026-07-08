@@ -6,6 +6,16 @@
      讓 reload-fix CSS（top:0）正確消除動態島下方多餘間距。
      sessionStorage 旗標確保每個 session 只 reload 一次，不會無限迴圈。 -->
 <script>
+// 開機事件環狀記錄（最近 40 筆，localStorage）：白屏/卡住/重載的黑盒子，
+// 事後可從 mt_bootlog 還原「哪一次開機走到哪裡、為什麼重載」
+window.__mtLog = function (ev) {
+  try {
+    var a = JSON.parse(localStorage.getItem('mt_bootlog') || '[]');
+    a.push(new Date().toISOString().slice(5, 19) + ' ' + ev);
+    if (a.length > 40) a = a.slice(-40);
+    localStorage.setItem('mt_bootlog', JSON.stringify(a));
+  } catch (e) {}
+};
 // 自動重載防迴圈：3 分鐘內自動重載超過 4 次 → 判定為迴圈，停止重載並強制走標準地圖
 // （窗要夠長：~30 秒一輪的迴圈在 30 秒窗內永遠攔不到；旗標用 localStorage，reload 後必定保留）
 window.__mtSafeReload = function () {
@@ -14,6 +24,7 @@ window.__mtSafeReload = function () {
     try { g = JSON.parse(localStorage.getItem('mt_rl') || 'null'); } catch (e) {}
     if (!g || (now - g.t0) > 180000) g = { n: 0, t0: now };
     g.n++; localStorage.setItem('mt_rl', JSON.stringify(g));
+    window.__mtLog('safeReload n=' + g.n);
     if (g.n > 4) {
       try { localStorage.setItem('mt_glfail', String(now)); localStorage.setItem('mt_glfail_reason', 'reloadloop'); } catch (e) {}
       return;
@@ -21,6 +32,11 @@ window.__mtSafeReload = function () {
   } catch (e) {}
   location.reload();
 };
+// 開機看門狗：頁面已載入但 25 秒還沒完成開機（CDN 卡住 / 資源半載 / 引擎卡死）
+// → 防迴圈重載。把「卡住的白畫面」變成自動恢復。
+setTimeout(function () {
+  if (!window.__mtBooted) { window.__mtLog('watchdog: not booted in 25s'); window.__mtSafeReload(); }
+}, 25000);
 if (!sessionStorage.getItem('booted')) {
   // 崩潰迴圈偵測：WKWebView 把網頁行程砍掉重啟時 sessionStorage 消失＝全新開場。
   // 只在向量地圖模式計數；3 分鐘內超過 4 次 → 判定崩潰迴圈，切回標準地圖 3 小時。
@@ -42,6 +58,12 @@ if (!sessionStorage.getItem('booted')) {
   } catch (e) {}
   sessionStorage.setItem('booted', '1');
 }
+// 記錄本次開場型態：navigate＝全新載入（含 WKWebView 行程被系統砍掉後的自動重啟）、
+// reload＝程式自己重載。連續多筆 navigate 就是「一直被砍」的鐵證。
+try {
+  var _nav = (performance.getEntriesByType('navigation')[0] || {}).type || '?';
+  window.__mtLog('page ' + _nav + (sessionStorage.getItem('seeded') ? ' (test)' : ''));
+} catch (e) {}
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -51,7 +73,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.227';</script>
+<script>window.INDEX_VERSION = '1.1.228';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->

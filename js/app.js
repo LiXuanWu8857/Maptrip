@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.227';
+const APP_VERSION  = '1.1.228';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -335,6 +335,19 @@ function initMap() {
       // 記錄中時把時間/距離推給浮窗（widgetHeartbeat 內含 floatWin().update）
       setInterval(widgetHeartbeat, 3000);
     }
+  }
+
+  // 退到背景（跑導航等其他 App）時卸下圖磚：Google 圖磚的已解碼影像是背景時最大的
+  // 記憶體佔用，而 WKWebView 記憶體超標會被 iOS 整個砍掉（回前景全白＋重載）。
+  // 背景看不到地圖，卸掉零成本；回前景重掛，圖磚多半還在 HTTP 快取、瞬間回來。
+  if (!window.MAPTRIP_GL) {
+    document.addEventListener('visibilitychange', () => {
+      try {
+        const t = TILE_LAYERS[currentTile];
+        if (document.hidden) { if (map.hasLayer(t)) map.removeLayer(t); }
+        else if (!map.hasLayer(t)) t.addTo(map);
+      } catch (_) {}
+    });
   }
 
   loadTodayFromStorage();
@@ -3564,6 +3577,13 @@ function boot() {
 
   // 雲端同步：載入登入狀態並開始監聽（未設定 Firebase 時安靜略過）
   if (window.MaptripSync) { try { MaptripSync.init(); } catch (e) {} }
+
+  // 開機完成：解除 index.html 的 25 秒看門狗，並寫入黑盒子
+  window.__mtBooted = true;
+  try {
+    window.__mtLog && window.__mtLog('boot ok v' + APP_VERSION + ' ' + (window.MAPTRIP_GL ? 'gl' : 'lf')
+      + (activeTrip ? ' rec' : ''));
+  } catch (_) {}
 }
 
 // 先完成儲存層初始化（IndexedDB 開啟＋舊資料搬移）再 boot，
