@@ -12,10 +12,15 @@ window.__mtLog = function (ev) {
   try {
     var a = JSON.parse(localStorage.getItem('mt_bootlog') || '[]');
     a.push(new Date().toISOString().slice(5, 19) + ' ' + ev);
-    if (a.length > 40) a = a.slice(-40);
+    if (a.length > 80) a = a.slice(-80);
     localStorage.setItem('mt_bootlog', JSON.stringify(a));
   } catch (e) {}
 };
+// 前景/背景切換也記錄：被砍後的 page navigate 若緊跟在 bg 之後＝背景被砍（正常病程）、
+// 若在 fg 期間＝前景直接白屏（需要進一步瘦身）
+document.addEventListener('visibilitychange', function () {
+  window.__mtLog(document.hidden ? 'bg' : 'fg');
+});
 // 自動重載防迴圈：3 分鐘內自動重載超過 4 次 → 判定為迴圈，停止重載並強制走標準地圖
 // （窗要夠長：~30 秒一輪的迴圈在 30 秒窗內永遠攔不到；旗標用 localStorage，reload 後必定保留）
 window.__mtSafeReload = function () {
@@ -73,7 +78,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.228';</script>
+<script>window.INDEX_VERSION = '1.1.229';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->

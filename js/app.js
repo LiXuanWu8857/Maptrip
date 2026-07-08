@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.228';
+const APP_VERSION  = '1.1.229';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -3335,14 +3335,38 @@ function toast(msg) {
 function dbgEnabled() {
   return TEST_MODE_ON || localStorage.getItem('maptrip_debug') === '1';
 }
-// 點版本號 5 下 → 切換診斷模式（不需重 build / 改網址即可重新開啟診斷框）
+// 開機黑盒子檢視器：顯示 mt_bootlog（每次開場/重載/看門狗事件）＋當前異常旗標，
+// 使用者截圖回報即可還原「一直重置」的完整事件序列（新→舊排列）
+function showBootLog() {
+  document.getElementById('bootlog-box')?.remove();
+  let log = [];
+  try { log = JSON.parse(localStorage.getItem('mt_bootlog') || '[]'); } catch (_) {}
+  const flags = ['mt_glfail_reason', 'mt_glerr', 'mt_rl', 'mt_run', 'mt_glfail', 'maptrip_gl']
+    .map(k => { const v = localStorage.getItem(k); return v ? k + '=' + v : null; })
+    .filter(Boolean).join('\n');
+  const box = document.createElement('div');
+  box.id = 'bootlog-box';
+  box.style.cssText = 'position:fixed;top:56px;left:8px;right:8px;bottom:90px;z-index:99999;'
+    + 'background:rgba(0,0,0,0.92);color:#9ef;font:11px/1.5 monospace;'
+    + 'padding:10px 12px;border-radius:10px;overflow:auto;white-space:pre-wrap;-webkit-overflow-scrolling:touch';
+  box.textContent = '📦 開機黑盒子 v' + APP_VERSION + '（點擊關閉）\n'
+    + (flags ? '── 旗標 ──\n' + flags + '\n' : '')
+    + '── 事件（新→舊）──\n'
+    + (log.length ? log.slice().reverse().join('\n') : '（尚無記錄）');
+  box.onclick = () => box.remove();
+  document.body.appendChild(box);
+}
+
+// 點版本號 3 下 → 開機黑盒子；5 下 → 切換診斷模式（不需重 build / 改網址）
 let _verTapCount = 0, _verTapTimer = null;
 function onVersionTap() {
   _verTapCount++;
   clearTimeout(_verTapTimer);
   _verTapTimer = setTimeout(() => { _verTapCount = 0; }, 1500);
+  if (_verTapCount === 3) showBootLog();
   if (_verTapCount < 5) return;
   _verTapCount = 0;
+  document.getElementById('bootlog-box')?.remove();
   const on = localStorage.getItem('maptrip_debug') === '1';
   if (on) {
     localStorage.removeItem('maptrip_debug');
