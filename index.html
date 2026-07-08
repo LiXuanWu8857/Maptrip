@@ -51,7 +51,7 @@ if (!sessionStorage.getItem('booted')) {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.226';</script>
+<script>window.INDEX_VERSION = '1.1.227';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -442,16 +442,28 @@ if (!sessionStorage.getItem('booted')) {
     var glFail = function () {
       // 記下失敗時間（localStorage，reload 後保留）；接下來 3 小時走標準地圖，之後再試 GL
       try { localStorage.setItem('mt_glfail', String(Date.now())); localStorage.setItem('mt_glfail_reason', 'loadfail'); } catch (e) {}
+      // 相容層若跑到一半，window.L 可能是半套 GL shim —— 清掉才不會騙過 tryLeaflet 的 typeof L 檢查
+      try { window.L = undefined; window.MAPTRIP_GL = undefined; } catch (e) {}
       tryLeaflet(0);
     };
     var startGlApp = function () {
+      // 腳本 onload 有觸發但 maplibregl 不存在＝載到壞檔（快取毀損 / CDN 回錯誤頁）→ 走標準地圖
+      if (typeof maplibregl === 'undefined') { glFail(); return; }
       loadScript('js/gl-compat.js?v=' + window.INDEX_VERSION, function () {
+        // 相容層沒跑完（無 WebGL / maplibre 執行失敗）就載 app.js 的話，
+        // app.js 會因 L 不存在整支掛掉、所有按鈕全死 → 必須先驗證再放行
+        if (!window.MAPTRIP_GL) { glFail(); return; }
         sessionStorage.removeItem('lfRetry');
         loadScript('js/app.js?v=' + window.INDEX_VERSION);
       }, glFail);
     };
-    loadScript('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', startGlApp, function () {
-      loadScript('https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js', startGlApp, glFail);
+    var GL_CDN2 = 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+    loadScript('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', function () {
+      if (typeof maplibregl !== 'undefined') { startGlApp(); return; }
+      // 載到壞檔：換 CDN 並帶時戳繞過壞快取，再不行才退回標準地圖
+      loadScript(GL_CDN2 + '?r=' + Date.now(), startGlApp, glFail);
+    }, function () {
+      loadScript(GL_CDN2, startGlApp, glFail);
     });
   } else {
     tryLeaflet(0);

@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.226';
+const APP_VERSION  = '1.1.227';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -3509,6 +3509,7 @@ function boot() {
       localStorage.removeItem('mt_glfail_reason');
       const msg = reason === 'crashloop' ? '向量地圖不穩定（疑似記憶體），已暫時改用標準地圖（3 小時後自動再試）'
         : reason === 'reloadloop' ? '偵測到重載迴圈，已暫時改用標準地圖（3 小時後自動再試）'
+        : reason === 'jsfail' ? '向量地圖發生錯誤，已暫時改用標準地圖（3 小時後自動再試）'
         : '向量地圖載入失敗，已暫時改用標準地圖（3 小時後自動再試）';
       setTimeout(() => toast(msg), 2000);
     }
@@ -3570,7 +3571,23 @@ function boot() {
 function startApp() {
   if (window.__mtReloadPending) return;   // 冷啟動自動 reload 即將發生：這一次絕不啟動
   TripStore.init(STORAGE_KEY).then(() => {
-    boot();
+    // boot 在 .then 裡執行，丟出的例外會被 Promise 吞掉（畫面上完全無聲）——
+    // GL 模式下若開機半途出錯（地圖引擎建不起來等），App 會呈現「按鈕全無反應、
+    // 無法開始行程」的半死狀態。這裡接住：記下原因、防迴圈重載，重載後自動走標準地圖。
+    try {
+      boot();
+    } catch (e) {
+      if (window.MAPTRIP_GL) {
+        try {
+          localStorage.setItem('mt_glfail', String(Date.now()));
+          localStorage.setItem('mt_glfail_reason', 'jsfail');
+          localStorage.setItem('mt_glerr', String((e && e.stack) || e).slice(0, 300));
+        } catch (_) {}
+        (window.__mtSafeReload || location.reload.bind(location))();
+        return;
+      }
+      throw e;   // 標準地圖模式的錯誤照常拋出（可見、可診斷）
+    }
     // 開機合併有從備份撿回行程 → 讓使用者知道
     if (window._storeMerged > 0) setTimeout(() => toast(`已從備份補回 ${window._storeMerged} 趟行程`), 1200);
   });

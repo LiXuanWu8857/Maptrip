@@ -10,6 +10,18 @@
   'use strict';
   if (typeof maplibregl === 'undefined') return;
 
+  // WebGL 探測：WKWebView 的 GPU 行程剛被系統砍掉時，建立 WebGL context 會失敗，
+  // 屆時 maplibregl.Map 直接 throw、App 開機半途死掉（按鈕全無反應、無法開始行程）。
+  // 先探測，不行就不啟用相容層 —— index.html 驗到 MAPTRIP_GL 不存在會自動走標準地圖。
+  try {
+    var _pc = document.createElement('canvas');
+    _pc.width = _pc.height = 1;
+    var _pgl = _pc.getContext('webgl2') || _pc.getContext('webgl') || _pc.getContext('experimental-webgl');
+    if (!_pgl) return;
+    var _lose = _pgl.getExtension('WEBGL_lose_context');   // 探測完立刻釋放 context
+    if (_lose) _lose.loseContext();
+  } catch (e) { return; }
+
   var VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
   var uid = 0;
 
@@ -459,24 +471,49 @@
     this._ready = false;
     this._handlers = {};   // type → Map(origFn → wrappedFn)
 
-    this.gl = new maplibregl.Map({
-      container: containerId,
-      style: VECTOR_STYLE,
-      center: [121.565, 25.033],
-      zoom: 14,
-      attributionControl: false,
-      pitchWithRotate: false,
-      maxZoom: 20,
-      // 記憶體控管：WKWebView 記憶體超標會整頁被系統砍掉重載（≈30 秒一次的重整迴圈）。
-      // 3x 螢幕的畫布記憶體是 2x 的 2.25 倍 → 上限 2x；磁磚快取也設上限。
-      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-      maxTileCacheSize: 64,
-      fadeDuration: 150,
-      // 中日韓文字用「裝置系統字型」就地繪製（不下載 CJK glyph）：
-      // iOS = PingFang、Android = Noto Sans CJK，和 App 內部 system-ui 一致。
-      // 英數仍走樣式內建 SDF 字型（Noto Sans，接近系統無襯線）。
-      localIdeographFontFamily: '-apple-system, "PingFang TC", "PingFang SC", "Heiti TC", "Microsoft JhengHei", system-ui, sans-serif'
-    });
+    try {
+      this.gl = new maplibregl.Map({
+        container: containerId,
+        style: VECTOR_STYLE,
+        center: [121.565, 25.033],
+        zoom: 14,
+        attributionControl: false,
+        pitchWithRotate: false,
+        maxZoom: 20,
+        // 記憶體控管：WKWebView 記憶體超標會整頁被系統砍掉重載（≈30 秒一次的重整迴圈）。
+        // 3x 螢幕的畫布記憶體是 2x 的 2.25 倍 → 上限 2x；磁磚快取也設上限。
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        maxTileCacheSize: 64,
+        fadeDuration: 150,
+        // 中日韓文字用「裝置系統字型」就地繪製（不下載 CJK glyph）：
+        // iOS = PingFang、Android = Noto Sans CJK，和 App 內部 system-ui 一致。
+        // 英數仍走樣式內建 SDF 字型（Noto Sans，接近系統無襯線）。
+        localIdeographFontFamily: '-apple-system, "PingFang TC", "PingFang SC", "Heiti TC", "Microsoft JhengHei", system-ui, sans-serif'
+      });
+    } catch (e) {
+      // 地圖引擎建立失敗（WebGL context 偶發建不起來等）→ 記下失敗、防迴圈重載；
+      // 重載後 3 小時內走標準地圖並提示原因，App 不會半死
+      try {
+        localStorage.setItem('mt_glfail', String(Date.now()));
+        localStorage.setItem('mt_glfail_reason', 'jsfail');
+        localStorage.setItem('mt_glerr', String((e && e.stack) || e).slice(0, 300));
+      } catch (_e) {}
+      (window.__mtSafeReload || location.reload.bind(location))();
+      throw e;   // 讓 app.js 的開機守門員停止本次啟動（頁面即將重載）
+    }
+    // GPU 行程被系統砍掉（背景跑導航 App 時常見）→ WebGL context 遺失、地圖凍結。
+    // MapLibre 會嘗試自動復原；5 秒內沒復原就防迴圈重載一次，回來就是全新 context。
+    try {
+      var _cv = this.gl.getCanvas();
+      var _lostTimer = null;
+      _cv.addEventListener('webglcontextlost', function () {
+        clearTimeout(_lostTimer);
+        _lostTimer = setTimeout(function () {
+          (window.__mtSafeReload || location.reload.bind(location))();
+        }, 5000);
+      });
+      _cv.addEventListener('webglcontextrestored', function () { clearTimeout(_lostTimer); });
+    } catch (e) {}
     // 允許雙指旋轉手勢；關掉傾斜（保持 2D）
     try {
       this.gl.dragRotate.disable();
