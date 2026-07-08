@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.229';
+const APP_VERSION  = '1.1.230';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1368,7 +1368,13 @@ function enableDeviceCompass(silent) {
   } catch (_) {}
 }
 
-// 羅盤回呼：停著或低速時用手機朝向轉地圖；高速行駛時交給 GPS 方向
+// 羅盤回呼：停著或低速時用手機朝向轉地圖；高速行駛時交給 GPS 方向。
+// 節流＋死區（關鍵）：iOS 羅盤每秒回報 ~60 次且靜止時恆抖 ±1-2°，
+// 若全量餵進旋轉動畫，目標角永遠在變、動畫迴圈永不停 → 地圖 60fps 無限重繪
+// → GPU/CPU 滿載、手機發燙、記憶體+熱壓力 → WKWebView 行程每隔幾秒被 iOS 砍掉。
+// 節流到最多 ~7 次/秒；並與「目前已套用的方向」比較，差 <2.5° 一律不動
+// （比「與上一筆比」強：抖動繞著錨點慢慢晃也擋得住）。靜止零重繪，真轉向瞬間通過。
+let _lastOrientT = 0;
 function onDeviceOrient(e) {
   let h = null;
   if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
@@ -1377,6 +1383,11 @@ function onDeviceOrient(e) {
     h = (360 - e.alpha) % 360;                   // Android
   }
   if (h == null || isNaN(h)) return;
+  const _now = Date.now();
+  if (_now - _lastOrientT < 150) return;
+  _lastOrientT = _now;
+  if (myHeading != null &&
+      Math.abs(((h - myHeading + 540) % 360) - 180) < 2.5) return;
   // 只要在移動就優先用 GPS 行進方向（不限記錄中）：
   // 手機架在車上時羅盤指的是「手機面向」而非行進方向，行進中會與實際方向不符
   const driving = lastMoveSpeed > 1.2;
