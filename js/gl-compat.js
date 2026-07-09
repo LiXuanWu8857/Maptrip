@@ -180,6 +180,18 @@
       return true;
     } catch (e) { return false; }
   }
+  // 記憶體瘦身：3D 建築（fill-extrusion）純裝飾卻吃大量 GPU/記憶體，
+  // 開車記錄用不到；WKWebView 記憶體超標會整頁被 iOS 砍掉 → 全部隱藏。
+  function trimStyleMemory(gl) {
+    try {
+      ((gl.getStyle() || {}).layers || []).forEach(function (ly) {
+        if (ly.type === 'fill-extrusion') {
+          try { gl.setLayoutProperty(ly.id, 'visibility', 'none'); } catch (_) {}
+        }
+      });
+    } catch (e) {}
+  }
+
   // 診斷：取樣目前畫面載入到的道路 class/ref/network（上機校準用）
   function sampleTwRoads(gl) {
     try {
@@ -483,7 +495,7 @@
         // 記憶體控管：WKWebView 記憶體超標會整頁被系統砍掉重載（≈30 秒一次的重整迴圈）。
         // 3x 螢幕的畫布記憶體是 2x 的 2.25 倍 → 上限 2x；磁磚快取也設上限。
         pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-        maxTileCacheSize: 64,
+        maxTileCacheSize: 24,   // 再縮圖磚快取：省記憶體優先（回看舊區域多花一點網路）
         fadeDuration: 150,
         // 中日韓文字用「裝置系統字型」就地繪製（不下載 CJK glyph）：
         // iOS = PingFang、Android = Noto Sans CJK，和 App 內部 system-ui 一致。
@@ -526,6 +538,7 @@
       // 成功載入 → 清掉「最近失敗」與「重載計數」，回到健康狀態
       try { localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (e) {}
       try { installTwShields(self.gl); } catch (e) {}   // 台灣公路盾牌
+      trimStyleMemory(self.gl);                          // 隱藏 3D 建築省記憶體
       var q = self._queue; self._queue = [];
       q.forEach(function (fn) { try { fn(); } catch (e) {} });
     });
@@ -544,6 +557,7 @@
       self._ready = true;
       try { localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (e) {}
       try { installTwShields(self.gl); } catch (e) {}
+      trimStyleMemory(self.gl);
       var q = self._queue; self._queue = [];
       q.forEach(function (fn) { try { fn(); } catch (e) {} });
       return true;

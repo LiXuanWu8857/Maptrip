@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.232';
+const APP_VERSION  = '1.1.233';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -3567,6 +3567,11 @@ function checkForUpdate() {
 function boot() {
   // App 成功啟動 → 清掉「自動重載計數」（健康狀態，避免殘留計數誤判為迴圈）
   try { localStorage.removeItem('mt_rl'); } catch (_) {}
+  // 崩潰偵測心跳（見 index.html 開頭）：活著就每 5 秒蓋一次時間戳。
+  // 全新開場時發現上個行程 45 秒內還活著＝被系統砍掉，累積 4 次自動切標準地圖。
+  const _beat = () => { try { localStorage.setItem('mt_alive', String(Date.now())); } catch (_) {} };
+  _beat();
+  setInterval(_beat, 5000);
   // 穩定執行 90 秒 → 清掉「崩潰迴圈計數」（撐不過 90 秒就被砍＝疑似記憶體迴圈，計數保留累積）
   setTimeout(() => { try { localStorage.removeItem('mt_run'); } catch (_) {} }, 90000);
   // 若剛因異常被切回標準地圖 → 告知使用者原因（診斷關鍵：知道是哪條路徑觸發）

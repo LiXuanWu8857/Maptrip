@@ -53,14 +53,23 @@ if (!sessionStorage.getItem('booted')) {
     var _p0 = localStorage.getItem('maptrip_gl');
     var _app0 = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
     if (_app0 ? _p0 !== '0' : _p0 === '1') {
-      var _now = Date.now(), _g = null;
-      try { _g = JSON.parse(localStorage.getItem('mt_run') || 'null'); } catch (e) {}
-      if (!_g || (_now - _g.t0) > 180000) _g = { n: 0, t0: _now };
-      _g.n++; localStorage.setItem('mt_run', JSON.stringify(_g));
-      if (_g.n > 4) {
-        localStorage.setItem('mt_glfail', String(_now));
-        localStorage.setItem('mt_glfail_reason', 'crashloop');
-        localStorage.removeItem('mt_run');
+      // 崩潰偵測 v2（心跳式）：App 每 5 秒寫一次 mt_alive。全新開場時若上個行程
+      // 45 秒內還活著＝它是「跑到一半被系統砍掉」而不是使用者正常關閉。
+      // 30 分鐘內累積 4 次 → 判定記憶體崩潰迴圈，切回標準地圖 3 小時。
+      // （舊版用「3 分鐘內開場次數」偵測，砍頻 30~60 秒一輪剛好穿過窗縫永遠抓不到）
+      var _now = Date.now();
+      var _alive = +localStorage.getItem('mt_alive') || 0;
+      if (_alive && (_now - _alive) < 45000) {
+        var _c = null;
+        try { _c = JSON.parse(localStorage.getItem('mt_crash') || 'null'); } catch (e) {}
+        if (!_c || (_now - _c.t0) > 1800000) _c = { n: 0, t0: _now };
+        _c.n++; localStorage.setItem('mt_crash', JSON.stringify(_c));
+        window.__mtLog('crash-restart n=' + _c.n);
+        if (_c.n >= 4) {
+          localStorage.setItem('mt_glfail', String(_now));
+          localStorage.setItem('mt_glfail_reason', 'crashloop');
+          localStorage.removeItem('mt_crash');
+        }
       }
     }
   } catch (e) {}
@@ -81,7 +90,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.232';</script>
+<script>window.INDEX_VERSION = '1.1.233';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
