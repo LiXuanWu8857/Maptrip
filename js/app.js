@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.230';
+const APP_VERSION  = '1.1.231';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1031,58 +1031,69 @@ function saveTripFinal(trip) {
 }
 
 // OSRM Map Matching：將 GPS 座標貼合到道路上
-async function snapToRoads(coords) {
-  if (coords.length < 2) return null;
-
-  // OSRM 公開服務上限 100 點；抓 95 留安全邊際（實測 100 點會被以 TooBig 拒絕）。
-  // step 用 ceil 才保證取樣後 ≤ MAX_PTS（floor 在臨界點時 step=1，全數保留 → 必定超限失敗）
-  const MAX_PTS = 95;
+// 均勻取樣至最多 maxPts 點（step 用 ceil 才保證取樣後 ≤ maxPts；結尾補回真正的終點）
+function _sampleTrack(coords, maxPts) {
   let pts = coords;
-  if (pts.length > MAX_PTS) {
-    const step = Math.ceil(pts.length / MAX_PTS);
+  if (pts.length > maxPts) {
+    const step = Math.ceil(pts.length / maxPts);
     pts = coords.filter((_, i) => i % step === 0);
-    if (pts.length >= MAX_PTS) pts = pts.slice(0, MAX_PTS - 1);
+    if (pts.length >= maxPts) pts = pts.slice(0, maxPts - 1);
     if (pts[pts.length - 1] !== coords[coords.length - 1])
       pts.push(coords[coords.length - 1]);
   }
+  return pts;
+}
 
-  const coordStr = pts.map(c => `${c.lng},${c.lat}`).join(';');
-  const hasT = pts.every(c => typeof c.t === 'number' && isFinite(c.t));
-  const tsStr = hasT ? pts.map(c => Math.floor(c.t / 1000)).join(';') : null;
+async function snapToRoads(coords) {
+  if (coords.length < 2) return null;
 
-  // 依序嘗試多組參數（半徑 / 有無時間戳）：伺服器嫌哪個參數都能自動降級成功。
-  // 失敗時把「回應內文的錯誤碼」記進 _snapErr，診斷提示會顯示真正原因。
-  const attempts = [
-    { r: 50, ts: !!tsStr },
-    { r: 50, ts: false },
-    { r: 30, ts: false }
-  ];
-  for (const a of attempts) {
-    const radii = pts.map(() => String(a.r)).join(';');
-    const tsParam = (a.ts && tsStr) ? `&timestamps=${tsStr}` : '';
-    const url = `https://router.project-osrm.org/match/v1/driving/${coordStr}` +
-      `?radiuses=${radii}${tsParam}&geometries=geojson&overview=full&annotations=false`;
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) {
-        let detail = '';
-        try { const body = await res.json(); detail = body.code || body.message || ''; } catch (_) {}
-        window._snapErr = 'HTTP' + res.status + (detail ? ':' + detail : '');
-        continue;   // 換下一組參數
+  // OSRM 公開伺服器的點數上限「會變」（曾為 100；2026-07 實測連 95 點也被 TooBig 拒絕）。
+  // 不猜固定上限：被嫌太大就自動縮小取樣數再試，任何伺服器設定都能自我適應。
+  for (const maxPts of [95, 60, 40, 25]) {
+    const pts = _sampleTrack(coords, maxPts);
+    const coordStr = pts.map(c => `${c.lng},${c.lat}`).join(';');
+    const hasT = pts.every(c => typeof c.t === 'number' && isFinite(c.t));
+    const tsStr = hasT ? pts.map(c => Math.floor(c.t / 1000)).join(';') : null;
+
+    // 依序嘗試多組參數（半徑 / 有無時間戳）：伺服器嫌哪個參數都能自動降級成功。
+    // 失敗時把「回應內文的錯誤碼」記進 _snapErr，診斷提示會顯示真正原因。
+    const attempts = [
+      { r: 50, ts: !!tsStr },
+      { r: 50, ts: false },
+      { r: 30, ts: false }
+    ];
+    let tooBig = false;
+    for (const a of attempts) {
+      const radii = pts.map(() => String(a.r)).join(';');
+      const tsParam = (a.ts && tsStr) ? `&timestamps=${tsStr}` : '';
+      const url = `https://router.project-osrm.org/match/v1/driving/${coordStr}` +
+        `?radiuses=${radii}${tsParam}&geometries=geojson&overview=full&annotations=false`;
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) {
+          let detail = '';
+          try { const body = await res.json(); detail = body.code || body.message || ''; } catch (_) {}
+          window._snapErr = 'HTTP' + res.status + (detail ? ':' + detail : '');
+          // 點數超限：換半徑/時間戳都沒用，直接跳到下一級較小的取樣數
+          if (/toobig/i.test(detail)) { tooBig = true; break; }
+          continue;   // 其他錯誤 → 換下一組參數
+        }
+        const data = await res.json();
+        if (data.code === 'Ok' && data.matchings?.length) {
+          window._snapErr = null;
+          return data.matchings.flatMap(m =>
+            m.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
+          );
+        }
+        window._snapErr = data.code || 'NoMatch';
+        // NoMatch 換參數也難救，但半徑不同仍值得一試 → 繼續
+      } catch (e) {
+        window._snapErr = (e && e.name === 'TimeoutError') ? '逾時' : '網路錯誤';
+        return null;   // 網路層問題，換參數/縮點數都無意義
       }
-      const data = await res.json();
-      if (data.code === 'Ok' && data.matchings?.length) {
-        window._snapErr = null;
-        return data.matchings.flatMap(m =>
-          m.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
-        );
-      }
-      window._snapErr = data.code || 'NoMatch';
-      // NoMatch 換參數也難救，但半徑不同仍值得一試 → 繼續
-    } catch (e) {
-      window._snapErr = (e && e.name === 'TimeoutError') ? '逾時' : '網路錯誤';
-      break;   // 網路層問題，換參數無意義
     }
+    if (!tooBig) return null;   // 非點數問題（NoMatch 等）：縮小取樣也救不了
+    // TooBig → 下一輪用更小的取樣數再試
   }
   return null;
 }
@@ -3140,7 +3151,9 @@ async function retrySnapBacklog(maxTrips = 5) {
     const raw = loadTrips();
     const jobs = [];
     Object.keys(raw).forEach(day => (raw[day] || []).forEach(t => {
-      if (!t.roadCoords && t.coords && t.coords.length > 20) jobs.push({ day, id: t.id });
+      // _snapN：累積失敗次數（隨行程存檔）。超過 15 次＝救不回來（如訊號漂太遠），
+      // 不再無限重試、也不再每次開機跳失敗提示
+      if (!t.roadCoords && t.coords && t.coords.length > 20 && (t._snapN || 0) < 15) jobs.push({ day, id: t.id });
     }));
     if (!jobs.length) return;
     let done = 0, failed = 0;
@@ -3150,7 +3163,13 @@ async function retrySnapBacklog(maxTrips = 5) {
       const trip = (cur[j.day] || []).find(t => t.id === j.id);
       if (!trip || trip.roadCoords) continue;
       const road = await snapToRoads(trip.coords);
-      if (!road) { failed++; await new Promise(r => setTimeout(r, 800)); continue; }
+      if (!road) {
+        failed++;
+        trip._snapN = (trip._snapN || 0) + 1;
+        saveTrips(cur);
+        await new Promise(r => setTimeout(r, 800));
+        continue;
+      }
       trip.roadCoords = _simplifyPath(road, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));
       trip.coords = [trip.coords[0], trip.coords[trip.coords.length - 1]]
         .map(c => ({ lat: c.lat, lng: c.lng }));
