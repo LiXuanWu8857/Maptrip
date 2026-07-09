@@ -49,7 +49,10 @@ if (!sessionStorage.getItem('booted')) {
   // 注意：冷啟動「自動 reload」已移除 —— 頂列 safe-area 改由下方量測式修正處理，
   // 開機不再載入兩次（省一半啟動時間，也不再有「一開就重新整理」的感覺）。
   try {
-    if (localStorage.getItem('maptrip_gl') !== '0') {
+    // 與下方 loader 的引擎判斷一致：App 預設向量（'0' 關）、瀏覽器預設標準（'1' 才開）
+    var _p0 = localStorage.getItem('maptrip_gl');
+    var _app0 = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    if (_app0 ? _p0 !== '0' : _p0 === '1') {
       var _now = Date.now(), _g = null;
       try { _g = JSON.parse(localStorage.getItem('mt_run') || 'null'); } catch (e) {}
       if (!_g || (_now - _g.t0) > 180000) _g = { n: 0, t0: _now };
@@ -78,7 +81,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.231';</script>
+<script>window.INDEX_VERSION = '1.1.232';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -454,7 +457,12 @@ try {
   try {
     var _glf = +localStorage.getItem('mt_glfail') || 0;
     var _recentFail = _glf && (Date.now() - _glf) < 3 * 3600 * 1000;
-    useGL = (localStorage.getItem('maptrip_gl') !== '0') && !_recentFail;
+    var _pref = localStorage.getItem('maptrip_gl');
+    // App（Capacitor 殼）：預設向量，'0' 才關。
+    // 瀏覽器（Safari 後備）：預設標準，'1' 才開 —— Safari 分頁的記憶體上限比 App 嚴格，
+    // 向量地圖容易觸頂讓網頁行程反覆崩潰（"A problem repeatedly occurred"）。
+    var _isApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    useGL = (_isApp ? _pref !== '0' : _pref === '1') && !_recentFail;
   } catch (e) {}
   if (useGL) {
     // CSS：unpkg 失敗自動換 jsdelivr（關鍵規則另有內建保險，見 gl-compat.js）
