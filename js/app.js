@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.233';
+const APP_VERSION  = '1.1.234';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1095,6 +1095,22 @@ async function snapToRoads(coords) {
     if (!tooBig) return null;   // 非點數問題（NoMatch 等）：縮小取樣也救不了
     // TooBig → 下一輪用更小的取樣數再試
   }
+  // /match 連最小取樣（25 點）都被拒 → 公開伺服器可能已收緊/停用貼合服務。
+  // 後備：改用 /route 以「途經點」近似貼路（把取樣點當依序經過的路口，走路網連起來）
+  try {
+    const pts = _sampleTrack(coords, 25);
+    const coordStr = pts.map(c => `${c.lng},${c.lat}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}` +
+      `?overview=full&geometries=geojson&steps=false&annotations=false`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.length) {
+        window._snapErr = null;
+        return data.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
+      }
+    }
+  } catch (_) {}
   return null;
 }
 
@@ -3191,9 +3207,12 @@ async function retrySnapBacklog(maxTrips = 5) {
       done++;
       await new Promise(r => setTimeout(r, 800));   // 節流
     }
-    // 讓使用者看得到補貼路結果與失敗原因（診斷用）
+    // 成功才提示；失敗改記進黑盒子（使用者不想看到失敗提示，開診斷模式才顯示）
     if (done && !failed) toast(`已補貼路 ${done} 趟`);
-    else if (failed) toast(`補貼路：成功 ${done}、失敗 ${failed}（${window._snapErr || '未知'}）`);
+    else if (failed) {
+      try { window.__mtLog && window.__mtLog(`snap fail x${failed} (${window._snapErr || '未知'})`); } catch (_) {}
+      if (dbgEnabled()) toast(`補貼路：成功 ${done}、失敗 ${failed}（${window._snapErr || '未知'}）`);
+    }
   } catch (_) {}
 }
 
