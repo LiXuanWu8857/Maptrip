@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.235';
+const APP_VERSION  = '1.1.236';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1193,7 +1193,18 @@ function showTodayLayers(on) {
 // 取一趟的可畫路徑：極舊雲端資料可能沒有座標，一律回傳陣列（可能為空），
 // 呼叫端遇空就略過繪製 —— 一趟壞資料絕不能讓整個載入/預覽/回放迴圈死掉
 function tripPath(t) {
-  const c = t && (t.roadCoords || t.coords);
+  if (!t) return [];
+  let c = t.roadCoords || t.coords;
+  // 假路線防線（顯示層）：貼路路徑比記錄距離長太多（>1.4 倍 + 500m）＝飄點造成的
+  // 繞遠假路線 → 永不顯示，退回原始座標。比一次性修復堅固：就算雲端同步把舊的
+  // 假路線蓋回本機，畫面也不受影響。結果快取在 _roadBad，不必每次重算路徑長。
+  if (t.roadCoords && t.totalDist > 0) {
+    if (t._roadBad === undefined) {
+      try { t._roadBad = calcTotalDist(t.roadCoords) > t.totalDist * 1.4 + 500; }
+      catch (_) { t._roadBad = false; }
+    }
+    if (t._roadBad) c = t.coords;
+  }
   return Array.isArray(c) ? c : [];
 }
 
@@ -3597,6 +3608,29 @@ function checkForUpdate() {
   localStorage.setItem('maptrip_version', APP_VERSION);
 }
 
+// 掃描並移除「假路線」：roadCoords 路徑長明顯超過記錄距離（>1.4 倍 + 500m）
+// ＝GPS 飄點讓 /route 後備繞遠產生的假路線 → 移除、重新上雲。
+// notify=true 時顯示修復提示（僅開機第一掃，避免重複打擾）
+function healBogusRoads(notify) {
+  try {
+    const all = loadTrips();
+    const fixedDays = new Set();
+    Object.keys(all).forEach(day => (all[day] || []).forEach(t => {
+      if (t.roadCoords && t.totalDist > 0 &&
+          calcTotalDist(t.roadCoords) > t.totalDist * 1.4 + 500) {
+        delete t.roadCoords;
+        delete t._roadBad;
+        fixedDays.add(day);
+      }
+    }));
+    if (!fixedDays.size) return;
+    saveTrips(all);
+    if (window.MaptripSync) { try { MaptripSync.syncDays([...fixedDays]); } catch (_) {} }
+    if (notify) setTimeout(() => toast(`已修復 ${fixedDays.size} 天內的異常貼路路線`), 2500);
+    else if (typeof refreshAfterSync === 'function') { try { refreshAfterSync(); } catch (_) {} }
+  } catch (_) {}
+}
+
 function boot() {
   // App 成功啟動 → 清掉「自動重載計數」（健康狀態，避免殘留計數誤判為迴圈）
   try { localStorage.removeItem('mt_rl'); } catch (_) {}
@@ -3644,28 +3678,12 @@ function boot() {
       }
     }
   } catch (_) {}
-  // 一次性修復：v1.1.234 的 /route 後備可能把含飄點的趟貼成「繞一大圈」的假路線。
-  // 掃描所有趟：roadCoords 路徑長明顯超過記錄距離（>1.4 倍 + 500m）＝假路線 → 移除，
-  // 回到原始軌跡顯示（座標還在的趟之後會用新的健全性檢查重新貼路）
-  try {
-    if (localStorage.getItem('maptrip_roadfix') !== 'v235') {
-      const all = loadTrips();
-      const fixedDays = new Set();
-      Object.keys(all).forEach(day => (all[day] || []).forEach(t => {
-        if (t.roadCoords && t.totalDist > 0 &&
-            calcTotalDist(t.roadCoords) > t.totalDist * 1.4 + 500) {
-          delete t.roadCoords;
-          fixedDays.add(day);
-        }
-      }));
-      if (fixedDays.size) {
-        saveTrips(all);
-        if (window.MaptripSync) { try { MaptripSync.syncDays([...fixedDays]); } catch (_) {} }
-        setTimeout(() => toast(`已修復 ${fixedDays.size} 天內的異常貼路路線`), 2500);
-      }
-      localStorage.setItem('maptrip_roadfix', 'v235');
-    }
-  } catch (_) {}
+  // 修復假路線（每次開機都掃，不再一次性）：v1.1.234 的 /route 後備可能把含飄點的趟
+  // 貼成「繞一大圈」的假路線。一次性修復會被「雲端同步稍後把舊資料蓋回來」打敗，
+  // 所以：每次開機掃一遍＋開機 25 秒後（初始雲端同步落地後）再掃一遍，
+  // 雲端副本遲早會被覆蓋成修復後的正確版本。顯示層另有 tripPath 防線，畫面永不受影響。
+  healBogusRoads(true);
+  setTimeout(() => healBogusRoads(false), 25000);
   initMap();
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
