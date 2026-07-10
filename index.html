@@ -42,39 +42,34 @@ window.__mtSafeReload = function () {
 setTimeout(function () {
   if (!window.__mtBooted) { window.__mtLog('watchdog: not booted in 25s'); window.__mtSafeReload(); }
 }, 25000);
-if (!sessionStorage.getItem('booted')) {
-  // 崩潰迴圈偵測：WKWebView 把網頁行程砍掉重啟時 sessionStorage 消失＝全新開場。
-  // 只在向量地圖模式計數；3 分鐘內超過 4 次 → 判定崩潰迴圈，切回標準地圖 3 小時。
-  // 穩定執行 90 秒後計數歸零（見 app.js）。
-  // 注意：冷啟動「自動 reload」已移除 —— 頂列 safe-area 改由下方量測式修正處理，
-  // 開機不再載入兩次（省一半啟動時間，也不再有「一開就重新整理」的感覺）。
-  try {
-    // 與下方 loader 的引擎判斷一致：App 預設向量（'0' 關）、瀏覽器預設標準（'1' 才開）
-    var _p0 = localStorage.getItem('maptrip_gl');
-    var _app0 = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-    if (_app0 ? _p0 !== '0' : _p0 === '1') {
-      // 崩潰偵測 v2（心跳式）：App 每 5 秒寫一次 mt_alive。全新開場時若上個行程
-      // 45 秒內還活著＝它是「跑到一半被系統砍掉」而不是使用者正常關閉。
-      // 30 分鐘內累積 4 次 → 判定記憶體崩潰迴圈，切回標準地圖 3 小時。
-      // （舊版用「3 分鐘內開場次數」偵測，砍頻 30~60 秒一輪剛好穿過窗縫永遠抓不到）
-      var _now = Date.now();
-      var _alive = +localStorage.getItem('mt_alive') || 0;
-      if (_alive && (_now - _alive) < 45000) {
-        var _c = null;
-        try { _c = JSON.parse(localStorage.getItem('mt_crash') || 'null'); } catch (e) {}
-        if (!_c || (_now - _c.t0) > 1800000) _c = { n: 0, t0: _now };
-        _c.n++; localStorage.setItem('mt_crash', JSON.stringify(_c));
-        window.__mtLog('crash-restart n=' + _c.n);
-        if (_c.n >= 4) {
-          localStorage.setItem('mt_glfail', String(_now));
-          localStorage.setItem('mt_glfail_reason', 'crashloop');
-          localStorage.removeItem('mt_crash');
-        }
+// 崩潰偵測 v3：v2 靠「sessionStorage 消失＝全新開場」判斷，但實測 WKWebView
+// 行程被砍重啟後 sessionStorage 常常還在（由 UI 行程保管），25 次被砍只抓到 3 次。
+// 改判準：「這次載入是全新導覽（navigate，不是程式自己 location.reload）
+// 且上個行程 45 秒內心跳（mt_alive，App 每 5 秒寫）還活著」＝跑到一半被系統砍掉。
+// 30 分鐘內累積 4 次 → 判定記憶體崩潰迴圈，向量模式切回標準地圖 3 小時。
+try {
+  var _p0 = localStorage.getItem('maptrip_gl');
+  var _app0 = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  if (_app0 ? _p0 !== '0' : _p0 === '1') {
+    var _now = Date.now();
+    var _alive = +localStorage.getItem('mt_alive') || 0;
+    var _nt0 = '';
+    try { _nt0 = (performance.getEntriesByType('navigation')[0] || {}).type || ''; } catch (e) {}
+    if (_nt0 !== 'reload' && _alive && (_now - _alive) < 45000) {
+      var _c = null;
+      try { _c = JSON.parse(localStorage.getItem('mt_crash') || 'null'); } catch (e) {}
+      if (!_c || (_now - _c.t0) > 1800000) _c = { n: 0, t0: _now };
+      _c.n++; localStorage.setItem('mt_crash', JSON.stringify(_c));
+      window.__mtLog('crash-restart n=' + _c.n);
+      if (_c.n >= 4) {
+        localStorage.setItem('mt_glfail', String(_now));
+        localStorage.setItem('mt_glfail_reason', 'crashloop');
+        localStorage.removeItem('mt_crash');
       }
     }
-  } catch (e) {}
-  sessionStorage.setItem('booted', '1');
-}
+  }
+} catch (e) {}
+sessionStorage.setItem('booted', '1');
 // 記錄本次開場型態：navigate＝全新載入（含 WKWebView 行程被系統砍掉後的自動重啟）、
 // reload＝程式自己重載。連續多筆 navigate 就是「一直被砍」的鐵證。
 try {
@@ -90,7 +85,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.237';</script>
+<script>window.INDEX_VERSION = '1.1.238';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -194,6 +189,11 @@ try {
   window.addEventListener('resize', evaluate);
   window.addEventListener('orientationchange', evaluate);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) evaluate(); });
+  // 行程被砍後由系統自動重載時，viewport 位移可能發生在載入量測「之後」且不觸發
+  // resize（版面跑掉、頂列滑到畫面中間的元兇）→ 開頭 8 秒內多複檢幾次
+  setTimeout(evaluate, 800);
+  setTimeout(evaluate, 2500);
+  setTimeout(evaluate, 8000);
 })();
 </script>
 </head>

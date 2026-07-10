@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.237';
+const APP_VERSION  = '1.1.238';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -80,11 +80,13 @@ function nativePlatform() {
   return window.Capacitor?.getPlatform ? window.Capacitor.getPlatform() : 'web';
 }
 
+// keepBuffer:0＝畫面外的圖磚立刻釋放（預設留 2 圈，解碼點陣圖是背景記憶體大戶；
+// WKWebView 記憶體超標會整個被 iOS 砍掉，寧可回看舊區域時多抓一次網路）
 const TILE_LAYERS = {
   road: L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
-    { subdomains: '0123', maxZoom: 20 }),
+    { subdomains: '0123', maxZoom: 20, keepBuffer: 0, updateWhenIdle: true }),
   satellite: L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-    { subdomains: '0123', maxZoom: 20 })
+    { subdomains: '0123', maxZoom: 20, keepBuffer: 0, updateWhenIdle: true })
 };
 let currentTile = 'road';
 
