@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.236';
+const APP_VERSION  = '1.1.237';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -58,6 +58,8 @@ let _mapTouching = 0;           // 手指目前在地圖上的數量（>0 時暫
 let _mapZooming = false;        // 縮放動畫進行中（期間不可改動線條，否則整條線會飛走）
 let _lineResyncPending = false; // 縮放/手勢期間累積的新點 → 結束後一次補畫
 let myHeading = null;           // 我的位置朝向（GPS 行進方向 / 羅盤），供方向光束用
+let _lastPanPos = null;         // 上次跟隨移動的位置（移動 <3m 不重跑跟隨動畫，省 GPU）
+let _lastCircleAt = null;       // 上次精度圓圈的位置/精度（無實質變化不重畫）
 let activeSnapPending = false;
 let autoStartTimer = null, autoStartShown = false, autoStartResetTimer = null, lastKnownPos = null;
 let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
@@ -495,11 +497,24 @@ function onGpsUpdate(pos) {
     setAutoFollow(true);
   } else {
     myDotMarker.setLatLng([lat, lng]);
-    accuracyCircle.setLatLng([lat, lng]).setRadius(acc);
+    // 精度圓圈：位置/精度沒有實質變化就不重畫（GL 模式每次更新都會觸發整張重繪）
+    if (!_lastCircleAt || haversine(_lastCircleAt, { lat, lng }) >= 3 ||
+        Math.abs((_lastCircleAt.acc || 0) - (acc || 0)) >= 3) {
+      _lastCircleAt = { lat, lng, acc };
+      accuracyCircle.setLatLng([lat, lng]).setRadius(acc);
+    }
   }
   updateMyHeadingArrow();
 
-  if (autoFollow && !_mapTouching && !inBrowsingMode()) map.panTo([lat, lng], { animate: true, duration: 0.5 });
+  // 跟隨移動門檻：停等紅燈時 GPS 每秒仍回報、位置只抖 1~3m，若每筆都跑 0.5 秒
+  // 跟隨動畫，怠速時 GPU 全在做白工（發燙/卡頓主因之一）。移動 ≥3m 才跟隨，
+  // 真正行駛（≥3m/s）每秒必過門檻，跟隨體感完全不變；靜止時地圖完全靜止。
+  if (autoFollow && !_mapTouching && !inBrowsingMode()) {
+    if (!_lastPanPos || haversine(_lastPanPos, { lat, lng }) >= 3) {
+      _lastPanPos = { lat, lng };
+      map.panTo([lat, lng], { animate: true, duration: 0.5 });
+    }
+  }
 
   if (activeTrip) {
     // GPS 品質閘門：都市峽谷/高架下的反射訊號會產生亂飄的點，
@@ -1465,7 +1480,14 @@ function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
   }
   if (effectiveSpeed > 1) { lastHeading = heading; headingRefPos = { lat, lng }; }
   if (!autoFollow || _mapTouching) return;        // 使用者正在自由瀏覽/操作手勢 → 不搶地圖
-  if (effectiveSpeed > 0.8) setTargetBearing(-lastHeading);
+  if (effectiveSpeed > 0.8) {
+    // 死區：直線行駛時 GPS 方向每秒恆抖 ±2~5°，全量餵進旋轉動畫會讓記錄中的地圖
+    // 近乎連續重繪（發燙/卡頓主因之一）。與目前地圖方向差 <3° 不轉；
+    // 真正轉彎遠超過 3°，瞬間通過、跟隨體感不變。
+    const tgt = (((-lastHeading) % 360) + 360) % 360;
+    const diff = Math.abs(((tgt - _targetBearing + 540) % 360) - 180);
+    if (diff >= 3) setTargetBearing(-lastHeading);
+  }
 }
 
 let _uiDayKey = null;   // 目前 UI 顯示的營業日，跨 7:00 換日時用來觸發刷新
