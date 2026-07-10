@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.239';
+const APP_VERSION  = '1.1.240';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1061,18 +1061,36 @@ function _sampleTrack(coords, maxPts) {
   return pts;
 }
 
-// 貼路結果健全性檢查：貼出來的路徑若比原始軌跡長太多（>1.4 倍 + 500m），
-// 必定是 GPS 飄點把路線拉去繞遠路（/route 會把每個取樣點當必經點，飄點會造成
-// 「繞河一大圈」的假路線）→ 寧可不貼，維持原始軌跡顯示
-function _snapSane(result, coords) {
+// 貼路結果健全性檢查：貼出來的路徑若比原始軌跡長太多，必定是 GPS 飄點
+// 把路線拉去繞遠路（/route 會把每個取樣點當必經點）→ 寧可不貼，維持原始軌跡。
+// ratio/slack 可依來源調整：/route 較容易產生繞路 → 用更嚴的門檻
+function _snapSane(result, coords, ratio, slack) {
   try {
     const raw = calcTotalDist(coords);
-    return calcTotalDist(result) <= raw * 1.4 + 500;
+    return calcTotalDist(result) <= raw * (ratio || 1.4) + (slack || 500);
   } catch (_) { return true; }
+}
+
+// 剔除孤立飄點：經過 p 的繞行距離遠大於直接連前後點（>2.5 倍且多繞 60m 以上）
+// ＝孤立飄點。少了它，貼路就不會繞一個街廓去「經過」飄點（小圈假路線的成因）。
+// 只影響貼路輸入，原始記錄座標不動。
+function _dropSpikes(coords) {
+  if (!coords || coords.length < 3) return coords;
+  const out = [coords[0]];
+  for (let i = 1; i < coords.length - 1; i++) {
+    const a = out[out.length - 1], p = coords[i], b = coords[i + 1];
+    const via = haversine(a, p) + haversine(p, b);
+    const direct = haversine(a, b);
+    if (via > direct * 2.5 && via - direct > 60) continue;
+    out.push(p);
+  }
+  out.push(coords[coords.length - 1]);
+  return out;
 }
 
 async function snapToRoads(coords) {
   if (coords.length < 2) return null;
+  coords = _dropSpikes(coords);   // 孤立飄點不進貼路（否則會被當必經點繞路）
 
   // OSRM 公開伺服器的點數上限「會變」（曾為 100；2026-07 實測連 95 點也被 TooBig 拒絕）。
   // 不猜固定上限：被嫌太大就自動縮小取樣數再試，任何伺服器設定都能自我適應。
@@ -1136,8 +1154,9 @@ async function snapToRoads(coords) {
       const data = await res.json();
       if (data.code === 'Ok' && data.routes?.length) {
         const out = data.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
-        // /route 把飄點當必經點 → 必做健全性檢查，繞遠路的假路線一律拒收
-        if (_snapSane(out, coords)) { window._snapErr = null; return out; }
+        // /route 把取樣點當必經點、容易產生繞路 → 用更嚴的門檻（1.2 倍 + 200m），
+        // 連「繞一個街廓的小圈」也擋下
+        if (_snapSane(out, coords, 1.2, 200)) { window._snapErr = null; return out; }
         window._snapErr = '貼路繞遠(棄用)';
       }
     }
