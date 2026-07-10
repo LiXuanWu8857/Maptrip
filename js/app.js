@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.238';
+const APP_VERSION  = '1.1.239';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -3121,6 +3121,14 @@ function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCo
 window.slimTripForStorage = function (t) {
   try {
     const slim = serializeTrip(t);
+    // 假路線防線（同步層）：「繞遠假路線」（roadCoords 遠長於記錄距離）進入合併前
+    // 直接剝除。否則合併評分偏好「帶 roadCoords 的版本」→ 修復後的乾淨版永遠
+    // 輸給雲端殘留的假路線版 → 每次開機修復、每次同步又被蓋回 → 無限來回，
+    // 而每一回合都是全量合併＋回推（資料量大後就是記憶體/CPU 風暴）
+    if (slim.roadCoords && slim.totalDist > 0 &&
+        calcTotalDist(slim.roadCoords) > slim.totalDist * 1.4 + 500) {
+      delete slim.roadCoords;
+    }
     const day = businessDayKey(slim.startTime);
     if (day !== todayKey()) {
       if (slim.roadCoords && slim.coords && slim.coords.length > 2) {

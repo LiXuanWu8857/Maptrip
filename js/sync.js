@@ -310,17 +310,26 @@
         mergeCloudTombstones((snap.exists && snap.data().ids) || []);
       }, err => log('del snapshot err ' + (err && err.code)));
 
+      let firstSnap = true;
       unsub = daysCol().onSnapshot(snap => {
+        // 只處理「有變動的日子」（首個快照全部視為變動）：合併成本與變動量成正比。
+        // 之前每個快照都全量解析＋全量合併＋逐日 stringify 整個資料集，
+        // 而自己的回推寫入又觸發下一個快照 —— 資料量成長後（數 MB）
+        // 這條鏈就是每次同步數十 MB 暫存配置的記憶體風暴
         const cloud = {};
-        let tripCount = 0;
-        snap.forEach(doc => {
-          const trips = doc.data().trips || [];
-          cloud[doc.id] = trips;
-          tripCount += trips.length;
+        snap.docChanges().forEach(ch => {
+          if (ch.type === 'removed') return;   // 雲端整天消失交由墓碑機制處理，不動本機
+          cloud[ch.doc.id] = ch.doc.data().trips || [];
         });
+        let tripCount = cloudInfo ? cloudInfo.trips : 0;
+        if (firstSnap) {
+          tripCount = 0;
+          snap.forEach(doc => { tripCount += (doc.data().trips || []).length; });
+        }
         cloudInfo = { days: snap.size, trips: tripCount, at: Date.now() };
         updateUI();
-        mergeCloudIntoLocal(cloud);
+        if (Object.keys(cloud).length || firstSnap) mergeCloudIntoLocal(cloud, firstSnap);
+        firstSnap = false;
       }, err => log('snapshot err ' + (err && err.code)));
     } catch (e) { log('listen failed'); }
   }
@@ -364,11 +373,15 @@
     } catch (e) { log('delTrip fail ' + day + ' ' + (e && e.code)); }
   }
 
-  function mergeCloudIntoLocal(cloud) {
+  function mergeCloudIntoLocal(cloud, includeLocalOnly) {
     const local = getLocal();
     let changed = false;
     const toPush = [];
-    const days = new Set([...Object.keys(local), ...Object.keys(cloud)]);
+    // 首個快照才需要把「本機有、雲端沒有」的日子納入（推上雲端補齊）；
+    // 之後的快照只合併雲端有變動的日子，成本與變動量成正比
+    const days = new Set(includeLocalOnly
+      ? [...Object.keys(local), ...Object.keys(cloud)]
+      : Object.keys(cloud));
     days.forEach(day => {
       const merged = mergeTrips(local[day], cloud[day]);
       // 雲端與瘦身後的合併結果不同（缺趟或仍是胖資料）→ 回推，雲端也跟著瘦身
