@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.234';
+const APP_VERSION  = '1.1.235';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1044,6 +1044,16 @@ function _sampleTrack(coords, maxPts) {
   return pts;
 }
 
+// 貼路結果健全性檢查：貼出來的路徑若比原始軌跡長太多（>1.4 倍 + 500m），
+// 必定是 GPS 飄點把路線拉去繞遠路（/route 會把每個取樣點當必經點，飄點會造成
+// 「繞河一大圈」的假路線）→ 寧可不貼，維持原始軌跡顯示
+function _snapSane(result, coords) {
+  try {
+    const raw = calcTotalDist(coords);
+    return calcTotalDist(result) <= raw * 1.4 + 500;
+  } catch (_) { return true; }
+}
+
 async function snapToRoads(coords) {
   if (coords.length < 2) return null;
 
@@ -1080,10 +1090,12 @@ async function snapToRoads(coords) {
         }
         const data = await res.json();
         if (data.code === 'Ok' && data.matchings?.length) {
-          window._snapErr = null;
-          return data.matchings.flatMap(m =>
+          const out = data.matchings.flatMap(m =>
             m.geometry.coordinates.map(([lng, lat]) => ({ lat, lng }))
           );
+          if (_snapSane(out, coords)) { window._snapErr = null; return out; }
+          window._snapErr = '貼路繞遠(棄用)';
+          continue;   // 換參數（較小半徑可能甩掉飄點）
         }
         window._snapErr = data.code || 'NoMatch';
         // NoMatch 換參數也難救，但半徑不同仍值得一試 → 繼續
@@ -1106,8 +1118,10 @@ async function snapToRoads(coords) {
     if (res.ok) {
       const data = await res.json();
       if (data.code === 'Ok' && data.routes?.length) {
-        window._snapErr = null;
-        return data.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
+        const out = data.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
+        // /route 把飄點當必經點 → 必做健全性檢查，繞遠路的假路線一律拒收
+        if (_snapSane(out, coords)) { window._snapErr = null; return out; }
+        window._snapErr = '貼路繞遠(棄用)';
       }
     }
   } catch (_) {}
@@ -3628,6 +3642,28 @@ function boot() {
         const freed = before - storageBytes();
         if (freed > 200000) setTimeout(() => toast(`已整理儲存空間，釋放 ${(freed / 1048576).toFixed(1)} MB`), 1500);
       }
+    }
+  } catch (_) {}
+  // 一次性修復：v1.1.234 的 /route 後備可能把含飄點的趟貼成「繞一大圈」的假路線。
+  // 掃描所有趟：roadCoords 路徑長明顯超過記錄距離（>1.4 倍 + 500m）＝假路線 → 移除，
+  // 回到原始軌跡顯示（座標還在的趟之後會用新的健全性檢查重新貼路）
+  try {
+    if (localStorage.getItem('maptrip_roadfix') !== 'v235') {
+      const all = loadTrips();
+      const fixedDays = new Set();
+      Object.keys(all).forEach(day => (all[day] || []).forEach(t => {
+        if (t.roadCoords && t.totalDist > 0 &&
+            calcTotalDist(t.roadCoords) > t.totalDist * 1.4 + 500) {
+          delete t.roadCoords;
+          fixedDays.add(day);
+        }
+      }));
+      if (fixedDays.size) {
+        saveTrips(all);
+        if (window.MaptripSync) { try { MaptripSync.syncDays([...fixedDays]); } catch (_) {} }
+        setTimeout(() => toast(`已修復 ${fixedDays.size} 天內的異常貼路路線`), 2500);
+      }
+      localStorage.setItem('maptrip_roadfix', 'v235');
     }
   } catch (_) {}
   initMap();
