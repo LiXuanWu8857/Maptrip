@@ -359,7 +359,14 @@
   }
   Marker.prototype.addTo = function (map) { this._mk.addTo(map.gl); return this; };
   Marker.prototype.setLatLng = function (ll) { this._mk.setLngLat(toLngLat(ll)); return this; };
-  Marker.prototype.setOpacity = function (v) { this._el.style.opacity = String(v); return this; };
+  Marker.prototype.setOpacity = function (v) {
+    // MapLibre 每次 render 會重寫 marker 元素的 style.opacity（淡入/遮蔽管理），
+    // 用 opacity 隱藏會在下一幀被蓋回可見（「歷史行程裡今日的點又出現」的元兇）
+    // → 隱藏（0）一律改用 display，MapLibre 不會動它
+    if (+v === 0) { this._el.style.display = 'none'; }
+    else { this._el.style.display = ''; this._el.style.opacity = String(v); }
+    return this;
+  };
   Marker.prototype.getElement = function () { return this._el; };
   Marker.prototype._removeFrom = function () { this._mk.remove(); };
 
