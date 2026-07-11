@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.242';
+const APP_VERSION  = '1.1.243';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1874,14 +1874,12 @@ function openSoloTrip(set, idx, labelFn) {
   setAutoFollow(false);   // 歷史檢視：關閉跟隨與 5 秒歸位
   resetBearingNow();   // 單趟檢視固定指北
   exitDayPreview();
-  // 歷史模式：換成無標示底圖（CartoDB），退出時還原
-  if (soloFromHistory) {
-    map.removeLayer(TILE_LAYERS[currentTile]);
-    soloHistoryTile = L.tileLayer(_isDark() ? NOLABEL_DARK : NOLABEL_LIGHT,
-      { subdomains: 'abcd', maxZoom: 20 }
-    ).addTo(map);
-    soloHistoryTile.bringToBack();
-  }
+  // 單趟預覽一律換成無標示白底圖（今日與歷史一致，突顯路線），退出時還原
+  map.removeLayer(TILE_LAYERS[currentTile]);
+  soloHistoryTile = L.tileLayer(_isDark() ? NOLABEL_DARK : NOLABEL_LIGHT,
+    { subdomains: 'abcd', maxZoom: 20 }
+  ).addTo(map);
+  soloHistoryTile.bringToBack();
   soloSet = set;
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
