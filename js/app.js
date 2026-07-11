@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.241';
+const APP_VERSION  = '1.1.242';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -45,7 +45,10 @@ const AUTO_START_DELAY_MS  = 4000;  // 行駛滿 4 秒才跳提示
 let map, myDotMarker, accuracyCircle, currentPos = null;
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
-let _todayLayersHidden = false;   // 歷史檢視中＝true：此期間「新畫」的今日圖層也要立即隱藏
+// 今日圖層顯示狀態：normal＝正常、hidden＝歷史檢視（整組隱藏）、
+// solo＝今日單趟預覽（線淡化當背景、點整組隱藏）。
+// 重畫（貼路成功/同步）發生在任何狀態下，新圖層都要立即套用當前狀態。
+let _todayMode = 'normal';
 let soloLayers = [];
 let soloSet = [], soloIdx = 0, soloLabelFn = null;  // 單趟顯示：可左右切換的趟次集合
 let soloFromHistory = false;  // 從歷史紀錄進入 solo 模式時為 true
@@ -1208,7 +1211,7 @@ function bezierGapPoints(from, to) {
 function drawGapLine(from, to) {
   const gap = L.polyline(bezierGapPoints(from, to),
     { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5', pane: _todayPane('todayLines') }).addTo(map);
-  _applyTodayHidden([gap]);
+  _applyTodayMode([gap]);
   return gap;
 }
 
@@ -1219,24 +1222,25 @@ function _todayPane(name) {
 }
 // 整組顯示/隱藏今日行程圖層（pane 一次搞定，不漏任何一個標記/線）
 function showTodayLayers(on) {
-  _todayLayersHidden = !on;   // 記住狀態：隱藏期間「新畫」的圖層（貼路重畫/同步重畫）也要隱藏
+  _todayMode = on ? 'normal' : 'hidden';
   ['todayLines', 'todayMarks'].forEach(p => {
     try { const pane = map.getPane && map.getPane(p); if (pane) pane.style.display = on ? '' : 'none'; } catch (_) {}
   });
-  // GL 模式或未進 pane 的圖層：用不透明度保險（維持舊行為）
+  // GL 模式或未進 pane 的圖層：線用不透明度、點用 setOpacity（GL shim 0＝display:none）
   allMapLayers.forEach(l => {
     if (l.setStyle) { try { l.setStyle({ opacity: on ? 0.85 : 0 }); } catch (_) {} }
     else if (l.setOpacity) { try { l.setOpacity(on ? 1 : 0); } catch (_) {} }
   });
 }
-// 新建立的今日圖層若正處於「歷史檢視隱藏中」→ 立即套用隱藏。
-// 修正：補貼路成功/同步後的「重畫」若發生在歷史檢視期間，新圖層原本會直接冒出來
-// （GL 模式沒有 pane 保護，今日的點就這樣外漏到歷史畫面）
-function _applyTodayHidden(layers) {
-  if (!_todayLayersHidden) return;
+// 依當前 _todayMode 套用圖層外觀。修正兩個外漏源：
+// (1) 貼路成功/同步的「重畫」發生在歷史/單趟檢視期間 → 新圖層原本以全濃度冒出
+// (2) 今日單趟預覽的「點」：淡化在 GL 會被引擎重繪蓋回全濃度 → 改為整組隱藏
+function _applyTodayMode(layers) {
+  if (_todayMode === 'normal') return;
+  const lineOp = _todayMode === 'solo' ? 0.12 : 0;
   layers.forEach(l => {
     if (!l) return;
-    if (l.setStyle) { try { l.setStyle({ opacity: 0 }); } catch (_) {} }
+    if (l.setStyle) { try { l.setStyle({ opacity: lineOp }); } catch (_) {} }
     else if (l.setOpacity) { try { l.setOpacity(0); } catch (_) {} }
   });
 }
@@ -1275,7 +1279,7 @@ function drawTripLine(trip, idx) {
   const endMk   = L.marker(latlngs.at(-1), { icon: makeEndIcon(), pane: _todayPane('todayMarks') }).addTo(map);
   allMapLayers.push(line, startMk, endMk);
   trip._layers = [line, startMk, endMk];
-  _applyTodayHidden(trip._layers);   // 歷史檢視期間重畫的趟：立即隱藏，不外漏
+  _applyTodayMode(trip._layers);   // 歷史/單趟檢視期間重畫的趟：立即套用當前狀態，不外漏
 }
 
 // 深色模式偵測（系統設定）
@@ -1905,10 +1909,13 @@ function renderSoloTrip() {
     // 從歷史進單趟：今日行程整組隱藏（不外漏今日的點/線）
     showTodayLayers(false);
   } else {
-    // 今日清單內看單趟：把其他趟淡化當背景（保留脈絡）
+    // 今日清單內看單趟：其他趟的「線」淡化當背景（保留脈絡）、「點」整組隱藏。
+    // 點不能用淡化：GL 模式下 MapLibre 每次重繪會把 marker 不透明度蓋回全濃度，
+    // 淡化的點會全部冒出來（使用者看到滿地圖其他趟的點）
+    _todayMode = 'solo';
     allMapLayers.forEach(l => {
-      if (l.setStyle) l.setStyle({ opacity: 0.12 });
-      else if (l.setOpacity) l.setOpacity(0.15);
+      if (l.setStyle) { try { l.setStyle({ opacity: 0.12 }); } catch (_) {} }
+      else if (l.setOpacity) { try { l.setOpacity(0); } catch (_) {} }
     });
   }
 
