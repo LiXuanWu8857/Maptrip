@@ -69,7 +69,22 @@ try {
     }
   }
 } catch (e) {}
-sessionStorage.setItem('booted', '1');
+// 冷啟動自動 reload 一次（恢復 v226 移除的行為）：reload 狀態下 WKWebView viewport
+// 穩定、頂列 safe-area 修正必定生效（量測式修正偶有漏網 → 版面跑掉）。
+// 現在 index 與資源都有 SW 快取，第二次載入幾乎即時，不再有當年的雙倍啟動成本。
+// 只在 App 殼內做；sessionStorage 旗標保證每個 session 只 reload 一次；
+// 放在崩潰偵測「之後」，被砍重啟的計數不受影響。
+try {
+  var _fresh0 = !sessionStorage.getItem('booted');
+  sessionStorage.setItem('booted', '1');
+  var _nt1 = '';
+  try { _nt1 = (performance.getEntriesByType('navigation')[0] || {}).type || ''; } catch (e) {}
+  if (_app0 && _fresh0 && _nt1 === 'navigate') {
+    window.__mtReloadPending = true;   // app.js 看到此旗標就不啟動這個「即將被丟棄」的頁面
+    window.__mtLog('cold-start reload');
+    location.reload();
+  }
+} catch (e) { try { sessionStorage.setItem('booted', '1'); } catch (e2) {} }
 // 記錄本次開場型態：navigate＝全新載入（含 WKWebView 行程被系統砍掉後的自動重啟）、
 // reload＝程式自己重載。連續多筆 navigate 就是「一直被砍」的鐵證。
 try {
@@ -85,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.243';</script>
+<script>window.INDEX_VERSION = '1.1.244';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
