@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.245';
+const APP_VERSION  = '1.1.246';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -897,7 +897,26 @@ async function finalizeSavedTrip(trip, fare, paymentMethod, label, commission, d
     }
     saveTodayToStorage();
   } else {
-    // 貼路失敗：60 秒後自動重試（不必等下次開機）
+    // 貼路失敗（OSRM 拒收/離線）：至少把原始軌跡的飄移群清掉，
+    // 讓顯示/儲存的路線不留鋸齒（貼路成功前的過渡狀態也乾淨）。
+    mem = todayTrips.find(t => t.id === trip.id) || trip;
+    if (mem.coords && mem.coords.length >= 4) {
+      const cleaned = _cleanTrace(mem.coords);
+      if (cleaned.length < mem.coords.length) {
+        mem.coords = cleaned.map(c => ({ lat: c.lat, lng: c.lng, ...(c.t != null ? { t: c.t } : {}) }));
+        const idx = todayTrips.indexOf(mem);
+        if (idx >= 0) {
+          (mem._layers || []).forEach(l => {
+            try { map.removeLayer(l); } catch (_) {}
+            const j = allMapLayers.indexOf(l);
+            if (j >= 0) allMapLayers.splice(j, 1);
+          });
+          drawTripLine(mem, idx + 1);
+        }
+        saveTodayToStorage();
+      }
+    }
+    // 60 秒後自動重試貼路（不必等下次開機）
     setTimeout(() => { if (!activeTrip) retrySnapBacklog(2); }, 60000);
   }
   const ts = document.getElementById('trip-sheet');
@@ -1077,26 +1096,65 @@ function _snapSane(result, coords, ratio, slack) {
   } catch (_) { return true; }
 }
 
-// 剔除孤立飄點：經過 p 的繞行距離遠大於直接連前後點（>2.5 倍且多繞 60m 以上）
-// ＝孤立飄點。少了它，貼路就不會繞一個街廓去「經過」飄點（小圈假路線的成因）。
-// 只影響貼路輸入，原始記錄座標不動。
+// 點 p 到線段 a-b 的垂直距離（公尺，區域平面近似，短距離足夠準）
+function _perpM(a, b, p) {
+  const kx = 111000 * Math.cos(a.lat * Math.PI / 180), ky = 111000;
+  const ax = a.lng * kx, ay = a.lat * ky, bx = b.lng * kx, by = b.lat * ky, px = p.lng * kx, py = p.lat * ky;
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.hypot(dx, dy) || 1;
+  return Math.abs((px - ax) * dy - (py - ay) * dx) / len;
+}
+
+// 剔除「來回飄移群」：從上一個保留點 a 往前看最多 4 點，若繞經 i..j-1 再到 coords[j]
+// 的路徑長 > 直線 2.5 倍、多繞 60m 以上，「且（端點相距<35m ＝甩出去又甩回原地
+// ／或 中間某點離 a-b 直線的垂距 > 端距 2 倍 ＝ 尖刺）」→ 整群丟棄。
+// 這兩個條件是關鍵防線：真正繞街廓的路，端點有實際前進、垂距與端距相當，兩條都不成立 → 不誤刪。
 function _dropSpikes(coords) {
   if (!coords || coords.length < 3) return coords;
   const out = [coords[0]];
-  for (let i = 1; i < coords.length - 1; i++) {
-    const a = out[out.length - 1], p = coords[i], b = coords[i + 1];
-    const via = haversine(a, p) + haversine(p, b);
-    const direct = haversine(a, b);
-    if (via > direct * 2.5 && via - direct > 60) continue;
-    out.push(p);
+  let i = 1;
+  while (i < coords.length) {
+    if (i === coords.length - 1) { out.push(coords[i]); break; }
+    const a = out[out.length - 1];
+    let collapsed = false;
+    for (let j = i + 1; j <= Math.min(i + 4, coords.length - 1); j++) {
+      let via = haversine(a, coords[i]);
+      for (let k = i; k < j; k++) via += haversine(coords[k], coords[k + 1]);
+      const direct = haversine(a, coords[j]);
+      // 第一個中間點必須自己就偏離 a→coords[j] 直線 >15m，才視為飄移群的起點；
+      // 否則（例如飄點前面幾個正常直行點）不會被連坐一起刪掉。
+      if (via > direct * 2.5 && via - direct > 60 && _perpM(a, coords[j], coords[i]) > 15) {
+        let apex = 0;
+        for (let k = i; k < j; k++) apex = Math.max(apex, _perpM(a, coords[j], coords[k]));
+        if (direct < 35 || apex > direct * 2) { i = j; collapsed = true; break; }
+      }
+    }
+    if (!collapsed) { out.push(coords[i]); i++; }
   }
-  out.push(coords[coords.length - 1]);
   return out;
+}
+
+// 迭代清理鋸齒/飄點群：都市峽谷/高架下的多重反射會產生「一小段來回鋸齒」——
+// 不只單一孤立飄點，而是好幾個連續飄點。_dropSpikes 單趟只剝一層，
+// 迭代數趟才能把整叢鋸齒剝乾淨（每趟剝掉當前最突兀的點，相鄰次突兀點下一趟變孤立）。
+// 安全閥：清掉超過 40% 的點＝門檻誤傷正常轉彎，放棄清理保留原始軌跡。
+function _cleanTrace(coords) {
+  if (!coords || coords.length < 4) return coords;
+  let cur = coords;
+  for (let pass = 0; pass < 4; pass++) {
+    const next = _dropSpikes(cur);
+    if (next.length === cur.length) break;   // 穩定：沒有飄點可剝了
+    cur = next;
+  }
+  // 安全閥：只在「較長的真實行程」上防止門檻誤傷（剝掉 >40% ＝ 有異，還原）。
+  // 短軌跡（測試/極短趟）不套用，避免少數幾點的正常清理被誤判為過度清理。
+  if (coords.length >= 25 && cur.length < coords.length * 0.6) return coords;
+  return cur;
 }
 
 async function snapToRoads(coords) {
   if (coords.length < 2) return null;
-  coords = _dropSpikes(coords);   // 孤立飄點不進貼路（否則會被當必經點繞路）
+  coords = _cleanTrace(coords);   // 飄移群不進貼路（否則被當必經點繞路、產生假路線）
 
   // OSRM 公開伺服器的點數上限「會變」（曾為 100；2026-07 實測連 95 點也被 TooBig 拒絕）。
   // 不猜固定上限：被嫌太大就自動縮小取樣數再試，任何伺服器設定都能自我適應。
@@ -3282,7 +3340,27 @@ async function retrySnapBacklog(maxTrips = 5) {
       if (!road) {
         failed++;
         trip._snapN = (trip._snapN || 0) + 1;
+        // 貼路仍失敗 → 至少清掉原始軌跡的飄移群（鋸齒/停等飄移），
+        // 讓顯示乾淨；下次重試用清理後的座標，貼路成功率也提高
+        if (trip.coords && trip.coords.length >= 4) {
+          const cleaned = _cleanTrace(trip.coords);
+          if (cleaned.length < trip.coords.length) {
+            trip.coords = cleaned.map(c => ({ lat: c.lat, lng: c.lng, ...(c.t != null ? { t: c.t } : {}) }));
+            const memC = todayTrips.find(t => t.id === j.id);
+            if (memC) {
+              memC.coords = trip.coords;
+              const mi = todayTrips.indexOf(memC);
+              (memC._layers || []).forEach(l => {
+                try { map.removeLayer(l); } catch (_) {}
+                const k = allMapLayers.indexOf(l);
+                if (k >= 0) allMapLayers.splice(k, 1);
+              });
+              drawTripLine(memC, mi + 1);
+            }
+          }
+        }
         saveTrips(cur);
+        if (window.MaptripSync) MaptripSync.syncDays([j.day]);
         await new Promise(r => setTimeout(r, 800));
         continue;
       }
@@ -3706,6 +3784,29 @@ function healBogusRoads(notify) {
   } catch (_) {}
 }
 
+// 一次性清理「未貼路且含飄移群」的既有行程：不受 _snapN 重試上限影響
+// （今天貼路一直失敗、_snapN 已滿的鋸齒趟也要清）。以版本旗標保證每版只跑一次。
+function healZigzagTraces() {
+  try {
+    if (localStorage.getItem('maptrip_zigfix') === 'v246') return;
+    const all = loadTrips();
+    const fixedDays = new Set();
+    Object.keys(all).forEach(day => (all[day] || []).forEach(t => {
+      if (t.roadCoords || !t.coords || t.coords.length < 4) return;
+      const cleaned = _cleanTrace(t.coords);
+      if (cleaned.length < t.coords.length) {
+        t.coords = cleaned.map(c => ({ lat: c.lat, lng: c.lng, ...(c.t != null ? { t: c.t } : {}) }));
+        fixedDays.add(day);
+      }
+    }));
+    localStorage.setItem('maptrip_zigfix', 'v246');
+    if (!fixedDays.size) return;
+    saveTrips(all);
+    if (window.MaptripSync) { try { MaptripSync.syncDays([...fixedDays]); } catch (_) {} }
+    if (typeof refreshAfterSync === 'function') { try { refreshAfterSync(); } catch (_) {} }
+  } catch (_) {}
+}
+
 function boot() {
   // App 成功啟動 → 清掉「自動重載計數」（健康狀態，避免殘留計數誤判為迴圈）
   try { localStorage.removeItem('mt_rl'); } catch (_) {}
@@ -3759,6 +3860,7 @@ function boot() {
   // 雲端副本遲早會被覆蓋成修復後的正確版本。顯示層另有 tripPath 防線，畫面永不受影響。
   healBogusRoads(true);
   setTimeout(() => healBogusRoads(false), 25000);
+  healZigzagTraces();   // 一次性清理既有鋸齒/飄移群的未貼路趟
   initMap();
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
