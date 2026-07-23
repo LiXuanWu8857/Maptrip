@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.244';
+const APP_VERSION  = '1.1.245';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -43,6 +43,8 @@ const AUTO_START_SPEED_MS  = 5 / 3.6; // >5 km/h 持續才問是否開始
 const AUTO_START_DELAY_MS  = 4000;  // 行駛滿 4 秒才跳提示
 
 let map, myDotMarker, accuracyCircle, currentPos = null;
+// 橋接：讓獨立模組（hotspots.js…）讀到即時的地圖與定位（兩者為 let，不在 window 上）
+window.__mtLive = { get pos() { return currentPos; }, get map() { return map; } };
 let activeTrip = null, activePolyline = null, timerTick = null;
 let todayTrips = [], allMapLayers = [];
 // 今日圖層顯示狀態：normal＝正常、hidden＝歷史檢視（整組隱藏）、
@@ -1600,6 +1602,7 @@ function _menuTouchEnd(e) {
   else if (action === 'bookkeeper') { closeSheet(); if (window.openBookkeeper) window.openBookkeeper(); }
   else if (action === 'history') showHistory();
   else if (action === 'sync') openSyncDialog();
+  else if (action === 'hotspot') { closeSheet(); if (window.openHotspots) window.openHotspots(); }
   else if (action === 'glmap') toggleGlEngine();
 }
 
