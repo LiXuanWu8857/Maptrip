@@ -18,9 +18,26 @@
   var CAT_MAP = {}; CATS.forEach(function (c) { CAT_MAP[c.k] = c; });
   var WD = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
+  // 上車熱點 × 時段：一天切 8 段（涵蓋 0-23 全時；深夜跨午夜）
+  var TBUCKETS = [
+    { label: '清晨',   s: 5,  e: 7 },
+    { label: '早尖峰', s: 7,  e: 9 },
+    { label: '上午',   s: 9,  e: 11 },
+    { label: '中午',   s: 11, e: 14 },
+    { label: '下午',   s: 14, e: 17 },
+    { label: '晚尖峰', s: 17, e: 19 },
+    { label: '晚間',   s: 19, e: 22 },
+    { label: '深夜',   s: 22, e: 5 }
+  ];
+  var PK_CELL = 300;       // 上車點聚合網格邊長（公尺）
+  var PK_TOP  = 6;         // 熱點排行顯示前幾名
+  var GEO_KEY = 'maptrip_geocache';
+
   var _month = null;       // 'YYYY-MM'（目前檢視月份）
   var _view = 'io';        // 'io'（收支）/ 'an'（分析）
   var _addOpen = false;
+  var _lastPk = null;      // 最近一次上車熱點分析結果（供地名補上）
+  var _pkToken = 0;        // 地名補上的世代序號（避免舊 render 的非同步覆寫）
 
   // ---------- 資料 ----------
   function loadExp() { try { return JSON.parse(localStorage.getItem(EXPENSE_KEY) || '[]'); } catch (_) { return []; } }
@@ -78,6 +95,143 @@
     return { byHour: byHour, byDow: byDow };
   }
 
+  // ---------- 上車熱點 × 時段 ----------
+  // 一天中 hour 落在哪個時段（找不到回 -1）；深夜段跨午夜要繞回來判斷
+  function bucketIndexOf(h) {
+    for (var i = 0; i < TBUCKETS.length; i++) {
+      var b = TBUCKETS[i];
+      if (b.s < b.e) { if (h >= b.s && h < b.e) return i; }
+      else { if (h >= b.s || h < b.e) return i; }
+    }
+    return -1;
+  }
+  function bucketRange(b) { return b.s + '–' + b.e + ' 點'; }
+
+  // 經緯度 → 相對 origin 的公尺座標（等距近似，與 hotspots.js 同法）
+  function toXY(origin, p) {
+    var mPerDeg = 111320;
+    return {
+      x: (p.lng - origin.lng) * mPerDeg * Math.cos(origin.lat * Math.PI / 180),
+      y: (p.lat - origin.lat) * mPerDeg
+    };
+  }
+
+  // 掃全部歷史的上車點（每趟 coords[0]），聚成 300m 網格，並記每格的時段分佈。
+  // 排除「其他」付款（多為自用/非載客）。時段熱點需要量，所以刻意不受月份篩選。
+  function analyzePickups() {
+    var raw = (window.loadTrips ? loadTrips() : {}) || {};
+    var pts = [];
+    Object.keys(raw).forEach(function (day) {
+      (raw[day] || []).forEach(function (t) {
+        if (t.paymentMethod === 'other') return;
+        var c = t.coords && t.coords[0];
+        if (!c || typeof c.lat !== 'number' || typeof c.lng !== 'number') return;
+        pts.push({ lat: c.lat, lng: c.lng, h: new Date(t.startTime).getHours(), fare: t.fare || 0 });
+      });
+    });
+    if (!pts.length) return { clusters: [], byBucket: [], total: 0 };
+
+    var origin = pts[0], cells = {};
+    pts.forEach(function (p) {
+      var xy = toXY(origin, p);
+      var k = Math.floor(xy.x / PK_CELL) + '_' + Math.floor(xy.y / PK_CELL);
+      var c = cells[k];
+      if (!c) { c = cells[k] = { key: k, n: 0, fare: 0, wlat: 0, wlng: 0, buckets: [] };
+        for (var z = 0; z < TBUCKETS.length; z++) c.buckets.push(0); }
+      c.n++; c.fare += p.fare; c.wlat += p.lat; c.wlng += p.lng;
+      var bi = bucketIndexOf(p.h); if (bi >= 0) c.buckets[bi]++;
+    });
+
+    var list = Object.keys(cells).map(function (k) {
+      var c = cells[k];
+      c.lat = c.wlat / c.n; c.lng = c.wlng / c.n;
+      c.avgFare = c.n ? c.fare / c.n : 0;
+      var pb = -1, pv = 0;
+      c.buckets.forEach(function (v, i) { if (v > pv) { pv = v; pb = i; } });
+      c.peakBucket = pb;
+      return c;
+    });
+    list.sort(function (a, b) { return b.n - a.n; });
+
+    // 每個時段內，各熱點依該時段趟數排名（首名＝該時段人最多的地點）
+    var byBucket = TBUCKETS.map(function (_, bi) {
+      return list.filter(function (c) { return c.buckets[bi] > 0; })
+        .sort(function (a, b) { return b.buckets[bi] - a.buckets[bi]; });
+    });
+    return { clusters: list, byBucket: byBucket, total: pts.length };
+  }
+
+  // 反向地理編碼（Nominatim）＋ localStorage 快取。離線／失敗都安靜退場，
+  // 不影響趟數統計（趟數才是主要訊號）。快取 key＝小數 3 位（約 100m）。
+  function geoCache() { try { return JSON.parse(localStorage.getItem(GEO_KEY) || '{}'); } catch (_) { return {}; } }
+  function saveGeoCache(o) { try { localStorage.setItem(GEO_KEY, JSON.stringify(o)); } catch (_) {} }
+  function geoKey(lat, lng) { return lat.toFixed(3) + ',' + lng.toFixed(3); }
+  function cachedName(lat, lng) { var c = geoCache()[geoKey(lat, lng)]; return c && c.name ? c.name : ''; }
+
+  function pickName(j) {
+    if (!j) return '';
+    var a = j.address || {};
+    var road = a.road || a.pedestrian || a.footway || a.residential || '';
+    var area = a.neighbourhood || a.quarter || a.suburb || a.village || a.town || a.city_district || '';
+    var poi = j.name || a.amenity || a.building || a.shop || '';
+    var main = poi || road || area || (j.display_name ? j.display_name.split(',')[0].trim() : '');
+    if (!main) return '';
+    if (area && main !== area) return main + '（' + area + '）';
+    return main;
+  }
+
+  function revGeocode(lat, lng) {
+    var cache = geoCache(), key = geoKey(lat, lng);
+    if (cache[key]) return Promise.resolve(cache[key].name || '');
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve('');
+    var url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&accept-language=zh-TW&lat=' +
+      lat + '&lon=' + lng;
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 8000);
+    var opt = { headers: { 'Accept': 'application/json' } };
+    if (ctrl) opt.signal = ctrl.signal;
+    return fetch(url, opt).then(function (r) {
+      clearTimeout(timer);
+      if (!r || !r.ok) throw new Error('http ' + (r && r.status));
+      return r.json();
+    }).then(function (j) {
+      var nm = pickName(j);
+      cache[key] = { name: nm, ts: Date.now() };   // 空字串也快取，避免重複打空
+      saveGeoCache(cache);
+      return nm;
+    }).catch(function () { clearTimeout(timer); return ''; });
+  }
+
+  // render 後把「查詢中…」換成真正地名：只查目前畫面上出現的熱點，
+  // 依 Nominatim 用量規範每筆間隔 1.1 秒，已快取者不等待。
+  function nameSpan(c) {
+    var nm = cachedName(c.lat, c.lng);
+    return '<span class="pk-name" data-pk="' + esc(c.key) + '">' + (nm ? esc(nm) : '查詢中…') + '</span>';
+  }
+  function setPkName(pkKey, txt) {
+    var els = document.querySelectorAll('.pk-name[data-pk="' + pkKey + '"]');
+    for (var i = 0; i < els.length; i++) {
+      if (els[i].textContent === '查詢中…' || txt) els[i].textContent = txt || '未命名地點';
+    }
+  }
+  function hydratePickupNames() {
+    var pk = _lastPk; if (!pk || !pk.total) return;
+    var my = ++_pkToken, seen = {}, queue = [];
+    function push(c) { if (c && !seen[c.key]) { seen[c.key] = 1; queue.push(c); } }
+    pk.byBucket.forEach(function (arr) { if (arr && arr[0]) push(arr[0]); });
+    pk.clusters.slice(0, PK_TOP).forEach(push);
+    (function step(i) {
+      if (i >= queue.length || my !== _pkToken) return;
+      var c = queue[i];
+      if (cachedName(c.lat, c.lng)) { setPkName(c.key, cachedName(c.lat, c.lng)); return step(i + 1); }
+      revGeocode(c.lat, c.lng).then(function (nm) {
+        if (my !== _pkToken) return;
+        setPkName(c.key, nm);
+        setTimeout(function () { step(i + 1); }, 1100);
+      });
+    })(0);
+  }
+
   // ---------- DOM ----------
   function injectCss() {
     if (document.getElementById('finance-css')) return;
@@ -133,7 +287,25 @@
       '.fin-bar .b.dim{background:#c6dafc}' +
       '.fin-bar .cap{font-size:.58rem;color:#9aa0a6;margin-top:3px;white-space:nowrap}' +
       '.fin-bars.wd .fin-bar .cap{font-size:.72rem}' +
+      '.pk-note{font-weight:400;color:#9aa0a6;font-size:.72rem;margin-left:4px}' +
+      '.pk-buckets{display:flex;flex-direction:column;gap:1px;background:#f1f3f4;border-radius:12px;overflow:hidden}' +
+      '.pk-brow{display:flex;align-items:center;gap:10px;background:#fff;padding:9px 12px}' +
+      '.pk-btime{flex:0 0 84px;line-height:1.15}.pk-btime b{display:block;font-size:.86rem;color:#202124}' +
+      '.pk-btime span{font-size:.68rem;color:#9aa0a6}' +
+      '.pk-bplace{flex:1;min-width:0;display:flex;align-items:center;gap:8px}' +
+      '.pk-name{flex:1;min-width:0;font-size:.9rem;color:#3c4043;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+      '.pk-cnt{flex:none;font-size:.82rem;font-weight:700;color:#188038}' +
+      '.pk-rank{display:flex;flex-direction:column;gap:6px}' +
+      '.pk-rrow{display:flex;align-items:center;gap:10px;background:#f8f9fa;border-radius:12px;padding:10px 12px}' +
+      '.pk-rk{flex:none;width:22px;height:22px;border-radius:50%;background:#c6dafc;color:#1a4b8c;font-size:.78rem;' +
+      'font-weight:700;display:flex;align-items:center;justify-content:center}' +
+      '.pk-rk1{background:#d93025;color:#fff}.pk-rk2{background:#e8710a;color:#fff}.pk-rk3{background:#f9ab00;color:#fff}' +
+      '.pk-rmid{flex:1;min-width:0}.pk-rmid .pk-name{display:block;font-size:.92rem;color:#202124;font-weight:600}' +
+      '.pk-rsub{font-size:.74rem;color:#9aa0a6;margin-top:2px}' +
       '@media (prefers-color-scheme: dark){' +
+      '.pk-buckets{background:#111}.pk-brow{background:#242424}.pk-btime b{color:#e8eaed}' +
+      '.pk-name{color:#c8ccd2}.pk-rrow{background:#242424}.pk-rmid .pk-name{color:#e8eaed}' +
+      '.pk-rk{background:#2f3b4d;color:#c6dafc}' +
       '#finance-sheet{background:#1a1a1a;border-top-color:rgba(255,255,255,.07)}' +
       '.fin-mbar span{color:#e8eaed}.fin-tab{background:#2a2a2a;color:#9aa0a6}' +
       '.fin-card,.fin-catcell,.fin-stat,.fin-form{background:#242424}' +
@@ -177,6 +349,7 @@
     document.getElementById('fin-tab-an').classList.toggle('active', _view === 'an');
     var body = document.getElementById('finance-body');
     body.innerHTML = _view === 'io' ? renderIO() : renderAnalytics();
+    if (_view === 'an') hydratePickupNames();
   }
 
   function renderIO() {
@@ -285,6 +458,43 @@
         '<div class="cap">' + WD[i].slice(1) + '</div></div>';
     });
     h += '</div></div>';
+
+    h += renderPickups();
+    return h;
+  }
+
+  // 上車熱點 × 時段（跨全部歷史，不受上方月份篩選）
+  function renderPickups() {
+    var pk = analyzePickups();
+    _lastPk = pk;
+    if (!pk.total) {
+      return '<div class="fin-sec">上車熱點 × 時段</div>' +
+        '<div class="fin-empty">還沒有足夠的上車紀錄可分析</div>';
+    }
+    var h = '<div class="fin-sec">各時段最熱上車點 <span class="pk-note">依全部歷史 · 共 ' + pk.total + ' 趟</span></div>';
+    h += '<div class="pk-buckets">';
+    var any = false;
+    TBUCKETS.forEach(function (b, bi) {
+      var arr = pk.byBucket[bi];
+      if (!arr || !arr.length) return;
+      any = true;
+      var top = arr[0];
+      h += '<div class="pk-brow">' +
+        '<div class="pk-btime"><b>' + b.label + '</b><span>' + bucketRange(b) + '</span></div>' +
+        '<div class="pk-bplace">' + nameSpan(top) +
+        '<span class="pk-cnt">' + top.buckets[bi] + ' 趟</span></div></div>';
+    });
+    if (!any) h += '<div class="fin-empty">上車點時間資料不足</div>';
+    h += '</div>';
+
+    h += '<div class="fin-sec">上車熱點排行</div><div class="pk-rank">';
+    pk.clusters.slice(0, PK_TOP).forEach(function (c, i) {
+      var pb = c.peakBucket >= 0 ? TBUCKETS[c.peakBucket].label : '—';
+      h += '<div class="pk-rrow"><span class="pk-rk pk-rk' + (i < 3 ? i + 1 : 'x') + '">' + (i + 1) + '</span>' +
+        '<div class="pk-rmid">' + nameSpan(c) +
+        '<div class="pk-rsub">' + c.n + ' 趟 · 均 NT$ ' + nf(c.avgFare) + ' · 常在' + pb + '</div></div></div>';
+    });
+    h += '</div>';
     return h;
   }
 
@@ -334,7 +544,8 @@
     render();
   }
 
-  window.MaptripFinance = { open: open, close: close, shiftMonth: shiftMonth, tab: tab, toggleAdd: toggleAdd, pickCat: pickCat, saveAdd: saveAdd, delExp: delExp };
+  window.MaptripFinance = { open: open, close: close, shiftMonth: shiftMonth, tab: tab, toggleAdd: toggleAdd, pickCat: pickCat, saveAdd: saveAdd, delExp: delExp,
+    _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName };
   window.openFinance = open;
   window.closeFinance = close;
 })();
