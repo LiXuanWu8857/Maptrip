@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.246';
+const APP_VERSION  = '1.1.247';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -278,7 +278,13 @@ function initMap() {
 
   // 縮放動畫期間「絕不」改動向量線（Leaflet 縮放中改線會用新座標系重算、疊在舊變換上 → 整條線飛走）
   map.on('zoomstart', () => { _mapZooming = true; });
-  map.on('zoomend', () => { _mapZooming = false; resyncLiveLine(); });
+  map.on('zoomend', () => { _mapZooming = false; resyncLiveLine(); redrawAllLines(); });
+  // leaflet-rotate 已知問題：手勢式「縮小＋旋轉」後，SVG 折線的幾何有時沒跟著重算，
+  // 整條路線飄離底圖（點/標記正常，只有線脫鉤）。底圖穩定後強制以目前投影重畫所有折線。
+  // moveend 涵蓋 pan/zoom/rotate 手勢的收尾；rotate 連續事件則去抖 150ms 後補畫一次。
+  map.on('moveend', () => { if (!_mapZooming && !_mapTouching) redrawAllLines(); });
+  let _rotRedraw = null;
+  map.on('rotate', () => { clearTimeout(_rotRedraw); _rotRedraw = setTimeout(() => { if (!_mapTouching) redrawAllLines(); }, 150); });
 
   // 單趟顯示列：左右滑切換趟次（往左滑＝下一趟，往右滑＝上一趟）
   setupSoloSwipe();
@@ -1240,6 +1246,18 @@ async function snapLiveRoute() {
   const latlngs = snapped.map(c => [c.lat, c.lng]);
   activeTrip.coords.slice(snapshot.length).forEach(c => latlngs.push([c.lat, c.lng]));
   activePolyline.setLatLngs(latlngs);
+}
+
+// 底圖穩定後（縮放/旋轉/平移收尾）強制以目前投影重畫所有折線。
+// 修 leaflet-rotate 手勢式縮放+旋轉後 SVG 折線幾何沒跟著重算、整條飄離底圖的問題。
+// 標準地圖才需要；GL（向量）由引擎原生處理，redraw 不存在時自動略過。
+function redrawAllLines() {
+  const redraw = (l) => { if (l && typeof l.redraw === 'function') { try { l.redraw(); } catch (_) {} } };
+  try { allMapLayers.forEach(redraw); } catch (_) {}
+  try { if (typeof soloLayers !== 'undefined') soloLayers.forEach(redraw); } catch (_) {}
+  try { if (typeof dayPreviewLayers !== 'undefined') dayPreviewLayers.forEach(redraw); } catch (_) {}
+  try { if (typeof replayTempLayers !== 'undefined') replayTempLayers.forEach(redraw); } catch (_) {}
+  try { redraw(activePolyline); } catch (_) {}
 }
 
 // 縮放/手勢結束後：把期間累積、沒畫進去的點一次補上（整條線從記錄座標重建）

@@ -59,6 +59,10 @@
   線 0.12 淡化、**點整組隱藏**）。任何狀態下的重畫（drawTripLine/drawGapLine）都套用當前狀態。
   **GL 陷阱**：MapLibre 每次 render 重寫 marker 元素 style.opacity → 隱藏 marker 必須用
   display:none（shim `Marker.setOpacity(0)` 已改為 display）
+- **折線脫鉤修正（v247，標準地圖）**：leaflet-rotate 手勢式「縮小＋旋轉」後 SVG 折線幾何
+  有時沒重算、整條飄離底圖（點/標記正常，只有線脫鉤；投影本身正確）。`redrawAllLines()`
+  在 zoomend/moveend/去抖 rotate 後強制以目前投影重畫所有折線（allMapLayers/soloLayers/
+  dayPreviewLayers/replayTempLayers/activePolyline）。GL 模式 redraw 不存在自動略過
 - **記帳**：每趟車資、現金/刷卡/其他（其他可填備註 label；改回現金/刷卡會清 label）、
   抽成 commission、叫車費 dispatch（綁在編輯車資對話框）
 - **收支報表** `js/finance.js`：月營收（排除「其他」）、淨收入＝營收−抽成/叫車−支出、
