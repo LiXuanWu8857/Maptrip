@@ -65,8 +65,10 @@
   dayPreviewLayers/replayTempLayers/activePolyline）。GL 模式 redraw 不存在自動略過
 - **記帳**：每趟車資、現金/刷卡/其他（其他可填備註 label；改回現金/刷卡會清 label）、
   抽成 commission、叫車費 dispatch
-- **叫車費切換 + 抽成延後填（v249）**：叫車費改成單一切換按鈕（`toggleDispatch`），
+- **叫車費切換 + 抽成延後填（v249；v250 預設有）**：叫車費改成單一切換按鈕（`toggleDispatch`），
   開＝`DISPATCH_FEE`（10 元）、關＝0；載入舊趟若 dispatch>0 則沿用該趟金額。
+  **v250 起行程完成對話框預設「有」10 元**（`showFareDialog` 用 `_setFareExtra(0, DISPATCH_FEE)`），
+  沒叫車費再點一下關掉；編輯舊趟仍照該趟原值。
   行程完成當下**不再問抽成**（抽成兩天後才知道；`_showCommissionField(false)` 隱藏該欄），
   改在歷史批次補。編輯對話框仍顯示抽成欄。
 - **批次編輯抽成（v249）** `app.js openCommissionBatch/saveCommissionBatch`：歷史每日標題列

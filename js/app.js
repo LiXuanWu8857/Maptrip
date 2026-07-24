@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.249';
+const APP_VERSION  = '1.1.250';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1059,7 +1059,7 @@ function showFareDialog(trip) {
   document.getElementById('fs-dur').textContent    = fmtDur(trip.endTime - trip.startTime);
   document.getElementById('fs-dist').textContent   = fmtDist(trip.totalDist);
   document.getElementById('fare-input').value = '';
-  _setFareExtra(0, 0);
+  _setFareExtra(0, DISPATCH_FEE);   // 叫車費預設「有」10 元；沒叫車費再點一下關掉
   _showCommissionField(false);   // 完成當下不問抽成（兩天後才知道）
 
   document.getElementById('fare-overlay').style.display = 'block';
