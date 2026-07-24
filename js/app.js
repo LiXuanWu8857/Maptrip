@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.248';
+const APP_VERSION  = '1.1.249';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1017,16 +1017,40 @@ function _pushCommission(tripId, commission, dispatch) {
   } catch (_) {}
 }
 
+// 叫車費：固定 10 元，用切換按鈕決定「有／無」（司機不必每趟打字）
+const DISPATCH_FEE = 10;
+let _dispatchOn = false;   // 車資對話框目前叫車費開關
+let _dispatchAmt = DISPATCH_FEE;  // 目前金額（載入舊趟時沿用該趟的值）
+
+function updateDispatchToggle() {
+  const btn = document.getElementById('fare-dispatch-toggle');
+  if (!btn) return;
+  btn.classList.toggle('on', _dispatchOn);
+  btn.querySelector('.fare-toggle-val').textContent = _dispatchOn ? ('$' + _dispatchAmt) : '無';
+}
+function toggleDispatch() {
+  _dispatchOn = !_dispatchOn;
+  if (_dispatchOn && (!_dispatchAmt || _dispatchAmt <= 0)) _dispatchAmt = DISPATCH_FEE;
+  updateDispatchToggle();
+}
+
 // 讀 / 寫車資對話框的「抽成 / 叫車費」欄位
 function _readFareExtra() {
   return {
     commission: parseInt(document.getElementById('fare-commission').value) || 0,
-    dispatch: parseInt(document.getElementById('fare-dispatch').value) || 0
+    dispatch: _dispatchOn ? (_dispatchAmt || DISPATCH_FEE) : 0
   };
 }
 function _setFareExtra(commission, dispatch) {
   document.getElementById('fare-commission').value = commission || '';
-  document.getElementById('fare-dispatch').value = dispatch || '';
+  _dispatchOn = (dispatch || 0) > 0;
+  _dispatchAmt = _dispatchOn ? dispatch : DISPATCH_FEE;
+  updateDispatchToggle();
+}
+// 控制抽成欄位顯示：完成當下隱藏（抽成兩天後才知道，改在歷史批次補），編輯時顯示
+function _showCommissionField(show) {
+  const wrap = document.getElementById('fare-commission-wrap');
+  if (wrap) wrap.style.display = show ? '' : 'none';
 }
 
 function showFareDialog(trip) {
@@ -1036,6 +1060,7 @@ function showFareDialog(trip) {
   document.getElementById('fs-dist').textContent   = fmtDist(trip.totalDist);
   document.getElementById('fare-input').value = '';
   _setFareExtra(0, 0);
+  _showCommissionField(false);   // 完成當下不問抽成（兩天後才知道）
 
   document.getElementById('fare-overlay').style.display = 'block';
   document.getElementById('fare-dialog').classList.add('show');
@@ -1801,6 +1826,7 @@ function editFare(e, idx) {
   const skipBtn = document.getElementById('fare-skip');
   input.value = trip.fare || '';
   _setFareExtra(trip.commission, trip.dispatch);
+  _showCommissionField(true);   // 編輯時可改抽成
   cashBtn.disabled = false; cardBtn.disabled = false;
   skipBtn.textContent = '取消'; skipBtn.disabled = false;
 
@@ -1852,6 +1878,7 @@ function editHistoryFare(e, day, idx) {
   const skipBtn = document.getElementById('fare-skip');
   input.value = trip.fare || '';
   _setFareExtra(trip.commission, trip.dispatch);
+  _showCommissionField(true);   // 編輯時可改抽成
   cashBtn.disabled = false; cardBtn.disabled = false;
   skipBtn.textContent = '取消'; skipBtn.disabled = false;
 
@@ -1893,6 +1920,87 @@ function editHistoryFare(e, day, idx) {
   cashBtn.onclick = () => saveEdit('cash');
   cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
+}
+
+// ---- 批次編輯抽成（歷史某日一次填好各趟不同抽成、一起儲存）----
+// 抽成通常兩天後才知道，所以行程完成當下不問，改在歷史批次補。
+let _cbDay = null;
+function _ensureCommissionSheet() {
+  let sheet = document.getElementById('commission-sheet');
+  if (sheet) return sheet;
+  const ov = document.createElement('div');
+  ov.id = 'commission-overlay';
+  ov.onclick = closeCommissionBatch;
+  document.body.appendChild(ov);
+  sheet = document.createElement('div');
+  sheet.id = 'commission-sheet';
+  sheet.innerHTML =
+    '<div class="sheet-handle"></div>' +
+    '<div class="cb-header"><span id="cb-title"></span>' +
+    '<button class="sheet-close" onclick="closeCommissionBatch()">✕</button></div>' +
+    '<div class="cb-note">抽成通常兩天後才知道；可一次填好當日各趟後一起儲存</div>' +
+    '<div id="cb-body"></div>' +
+    '<div class="cb-btns"><button class="cb-cancel" onclick="closeCommissionBatch()">取消</button>' +
+    '<button class="cb-save" onclick="saveCommissionBatch()">全部儲存</button></div>';
+  document.body.appendChild(sheet);
+  return sheet;
+}
+function openCommissionBatch(day) {
+  _cbDay = day;
+  const raw = loadTrips();
+  const trips = (raw[day] || []);
+  if (!trips.length) { toast('這天沒有行程'); return; }
+  _ensureCommissionSheet();
+  document.getElementById('cb-title').textContent = `批次抽成 — ${day}`;
+  const body = document.getElementById('cb-body');
+  body.innerHTML = trips.map((t, i) => {
+    const pay = t.paymentMethod === 'other' ? '其他'
+      : (t.fare ? `NT$ ${t.fare} ${t.paymentMethod === 'card' ? '刷卡' : '現金'}` : '未填金額');
+    return `<div class="cb-row">
+        <span class="cb-num">${i + 1}</span>
+        <div class="cb-mid"><div class="cb-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</div>
+          <div class="cb-fare">${pay}</div></div>
+        <div class="cb-inwrap"><span>抽成</span>
+          <input class="cb-inp" type="number" inputmode="numeric" min="0" placeholder="0"
+                 data-id="${t.id}" value="${t.commission || ''}"></div>
+      </div>`;
+  }).join('');
+  document.getElementById('commission-overlay').style.display = 'block';
+  document.getElementById('commission-sheet').classList.add('show');
+}
+function closeCommissionBatch() {
+  const s = document.getElementById('commission-sheet');
+  if (s) s.classList.remove('show');
+  const ov = document.getElementById('commission-overlay');
+  if (ov) ov.style.display = 'none';
+  _cbDay = null;
+}
+function saveCommissionBatch() {
+  const day = _cbDay;
+  if (!day) return;
+  const inputs = document.querySelectorAll('#cb-body .cb-inp');
+  const cur = loadTrips();
+  const arr = cur[day] || [];
+  let changed = 0;
+  inputs.forEach(inp => {
+    const id = inp.getAttribute('data-id');
+    const val = parseInt(inp.value) || 0;
+    const t = arr.find(x => String(x.id) === String(id));
+    if (!t) return;
+    if ((t.commission || 0) !== val) {
+      t.commission = val; changed++;
+      _pushCommission(t.id, val, t.dispatch || 0);   // 各趟抽成上雲
+      const mem = todayTrips.find(x => String(x.id) === String(id));
+      if (mem) mem.commission = val;
+    }
+  });
+  if (changed) {
+    saveTrips(cur);
+    if (window.MaptripSync) MaptripSync.syncDays([day]);
+  }
+  closeCommissionBatch();
+  renderHistorySheet();
+  toast(changed ? `已更新 ${changed} 筆抽成` : '沒有變更');
 }
 
 // 把 "2026-06-17" 格式的 dayKey 轉成「6月17日 週三」
@@ -2221,6 +2329,7 @@ function renderHistorySheet() {
           <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
           <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : ''}</span>
           <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
+          <button class="commission-btn" onclick="event.stopPropagation();openCommissionBatch('${day}')">抽成</button>
           <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
         </div>
         <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;

@@ -26,6 +26,22 @@
   var ring = null;            // 2km 範圍圈
   var busy = false;
 
+  // 時段（與 finance.js 一致）：一天切 8 段，深夜跨午夜。用來即時篩「當前時段」的歷史上車點。
+  var BUCKETS = [
+    { label: '清晨', s: 5, e: 7 }, { label: '早尖峰', s: 7, e: 9 }, { label: '上午', s: 9, e: 11 },
+    { label: '中午', s: 11, e: 14 }, { label: '下午', s: 14, e: 17 }, { label: '晚尖峰', s: 17, e: 19 },
+    { label: '晚間', s: 19, e: 22 }, { label: '深夜', s: 22, e: 5 }
+  ];
+  function bucketOf(h) {
+    for (var i = 0; i < BUCKETS.length; i++) {
+      var b = BUCKETS[i];
+      if (b.s < b.e) { if (h >= b.s && h < b.e) return i; }
+      else { if (h >= b.s || h < b.e) return i; }
+    }
+    return -1;
+  }
+  function bucketRange(bi) { var b = BUCKETS[bi]; return b ? (b.s + '–' + b.e + ' 點') : ''; }
+
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
   function gmap() { return window.__mtLive && window.__mtLive.map; }
   function say(m) { if (window.toast) window.toast(m); }
@@ -123,6 +139,37 @@
       });
     });
     return out;
+  }
+
+  // 即時：只看「當前時段」＋「附近 2km」的歷史上車點，就地聚類排名（免等網路）。
+  // 這是使用者要的「更即時」：直接讀當下位置與時間，秀出這個時段你都在哪裡上車。
+  function cellOf(origin, p) {
+    var xy = toXY(origin, p);
+    return Math.floor(xy.x / CELL) + '_' + Math.floor(xy.y / CELL);
+  }
+  function buildHistoryNow(me) {
+    var bi = bucketOf(new Date().getHours());
+    var now = Date.now(), DAY = 86400000, cells = {};
+    historyPickups().forEach(function (hp) {
+      if (!hp.t) return;
+      var p = { lat: hp.lat, lng: hp.lng };
+      if (H(me, p) > RADIUS) return;
+      if (bucketOf(new Date(hp.t).getHours()) !== bi) return;   // 只算當前時段
+      var age = (now - hp.t) / DAY;
+      var rf = age <= 30 ? 1.5 : (age <= 90 ? 1.0 : 0.6);        // 近期權重高
+      var k = cellOf(me, p);
+      var c = cells[k] || (cells[k] = { n: 0, score: 0, wlat: 0, wlng: 0, wsum: 0 });
+      c.n++; c.score += rf; c.wlat += p.lat * rf; c.wlng += p.lng * rf; c.wsum += rf;
+    });
+    var list = Object.keys(cells).map(function (k) {
+      var c = cells[k], center = { lat: c.wlat / c.wsum, lng: c.wlng / c.wsum };
+      return {
+        center: center, score: c.score, count: c.n, cats: { history: c.score },
+        dist: H(me, center), brg: bearing(me, center), reasons: ['你常上車的熱點'], histLed: true
+      };
+    });
+    list.sort(function (a, b) { return b.score - a.score; });
+    return { bucket: bi, zones: list.slice(0, TOP_N) };
   }
 
   // 經緯度 → 相對 origin 的公尺座標（等距近似）
@@ -245,7 +292,9 @@
 
   // ---- 底部清單面板 ----
   var lastZones = [];
-  function renderPanel(zones, me) {
+  function renderPanel(zones, me, meta) {
+    meta = meta || {};
+    var histMode = meta.mode === 'history';
     lastZones = zones;
     var panel = document.getElementById('hs-panel');
     if (!panel) {
@@ -265,7 +314,7 @@
       var km = z.dist >= 1000 ? (z.dist / 1000).toFixed(1) + ' km' : Math.round(z.dist) + ' m';
       var arrow = '<span class="hs-arrow" style="transform:rotate(' + z.brg + 'deg)">↑</span>';
       var name = z.histLed ? '你常上車的熱點' : z.reasons[0];
-      var sub = z.reasons.join('、');
+      var sub = (histMode && z.count) ? (z.count + ' 趟 · 這個時段常上車') : z.reasons.join('、');
       return '<div class="hs-row" onclick="MaptripHotspots.focus(' + i + ')">' +
         '<div class="hs-rank" style="background:' + (RANKC[i] || '#1a73e8') + '">' + (i + 1) + '</div>' +
         '<div class="hs-dir">' + arrow + '<span>' + compass(z.brg) + '</span></div>' +
@@ -274,9 +323,16 @@
         '<div class="hs-meta"><div class="hs-fire">' + fireIcons(z.score, max) + '</div>' +
         '<div class="hs-dist">' + km + '</div></div></div>';
     }).join('');
-    panel.innerHTML = '<div class="hs-head"><span>🔥 找客熱區（2 公里內）</span>' +
+    var title = histMode
+      ? '🔥 找客熱區 · 現在【' + (BUCKETS[meta.bucket] ? BUCKETS[meta.bucket].label : '此時段') + '】'
+      : '🔥 找客熱區（2 公里內）';
+    var note = histMode
+      ? '只看你「' + (BUCKETS[meta.bucket] ? BUCKETS[meta.bucket].label + ' ' + bucketRange(meta.bucket) : '這個時段') +
+        '」在附近 2km 的歷史上車點（即時，越上面越常上車）'
+      : '依「會聚人的場所＋你的歷史上車點＋現在時段」估算，越上面越有機會';
+    panel.innerHTML = '<div class="hs-head"><span>' + title + '</span>' +
       '<button class="hs-close" onclick="MaptripHotspots.close()">✕</button></div>' +
-      '<div class="hs-note">依「會聚人的場所＋你的歷史上車點＋現在時段」估算，越上面越有機會</div>' +
+      '<div class="hs-note">' + note + '</div>' +
       '<div class="hs-list">' + rows + '</div>';
     panel.style.display = 'block';
   }
@@ -299,23 +355,32 @@
     if (busy) return;
     var me = pos();
     if (!me) { say('等待 GPS 訊號中…'); return; }
+
+    // 1) 即時：先用「當前時段的歷史上車點」秒出（不等網路），這才是使用者要的即時感
+    var hn = buildHistoryNow(me);
+    if (hn.zones.length) {
+      drawMap(hn.zones, me);
+      renderPanel(hn.zones, me, { mode: 'history', bucket: hn.bucket });
+      say('現在【' + (BUCKETS[hn.bucket] ? BUCKETS[hn.bucket].label : '此時段') + '】· 你這個時段的上車熱點');
+      return;
+    }
+
+    // 2) 這個時段還沒有歷史 → 退回附近場所（Overpass）估算
     setBusy(true);
-    say('搜尋 2 公里內熱區中…');
+    say('這個時段還沒有歷史，改用附近場所估算…');
     fetchOverpass(me.lat, me.lng).then(function (data) {
       var els = (data && data.elements) || null;
       var zones = build(els || [], me);
       setBusy(false);
-      if (!els) {
-        if (zones.length) say('地圖服務忙線，先用你的歷史紀錄估算');
-        else { say('地圖服務暫時無法連線，稍後再試'); renderPanel([], me); return; }
-      }
+      if (!els && !zones.length) { say('地圖服務暫時無法連線，稍後再試'); renderPanel([], me, { mode: 'poi' }); return; }
+      if (!els) say('地圖服務忙線，先用你的歷史紀錄估算');
       drawMap(zones, me);
-      renderPanel(zones, me);
+      renderPanel(zones, me, { mode: 'poi' });
     }).catch(function () {
       setBusy(false);
       var zones = build([], me);      // 最後防線：只用歷史
       drawMap(zones, me);
-      renderPanel(zones, me);
+      renderPanel(zones, me, { mode: 'poi' });
       say(zones.length ? '用你的歷史紀錄估算' : '搜尋失敗，稍後再試');
     });
   }
@@ -326,6 +391,7 @@
     clearMap();
   }
 
-  window.MaptripHotspots = { run: run, close: close, focus: focusZone };
+  window.MaptripHotspots = { run: run, close: close, focus: focusZone,
+    _buildHistoryNow: buildHistoryNow, _bucketOf: bucketOf };
   window.openHotspots = run;
 })();

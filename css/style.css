@@ -476,6 +476,44 @@ html, body {
   color: #1a73e8; border-radius: 8px; padding: 4px 10px;
   font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer;
 }
+.commission-btn {
+  background: rgba(245,124,0,0.1); border: 1px solid rgba(245,124,0,0.28);
+  color: #e8710a; border-radius: 8px; padding: 4px 10px;
+  font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer; flex-shrink: 0;
+}
+/* 批次抽成編輯 */
+#commission-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 40;
+}
+#commission-sheet {
+  position: fixed; bottom: 0; left: 0; right: 0; max-height: 82vh; background: #fff;
+  border-radius: 20px 20px 0 0; border-top: 1px solid rgba(0,0,0,0.08); z-index: 41;
+  display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.25s ease;
+  padding-bottom: env(safe-area-inset-bottom, 0); box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+}
+#commission-sheet.show { transform: translateY(0); }
+.cb-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 18px 2px; }
+.cb-header span { font-size: 1rem; font-weight: 700; color: #202124; }
+.cb-note { font-size: 0.76rem; color: #9aa0a6; padding: 0 18px 8px; }
+#cb-body { overflow-y: auto; flex: 1; padding: 0 18px; }
+.cb-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.cb-num { flex: none; width: 24px; height: 24px; border-radius: 50%; background: #f1f3f4; color: #5f6368;
+  font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.cb-mid { flex: 1; min-width: 0; }
+.cb-time { font-size: 0.86rem; color: #202124; }
+.cb-fare { font-size: 0.74rem; color: #9aa0a6; margin-top: 1px; }
+.cb-inwrap { flex: none; display: flex; align-items: center; gap: 6px; background: #f8f9fa;
+  border: 1.5px solid rgba(0,0,0,0.12); border-radius: 10px; padding: 6px 10px; }
+.cb-inwrap:focus-within { border-color: #e8710a; background: #fff; }
+.cb-inwrap > span { font-size: 0.74rem; color: #9aa0a6; }
+.cb-inp { width: 58px; border: none; background: none; text-align: right; outline: none;
+  font-size: 1.05rem; font-weight: 700; color: #202124; font-family: inherit; }
+.cb-btns { display: flex; gap: 10px; padding: 10px 18px 14px; border-top: 1px solid rgba(0,0,0,0.06); }
+.cb-cancel { flex: 1; background: #f1f3f4; border: none; color: #5f6368; border-radius: 12px;
+  padding: 13px; font-size: 0.9rem; font-family: inherit; cursor: pointer; font-weight: 500; }
+.cb-save { flex: 2; background: #e8710a; border: none; color: #fff; border-radius: 12px;
+  padding: 13px; font-size: 0.95rem; font-family: inherit; cursor: pointer; font-weight: 600; }
+.cb-save:active, .cb-cancel:active { opacity: 0.85; }
 .sheet-close { background: none; border: none; color: #9aa0a6; font-size: 1.1rem; cursor: pointer; padding: 4px 8px; }
 #sheet-body, #history-body { overflow-y: auto; flex: 1; padding-bottom: 12px; }
 .sheet-footer { padding: 10px 18px 14px; border-top: 1px solid rgba(0,0,0,0.06); flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -691,6 +729,18 @@ html, body {
   font-size: 1.05rem; font-weight: 700; color: #202124; outline: none; font-family: inherit;
 }
 .fare-extra input::placeholder { color: #dadce0; font-weight: 400; }
+/* 叫車費切換：開＝$10（藍底），關＝無（灰底） */
+.fare-toggle {
+  flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: #f8f9fa; border: 1.5px solid rgba(0,0,0,0.12);
+  border-radius: 12px; padding: 9px 12px; cursor: pointer; font-family: inherit;
+}
+.fare-toggle .fare-toggle-lbl { font-size: 0.82rem; color: #5f6368; white-space: nowrap; }
+.fare-toggle .fare-toggle-val { font-size: 1.05rem; font-weight: 700; color: #9aa0a6; }
+.fare-toggle.on { background: #e8f0fe; border-color: #1a73e8; }
+.fare-toggle.on .fare-toggle-lbl { color: #1a73e8; }
+.fare-toggle.on .fare-toggle-val { color: #1a73e8; }
+.fare-toggle:active { opacity: 0.85; }
 #fare-btns { display: flex; gap: 10px; }
 #fare-skip {
   flex: 1; background: #f1f3f4; border: none; color: #5f6368;
@@ -933,6 +983,16 @@ html, body {
   .empty-state { color: #9aa0a6; }
   .danger-btn { background: rgba(234,67,53,0.15); color: #f28b82; border-color: rgba(234,67,53,0.3); }
 
+  #commission-sheet { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); }
+  .cb-header span { color: #e8eaed; }
+  .cb-row { border-bottom-color: rgba(255,255,255,0.06); }
+  .cb-num { background: #2a2a2a; color: #9aa0a6; }
+  .cb-time { color: #e8eaed; }
+  .cb-inwrap { background: #252525; border-color: rgba(255,255,255,0.12); }
+  .cb-inwrap:focus-within { border-color: #f9ab00; background: #1e1e1e; }
+  .cb-inp { color: #e8eaed; }
+  .cb-cancel { background: #2a2a2a; color: #c8ccd2; }
+  .cb-btns { border-top-color: rgba(255,255,255,0.06); }
   #fare-dialog { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); }
   #fare-header { color: #e8eaed; border-bottom-color: rgba(255,255,255,0.06); }
   .fare-label { color: #9aa0a6; }
@@ -945,6 +1005,11 @@ html, body {
   .fare-extra:focus-within { border-color: #6ab4ff; background: #1e1e1e; }
   .fare-extra > span { color: #9aa0a6; }
   .fare-extra input { color: #e8eaed; }
+  .fare-toggle { background: #252525; border-color: rgba(255,255,255,0.12); }
+  .fare-toggle .fare-toggle-lbl { color: #9aa0a6; }
+  .fare-toggle .fare-toggle-val { color: #7a7f87; }
+  .fare-toggle.on { background: rgba(106,180,255,0.16); border-color: #6ab4ff; }
+  .fare-toggle.on .fare-toggle-lbl, .fare-toggle.on .fare-toggle-val { color: #6ab4ff; }
   #fare-skip { background: #252525; color: #9aa0a6; }
   .pay-cash { background: rgba(52,168,83,0.18); }
   .pay-card { background: rgba(26,115,232,0.18); }

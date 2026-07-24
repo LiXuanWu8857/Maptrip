@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.248**（2026-07-23）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.249**（2026-07-24）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理都由不同 session 加入）。
 
 ## 架構
@@ -64,7 +64,14 @@
   在 zoomend/moveend/去抖 rotate 後強制以目前投影重畫所有折線（allMapLayers/soloLayers/
   dayPreviewLayers/replayTempLayers/activePolyline）。GL 模式 redraw 不存在自動略過
 - **記帳**：每趟車資、現金/刷卡/其他（其他可填備註 label；改回現金/刷卡會清 label）、
-  抽成 commission、叫車費 dispatch（綁在編輯車資對話框）
+  抽成 commission、叫車費 dispatch
+- **叫車費切換 + 抽成延後填（v249）**：叫車費改成單一切換按鈕（`toggleDispatch`），
+  開＝`DISPATCH_FEE`（10 元）、關＝0；載入舊趟若 dispatch>0 則沿用該趟金額。
+  行程完成當下**不再問抽成**（抽成兩天後才知道；`_showCommissionField(false)` 隱藏該欄），
+  改在歷史批次補。編輯對話框仍顯示抽成欄。
+- **批次編輯抽成（v249）** `app.js openCommissionBatch/saveCommissionBatch`：歷史每日標題列
+  新增「抽成」鈕，開底部 sheet 列出當日各趟（時間／車資），各自填不同抽成、一次「全部儲存」，
+  逐筆 `_pushCommission` 上雲並 `syncDays`。純 DOM 面板（`#commission-sheet`，樣式在 style.css）
 - **收支報表** `js/finance.js`：月營收（排除「其他」）、淨收入＝營收−抽成/叫車−支出、
   時段/星期分析、支出 CRUD（localStorage maptrip_expenses）
 - **上車熱點 × 時段（v248，在「分析」分頁）** `js/finance.js`：把每趟 `coords[0]`
@@ -75,6 +82,11 @@
   localStorage `maptrip_geocache`（key＝小數 3 位；空字串也快取避免重打），依用量規範
   每筆間隔 1.1 秒、已快取者不等待；離線／失敗顯示「未命名地點」但趟數統計照常。
   排除「其他」付款。純函式 `MaptripFinance._analyzePickups/_bucketIndexOf/_pickName` 供測試
+- **找客熱區（v245，v249 改即時）** `js/hotspots.js`：FAB 開啟。**v249 起優先即時**：
+  直接讀當下位置與時間，用 `buildHistoryNow` 只取「當前時段（同 8 段桶）＋附近 2km」的
+  歷史上車點，就地 350m 聚類、近期加權排名，**秒出免等網路**（這才是使用者要的即時感）。
+  只有這個時段還沒有歷史時，才退回 Overpass 附近場所估算（原行為）。面板依 `meta.mode`
+  切文案／顯示趟數。純函式 `MaptripHotspots._buildHistoryNow/_bucketOf` 供測試
 - **記帳者模式** `js/bookkeeper.js`：邀請碼授權；記帳者唯讀行程、可編抽成；
   雙向即時同步（司機端訂閱 commissions → applyCommission 合併）
 - **歷史行程**：月/日收合清單、日預覽（白底黑線＋編號）、回放、刪除、休息時間設定
