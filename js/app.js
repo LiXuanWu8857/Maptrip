@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.250';
+const APP_VERSION  = '1.1.251';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -531,15 +531,11 @@ function onGpsUpdate(pos) {
   }
 
   if (activeTrip) {
-    // GPS 品質閘門：都市峽谷/高架下的反射訊號會產生亂飄的點，
-    // (1) 水平精度太差（>40m）不記錄；(2) 相對上一點為物理上不可能的瞬移（>50 m/s）不記錄。
-    // 過濾掉的點也不畫進即時折線，畫面與存檔一致（藍點仍照常移動）。
+    // GPS 品質閘門已抽成模組 js/geo-gate.js（判準不變：精度>40m 或 相對上點瞬移>50 m/s 不記錄）。
+    // 都市峽谷/高架反射會產生亂飄點；過濾掉的點也不畫進即時折線，畫面與存檔一致（藍點仍照常移動）。
     const last = activeTrip.coords.at(-1);
-    const badAcc = acc != null && acc > 40;
-    const isJump = last &&
-      haversine(last, { lat, lng }) / Math.max(1, (Date.now() - last.t) / 1000) > 50;
 
-    if (!badAcc && !isJump) {
+    if (MaptripGeoGate.accept({ lat, lng, accuracy: acc, t: Date.now() }, last).accept) {
       // 每次 GPS 更新都延伸折線（畫面即時跟隨軌跡）。
       // 縮放/手勢期間先不畫（否則整條線會飛走），結束後 resyncLiveLine 一次補上
       if (_mapZooming || _mapTouching) _lineResyncPending = true;
@@ -1127,61 +1123,10 @@ function _snapSane(result, coords, ratio, slack) {
   } catch (_) { return true; }
 }
 
-// 點 p 到線段 a-b 的垂直距離（公尺，區域平面近似，短距離足夠準）
-function _perpM(a, b, p) {
-  const kx = 111000 * Math.cos(a.lat * Math.PI / 180), ky = 111000;
-  const ax = a.lng * kx, ay = a.lat * ky, bx = b.lng * kx, by = b.lat * ky, px = p.lng * kx, py = p.lat * ky;
-  const dx = bx - ax, dy = by - ay;
-  const len = Math.hypot(dx, dy) || 1;
-  return Math.abs((px - ax) * dy - (py - ay) * dx) / len;
-}
-
-// 剔除「來回飄移群」：從上一個保留點 a 往前看最多 4 點，若繞經 i..j-1 再到 coords[j]
-// 的路徑長 > 直線 2.5 倍、多繞 60m 以上，「且（端點相距<35m ＝甩出去又甩回原地
-// ／或 中間某點離 a-b 直線的垂距 > 端距 2 倍 ＝ 尖刺）」→ 整群丟棄。
-// 這兩個條件是關鍵防線：真正繞街廓的路，端點有實際前進、垂距與端距相當，兩條都不成立 → 不誤刪。
-function _dropSpikes(coords) {
-  if (!coords || coords.length < 3) return coords;
-  const out = [coords[0]];
-  let i = 1;
-  while (i < coords.length) {
-    if (i === coords.length - 1) { out.push(coords[i]); break; }
-    const a = out[out.length - 1];
-    let collapsed = false;
-    for (let j = i + 1; j <= Math.min(i + 4, coords.length - 1); j++) {
-      let via = haversine(a, coords[i]);
-      for (let k = i; k < j; k++) via += haversine(coords[k], coords[k + 1]);
-      const direct = haversine(a, coords[j]);
-      // 第一個中間點必須自己就偏離 a→coords[j] 直線 >15m，才視為飄移群的起點；
-      // 否則（例如飄點前面幾個正常直行點）不會被連坐一起刪掉。
-      if (via > direct * 2.5 && via - direct > 60 && _perpM(a, coords[j], coords[i]) > 15) {
-        let apex = 0;
-        for (let k = i; k < j; k++) apex = Math.max(apex, _perpM(a, coords[j], coords[k]));
-        if (direct < 35 || apex > direct * 2) { i = j; collapsed = true; break; }
-      }
-    }
-    if (!collapsed) { out.push(coords[i]); i++; }
-  }
-  return out;
-}
-
-// 迭代清理鋸齒/飄點群：都市峽谷/高架下的多重反射會產生「一小段來回鋸齒」——
-// 不只單一孤立飄點，而是好幾個連續飄點。_dropSpikes 單趟只剝一層，
-// 迭代數趟才能把整叢鋸齒剝乾淨（每趟剝掉當前最突兀的點，相鄰次突兀點下一趟變孤立）。
-// 安全閥：清掉超過 40% 的點＝門檻誤傷正常轉彎，放棄清理保留原始軌跡。
-function _cleanTrace(coords) {
-  if (!coords || coords.length < 4) return coords;
-  let cur = coords;
-  for (let pass = 0; pass < 4; pass++) {
-    const next = _dropSpikes(cur);
-    if (next.length === cur.length) break;   // 穩定：沒有飄點可剝了
-    cur = next;
-  }
-  // 安全閥：只在「較長的真實行程」上防止門檻誤傷（剝掉 >40% ＝ 有異，還原）。
-  // 短軌跡（測試/極短趟）不套用，避免少數幾點的正常清理被誤判為過度清理。
-  if (coords.length >= 25 && cur.length < coords.length * 0.6) return coords;
-  return cur;
-}
+// GPS 飄移群清理已抽成模組 js/geo-clean.js（_perpM/_dropSpikes/_cleanTrace 邏輯逐字不變，
+// 已用 404 案例回歸測試驗證與原版輸出完全相同）。這裡保留同名 _cleanTrace 委派，
+// 呼叫端（snapToRoads / retrySnapBacklog / finalize 等）不需改動。
+function _cleanTrace(coords) { return MaptripGeoClean.cleanTrace(coords); }
 
 async function snapToRoads(coords) {
   if (coords.length < 2) return null;
