@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.253';
+const APP_VERSION  = '1.1.254';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1620,10 +1620,10 @@ function renderTripSheet() {
     body.innerHTML = '<div class="empty-state">今日尚無行程紀錄<br>按「開始行程」開始追蹤</div>'; return;
   }
   const totalDist = todayTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
-  const fareLine = _fareLineHtml(todayTrips);
   const restMin = getRestMin(todayKey());
   const restHr = restMin ? +(restMin / 60).toFixed(2) : '';
   const work = workMs(todayTrips, restMin);
+  const fareLine = _fareLineHtml(todayTrips, work);
   const summary = `<div class="day-summary">
     <div class="ds-top">
       <span>${todayTrips.length} 趟</span>
@@ -2147,8 +2147,8 @@ function renderHistorySheet() {
     const mDays = monthMap[mk];
     const mTrips = mDays.flatMap(d => raw[d]);
     const mDist = mTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
-    const mFareLine = _fareLineHtml(mTrips);
     const mWork = mDays.reduce((s, d) => s + workMs(raw[d], getRestMin(d)), 0);
+    const mFareLine = _fareLineHtml(mTrips, mWork);
     const [yy, mm] = mk.split('-');
     const monthLabel = `${yy}年${parseInt(mm, 10)}月`;
     const monthOpen = monthIdx === 0;   // 最近月份展開，較遠月份預設收折
@@ -2156,10 +2156,10 @@ function renderHistorySheet() {
     const daysHtml = mDays.map(day => {
       const trips = raw[day];
       const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
-      const fareLine = _fareLineHtml(trips);
       const dRestMin = getRestMin(day);
       const dRestHr = dRestMin ? +(dRestMin / 60).toFixed(2) : '';
       const dWork = workMs(trips, dRestMin);
+      const fareLine = _fareLineHtml(trips, dWork);
       const isOpen = globalDayIdx === 0;   // 全清單最近一天展開
       globalDayIdx++;
       const restRow = `<div class="dr-rest">工作 <b id="work-${day}">${fmtWork(dWork)}</b>　休息
@@ -3483,13 +3483,19 @@ function _fareStats(trips) {
   });
   return { card, cash, total };
 }
-// 產生「刷卡：X　現金：Y　總計：Z」一行；無金額回傳空字串
-function _fareLineHtml(trips) {
+// 產生「刷卡：X　現金：Y　總計：Z」一行；無金額回傳空字串。
+// 傳入 workMsVal（實際工作時長 ms）且 > 0 時，在總計旁加上每小時金額 $X/hr。
+function _fareLineHtml(trips, workMsVal) {
   const { card, cash, total } = _fareStats(trips);
   if (!total) return '';
-  return `<span class="fl-card">刷卡：${card.toLocaleString()}</span>` +
+  let html = `<span class="fl-card">刷卡：${card.toLocaleString()}</span>` +
          `<span class="fl-cash">現金：${cash.toLocaleString()}</span>` +
          `<span class="fl-total">總計：${total.toLocaleString()}</span>`;
+  if (workMsVal && workMsVal > 0) {
+    const rate = Math.round(total / (workMsVal / 3600000));
+    html += `<span class="fl-rate">$${rate.toLocaleString()}/hr</span>`;
+  }
+  return html;
 }
 function fmtDur(ms) {
   const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);

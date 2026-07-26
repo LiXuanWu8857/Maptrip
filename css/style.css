@@ -794,10 +794,12 @@ html, body {
 .fl-card  { color: #1a73e8; font-weight: 700; }
 .fl-cash  { color: #34a853; font-weight: 700; }
 .fl-total { color: #202124; font-weight: 700; margin-left: auto; }
+.fl-rate  { color: #e8710a; font-weight: 700; margin-left: 10px; }
 .day-info-bot .fl-card, .day-info-bot .fl-cash, .day-info-bot .fl-total {
   margin-right: 10px; font-weight: 600;
 }
 .day-info-bot .fl-total { margin-right: 0; }
+.month-fare .fl-rate { margin-left: 0; }
 .trip-dur { color: #5f6368; font-size: 0.82rem; }
 .trip-fare-tag { color: #1a73e8; font-weight: 600; }
 .fare-edit-btn {
@@ -975,6 +977,7 @@ html, body {
   .fl-card { color: #6ab4ff; }
   .fl-cash { color: #6fcf80; }
   .fl-total { color: #e8eaed; }
+  .fl-rate { color: #f9ab00; }
   .history-day { color: #6ab4ff; }
   .history-day:active { background: rgba(106,180,255,0.08); }
   .day-info-bot { color: #9aa0a6; }
