@@ -275,13 +275,20 @@
       ring.addTo(m);
     } catch (_) {}
     zones.forEach(function (z, i) {
-      var col = RANKC[i] || '#1a73e8';
-      var html = '<div class="hs-pin" style="background:' + col + '">' + (i + 1) + '</div>';
-      var icon = L.divIcon({ className: 'hs-pin-wrap', html: html, iconSize: [30, 30], iconAnchor: [15, 15] });
-      var mk = L.marker([z.center.lat, z.center.lng], { icon: icon });
-      mk.on('click', function () { focusZone(i); });
-      mk.addTo(m);
-      markers.push(mk);
+      try {
+        var col = RANKC[i] || '#1a73e8';
+        var html = '<div class="hs-pin" style="background:' + col + '">' + (i + 1) + '</div>';
+        var icon = L.divIcon({ className: 'hs-pin-wrap', html: html, iconSize: [30, 30], iconAnchor: [15, 15] });
+        var mk = L.marker([z.center.lat, z.center.lng], { icon: icon });
+        mk.addTo(m);
+        // 綁點擊：標準 Leaflet 有 marker.on；向量相容層（gl-compat）的 Marker 沒有 .on，
+        // 改用 DOM 元素監聽（否則向量模式會丟 TypeError，整個 drawMap 崩潰）。
+        (function (idx) {
+          if (typeof mk.on === 'function') { mk.on('click', function () { focusZone(idx); }); }
+          else if (mk.getElement) { var el = mk.getElement(); if (el) el.addEventListener('click', function () { focusZone(idx); }); }
+        })(i);
+        markers.push(mk);
+      } catch (_) {}
     });
   }
 
