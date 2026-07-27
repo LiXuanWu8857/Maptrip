@@ -101,79 +101,6 @@ html, body {
 .badge-warn { background: rgba(251,188,4,0.15);  color: #e37400; border: 1px solid rgba(251,188,4,0.4); }
 .badge-err  { background: rgba(234,67,53,0.12);  color: #c5221f; border: 1px solid rgba(234,67,53,0.3); }
 
-#autostart-banner {
-  position: fixed;
-  top: -130px;
-  left: 12px; right: 12px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.14);
-  border: 1px solid rgba(52,168,83,0.25);
-  padding: 14px 16px;
-  z-index: 25;
-  visibility: hidden;   /* 隱藏時不繪出，避免高橫幅下緣露在畫面頂端 */
-  transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0s linear 0.4s;
-}
-#autostart-banner.show {
-  top: calc(env(safe-area-inset-top, 0px) + 56px);
-  visibility: visible;
-  transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0s;
-}
-#autostart-info {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 0.88rem; font-weight: 500; color: #202124;
-  margin-bottom: 12px;
-}
-#autostart-btns { display: flex; gap: 8px; }
-#autostart-dismiss {
-  flex: 1; background: #f1f3f4; border: none; color: #5f6368;
-  border-radius: 10px; padding: 10px; font-size: 0.88rem;
-  font-family: inherit; cursor: pointer; font-weight: 500;
-}
-#autostart-confirm {
-  flex: 2; background: #34a853; border: none; color: #fff;
-  border-radius: 10px; padding: 10px; font-size: 0.88rem;
-  font-family: inherit; cursor: pointer; font-weight: 600;
-}
-#autostart-confirm:active { opacity: 0.85; }
-
-#arrival-banner {
-  position: fixed;
-  top: -130px;
-  left: 12px; right: 12px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.14);
-  border: 1px solid rgba(0,0,0,0.08);
-  padding: 14px 16px;
-  z-index: 25;
-  visibility: hidden;   /* 隱藏時不繪出，避免高橫幅下緣露在畫面頂端 */
-  transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0s linear 0.4s;
-}
-#arrival-banner.show {
-  top: calc(env(safe-area-inset-top, 0px) + 56px);
-  visibility: visible;
-  transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), visibility 0s;
-}
-#arrival-info {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 0.88rem; font-weight: 500; color: #202124;
-  margin-bottom: 12px;
-}
-#arrival-icon { font-size: 1.1rem; }
-#arrival-btns { display: flex; gap: 8px; }
-#arrival-dismiss {
-  flex: 1; background: #f1f3f4; border: none; color: #5f6368;
-  border-radius: 10px; padding: 10px; font-size: 0.88rem;
-  font-family: inherit; cursor: pointer; font-weight: 500;
-}
-#arrival-confirm {
-  flex: 2; background: #1a73e8; border: none; color: #fff;
-  border-radius: 10px; padding: 10px; font-size: 0.88rem;
-  font-family: inherit; cursor: pointer; font-weight: 600;
-}
-#arrival-confirm:active { opacity: 0.85; }
-
 #tile-toggle {
   position: fixed; top: calc(env(safe-area-inset-top, 0px) + 56px); left: 12px;
   background: rgba(255,255,255,0.9); backdrop-filter: blur(8px);
@@ -962,10 +889,6 @@ html, body {
 
   #tile-toggle { background: rgba(30,30,30,0.9); border-color: rgba(255,255,255,0.12); color: #e8eaed; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
 
-  #arrival-banner, #autostart-banner { background: #1e1e1e; border-color: rgba(255,255,255,0.1); box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
-  #arrival-info, #autostart-info { color: #e8eaed; }
-  #arrival-dismiss, #autostart-dismiss { background: #2a2a2a; color: #9aa0a6; }
-
   #trip-sheet, #history-sheet { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -4px 24px rgba(0,0,0,0.4); }
   .sheet-handle { background: rgba(255,255,255,0.12); }
   .sheet-header { border-bottom-color: rgba(255,255,255,0.06); color: #e8eaed; }
@@ -1064,9 +987,8 @@ html, body {
     right: max(0px, calc(50% - 280px));
   }
 
-  /* 浮動橫幅置中（錄製中、回放、更新提示、到達提示） */
-  #rec-banner, #solo-bar, #update-bar,
-  #arrival-banner, #autostart-banner {
+  /* 浮動橫幅置中（錄製中、回放、更新提示） */
+  #rec-banner, #solo-bar, #update-bar {
     left: max(12px, calc(50% - 260px));
     right: max(12px, calc(50% - 260px));
   }

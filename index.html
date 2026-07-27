@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.255';</script>
+<script>window.INDEX_VERSION = '1.1.256';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -163,9 +163,7 @@ try {
         '#top-bar{top:0!important}' +
         '#top-menu{top:52px!important}' +
         '#gps-badge{top:56px!important}' +
-        '#tile-toggle{top:56px!important}' +
-        '#autostart-banner.show{top:56px!important}' +
-        '#arrival-banner.show{top:56px!important}';
+        '#tile-toggle{top:56px!important}';
       document.head.appendChild(s);
     } else if (!on && s) {
       s.remove();
@@ -242,30 +240,6 @@ try {
 
 <!-- Map -->
 <div id="map"></div>
-
-<!-- Auto-start Banner -->
-<div id="autostart-banner">
-  <div id="autostart-info">
-    <span>🚗</span>
-    <span>偵測到行駛中，要開始記錄行程嗎？</span>
-  </div>
-  <div id="autostart-btns">
-    <button id="autostart-dismiss" onclick="dismissAutoStart()">略過</button>
-    <button id="autostart-confirm" onclick="confirmAutoStart()">開始記錄</button>
-  </div>
-</div>
-
-<!-- Arrival Banner -->
-<div id="arrival-banner">
-  <div id="arrival-info">
-    <span id="arrival-icon">📍</span>
-    <span id="arrival-msg">偵測到您已停車，要結束行程嗎？</span>
-  </div>
-  <div id="arrival-btns">
-    <button id="arrival-dismiss" onclick="arrivalDismiss()">繼續記錄</button>
-    <button id="arrival-confirm" onclick="arrivalConfirm()">結束行程</button>
-  </div>
-</div>
 
 <!-- GPS Badge -->
 <div id="gps-badge" class="badge-off">📍 等待 GPS</div>

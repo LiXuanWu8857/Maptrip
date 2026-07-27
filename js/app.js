@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.255';
+const APP_VERSION  = '1.1.256';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -36,11 +36,6 @@ window.applyCommission = applyCommission;
 const MIN_ACCURACY_M = 60;
 const GPS_RECORD_MS  = 1000;   // 每秒存一點，路線更細緻
 const LIVE_SNAP_PTS  = 30;     // 每累積 30 點（約 30 秒）即時貼合一次道路
-const MOVING_SPEED_MS      = 4;     // >4 m/s (~15 km/h) = 行駛中
-const STOPPED_SPEED_MS     = 1;     // <1 m/s (~3.6 km/h) = 停車
-const ARRIVAL_DELAY_MS     = 8000;  // 停車滿 8 秒才提示
-const AUTO_START_SPEED_MS  = 5 / 3.6; // >5 km/h 持續才問是否開始
-const AUTO_START_DELAY_MS  = 4000;  // 行駛滿 4 秒才跳提示
 
 let map, myDotMarker, accuracyCircle, currentPos = null;
 // 橋接：讓獨立模組（hotspots.js…）讀到即時的地圖與定位（兩者為 let，不在 window 上）
@@ -55,7 +50,6 @@ let soloLayers = [];
 let soloSet = [], soloIdx = 0, soloLabelFn = null;  // 單趟顯示：可左右切換的趟次集合
 let soloFromHistory = false;  // 從歷史紀錄進入 solo 模式時為 true
 let soloHistoryTile = null;   // 歷史 solo 時換用的無標示底圖
-let wasMoving = false, stoppedTimer = null, arrivalBannerShown = false;
 let autoFollow = false, wakeLock = null;
 let headingUp = false;          // 朝車頭模式（地圖旋轉跟隨行進方向）
 let lastHeading = 0, headingRefPos = null;
@@ -67,7 +61,7 @@ let myHeading = null;           // 我的位置朝向（GPS 行進方向 / 羅�
 let _lastPanPos = null;         // 上次跟隨移動的位置（移動 <3m 不重跑跟隨動畫，省 GPU）
 let _lastCircleAt = null;       // 上次精度圓圈的位置/精度（無實質變化不重畫）
 let activeSnapPending = false;
-let autoStartTimer = null, autoStartShown = false, autoStartResetTimer = null, lastKnownPos = null;
+let lastKnownPos = null;   // 上一個定位（GPS 無速度時用位移估速，見 onGpsUpdate）
 let pendingWidgetStart = false;  // 鎖屏按了開始、但 GPS 還沒定位時，先排隊
 let pendingFareTrip = null;      // 由浮窗結束、等待數字鍵盤輸入車資的那趟
 let lastHeartbeat = 0;           // 上次替鎖屏方塊「續命」的時間戳
@@ -554,108 +548,14 @@ function onGpsUpdate(pos) {
         }
       }
     }
-    checkArrival(effectiveSpeed);
-  } else {
-    checkAutoStart(effectiveSpeed);
   }
 
   // 地圖朝車頭旋轉放最後，並包 try/catch：即使旋轉出錯也絕不影響上面的行程記錄
   try { applyHeadingUp(lat, lng, effectiveSpeed, pos.coords.heading); } catch (_) {}
 }
 
-// 自動偵測彈窗（行駛中→問開始、停車→問結束)已依使用者要求停用：行程一律手動開始/結束。
-// 想恢復把這個開關改回 true 即可。
-const AUTO_PROMPTS = false;
-
-function checkArrival(speed) {
-  if (!AUTO_PROMPTS) return;
-  if (speed == null || isNaN(speed) || speed < 0) return;
-  if (speed > MOVING_SPEED_MS) {
-    wasMoving = true;
-    arrivalBannerShown = false;
-    clearTimeout(stoppedTimer);
-    stoppedTimer = null;
-    hideArrivalBanner();
-  } else if (speed >= STOPPED_SPEED_MS) {
-    // 慢速蠕行（塞車 1~4 m/s）：不算停車，取消倒數，避免誤跳「已抵達」
-    clearTimeout(stoppedTimer);
-    stoppedTimer = null;
-  } else if (speed < STOPPED_SPEED_MS && wasMoving && !arrivalBannerShown) {
-    if (stoppedTimer) return; // 已在倒數中，不重複設定
-    stoppedTimer = setTimeout(() => {
-      stoppedTimer = null;
-      if (activeTrip && !arrivalBannerShown) {
-        arrivalBannerShown = true;
-        showArrivalBanner();
-      }
-    }, ARRIVAL_DELAY_MS);
-  }
-}
-
-function showArrivalBanner() {
-  const b = document.getElementById('arrival-banner');
-  b.classList.add('show');
-  clearTimeout(b._autoDismiss);
-  b._autoDismiss = setTimeout(() => hideArrivalBanner(), 30000);
-}
-
-function hideArrivalBanner() {
-  document.getElementById('arrival-banner').classList.remove('show');
-}
-
-function arrivalConfirm() {
-  hideArrivalBanner();
-  endTrip();
-}
-
-function arrivalDismiss() {
-  hideArrivalBanner();
-  wasMoving = false;
-  arrivalBannerShown = false;
-}
-
-function checkAutoStart(speed) {
-  if (!AUTO_PROMPTS) return;
-  if (activeTrip || autoStartShown) return;
-  if (speed == null || isNaN(speed) || speed < 0) return;
-  if (speed > AUTO_START_SPEED_MS) {
-    if (!autoStartTimer) {
-      autoStartTimer = setTimeout(() => {
-        autoStartTimer = null;
-        if (!activeTrip && !autoStartShown) {
-          autoStartShown = true;
-          document.getElementById('autostart-banner').classList.add('show');
-        }
-      }, AUTO_START_DELAY_MS);
-    }
-  } else {
-    clearTimeout(autoStartTimer);
-    autoStartTimer = null;
-  }
-  // 「略過」後：停止移動連續 2 分鐘即重置，下次出發能再次提示
-  if (autoStartShown && speed < STOPPED_SPEED_MS) {
-    if (!autoStartResetTimer) autoStartResetTimer = setTimeout(() => {
-      autoStartResetTimer = null;
-      autoStartShown = false;
-    }, 120000);
-  } else if (autoStartResetTimer) {
-    clearTimeout(autoStartResetTimer);
-    autoStartResetTimer = null;
-  }
-}
-
-function confirmAutoStart() {
-  document.getElementById('autostart-banner').classList.remove('show');
-  autoStartShown = false;
-  beginRecording();
-}
-
-function dismissAutoStart() {
-  document.getElementById('autostart-banner').classList.remove('show');
-  autoStartShown = true; // 略過後本次不再提示，直到停車再重置
-  clearTimeout(autoStartTimer);
-  autoStartTimer = null;
-}
+// 自動偵測彈窗（行駛中→問開始、停車→問結束）已於 v1.1.256 移除：行程一律手動開始/結束，
+// 此功能長期停用（AUTO_PROMPTS=false）為死碼，整段（含到達/出發偵測、橫幅 UI、相關常數/變數）刪除。
 
 function onGpsError(err) {
   const msgs = { 1: 'GPS 存取被拒', 2: 'GPS 訊號遺失', 3: 'GPS 逾時' };
@@ -774,8 +674,6 @@ function scheduleFollowResume() {
 async function beginRecording() {
   goHome();   // 開始行程立刻回主頁（地圖），收起紀錄/歷史等覆蓋層
   restartSimulation();
-  wasMoving = false;
-  arrivalBannerShown = false;
   activeSnapPending = false;
   setAutoFollow(true);
   activeTrip = { id: Date.now(), startTime: Date.now(), coords: [{ ...currentPos, t: Date.now() }] };
@@ -823,8 +721,6 @@ function endTrip(fromFloat) {
   clearActiveTrip();   // 行程正式結束，清掉復原暫存
   clearInterval(timerTick);  timerTick = null;
   liveAct()?.endTrip();
-  clearTimeout(stoppedTimer); stoppedTimer = null;
-  hideArrivalBanner();
 
   const trip = {
     id: activeTrip.id, startTime: activeTrip.startTime, endTime: Date.now(),
@@ -833,8 +729,6 @@ function endTrip(fromFloat) {
 
   if (activePolyline) { map.removeLayer(activePolyline); activePolyline = null; }
   activeTrip = null;
-  wasMoving = false; arrivalBannerShown = false;
-  autoStartShown = false; // 行程結束後，下次出發可再次偵測
   setAutoFollow(false);
   const startBtn = document.getElementById('start-btn');
   startBtn.onclick = startTrip;
