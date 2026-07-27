@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.254';
+const APP_VERSION  = '1.1.255';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -3440,94 +3440,24 @@ function loadTodayFromStorage() {
   updateTopBar();
 }
 
-function calcTotalDist(coords) {
-  let d = 0;
-  for (let i = 1; i < coords.length; i++) d += haversine(coords[i - 1], coords[i]);
-  return d;
-}
-
-function haversine(a, b) {
-  const R = 6371000;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const x = Math.sin(dLat / 2) ** 2 +
-    Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-}
-
-function fmtDist(m) { return !m ? '0 m' : m >= 1000 ? `${(m/1000).toFixed(1)} km` : `${Math.round(m)} m`; }
-function _payTag(pm) {
-  if (pm === 'cash') return '<span class="pay-tag pay-cash">現金</span>';
-  if (pm === 'card') return '<span class="pay-tag pay-card">刷卡</span>';
-  return '';
-}
-// 「其他」類行程的名稱標籤（如騎腳踏車）
-function _otherTag(t) {
-  if (t.paymentMethod === 'other') return `<span class="pay-tag pay-other">${t.label || '其他'}</span>`;
-  return '';
-}
-// 抽成 / 叫車費標籤（記錄公司抽成用）
-function _extraTag(t) {
-  let s = '';
-  if (t.commission) s += `　<span class="extra-tag">抽成 ${t.commission}</span>`;
-  if (t.dispatch)   s += `　<span class="extra-tag">叫車 ${t.dispatch}</span>`;
-  return s;
-}
-// 統計一組行程的刷卡 / 現金 / 總計金額
-function _fareStats(trips) {
-  let card = 0, cash = 0, total = 0;
-  trips.forEach(t => {
-    const f = t.fare || 0; total += f;
-    if (t.paymentMethod === 'card') card += f;
-    else if (t.paymentMethod === 'cash') cash += f;
-  });
-  return { card, cash, total };
-}
-// 產生「刷卡：X　現金：Y　總計：Z」一行；無金額回傳空字串。
-// 傳入 workMsVal（實際工作時長 ms）且 > 0 時，在總計旁加上每小時金額 $X/hr。
-function _fareLineHtml(trips, workMsVal) {
-  const { card, cash, total } = _fareStats(trips);
-  if (!total) return '';
-  let html = `<span class="fl-card">刷卡：${card.toLocaleString()}</span>` +
-         `<span class="fl-cash">現金：${cash.toLocaleString()}</span>` +
-         `<span class="fl-total">總計：${total.toLocaleString()}</span>`;
-  if (workMsVal && workMsVal > 0) {
-    const rate = Math.round(total / (workMsVal / 3600000));
-    html += `<span class="fl-rate">$${rate.toLocaleString()}/hr</span>`;
-  }
-  return html;
-}
-function fmtDur(ms) {
-  const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60);
-  if (h > 0) return `${h}h ${m%60}m`;
-  return `${String(m).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-}
-// 工作時長中文：X小時Y分
-function fmtWork(ms) {
-  const totalMin = Math.max(0, Math.round(ms / 60000));
-  const h = Math.floor(totalMin / 60), m = totalMin % 60;
-  return h > 0 ? `${h}小時${m}分` : `${m}分`;
-}
-
-// 每日休息時間（分鐘）儲存，key = dayKey
-const REST_KEY = TEST_MODE_ON ? 'maptrip_rest_test' : 'maptrip_rest';
-function getRestMin(dayKey) {
-  try { return JSON.parse(localStorage.getItem(REST_KEY) || '{}')[dayKey] || 0; }
-  catch (_) { return 0; }
-}
-function setRestMin(dayKey, min) {
-  let r = {};
-  try { r = JSON.parse(localStorage.getItem(REST_KEY) || '{}'); } catch (_) {}
-  if (min > 0) r[dayKey] = min; else delete r[dayKey];
-  localStorage.setItem(REST_KEY, JSON.stringify(r));
-}
-// 一組行程的「實際工作時長」= (最後結束 - 第一筆開始) - 休息
-function workMs(trips, restMin) {
-  if (!trips || !trips.length) return 0;
-  const span = trips[trips.length - 1].endTime - trips[0].startTime;
-  return Math.max(0, span - (restMin || 0) * 60000);
-}
-function fmtTime(ts) { return new Date(ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }); }
+// ── 工具函式已抽到 js/util.js（MaptripUtil）；以下為相容薄包裝，呼叫端（含 finance.js 的
+//    window.* 存取）一行都不用改。body 逐字搬移，行為與原版完全相同。
+//    註：_fareLineHtml 沿用 v1.1.254 的第二參數 workMsVal（總計旁顯示 $X/hr）。 ──
+MaptripUtil.init({ testMode: TEST_MODE_ON });   // REST_KEY 對齊 test 模式
+function haversine(a, b) { return MaptripUtil.haversine(a, b); }
+function calcTotalDist(coords) { return MaptripUtil.calcTotalDist(coords); }
+function fmtDist(m) { return MaptripUtil.fmtDist(m); }
+function fmtDur(ms) { return MaptripUtil.fmtDur(ms); }
+function fmtWork(ms) { return MaptripUtil.fmtWork(ms); }
+function fmtTime(ts) { return MaptripUtil.fmtTime(ts); }
+function _payTag(pm) { return MaptripUtil._payTag(pm); }
+function _otherTag(t) { return MaptripUtil._otherTag(t); }
+function _extraTag(t) { return MaptripUtil._extraTag(t); }
+function _fareStats(trips) { return MaptripUtil._fareStats(trips); }
+function _fareLineHtml(trips, workMsVal) { return MaptripUtil._fareLineHtml(trips, workMsVal); }
+function getRestMin(dayKey) { return MaptripUtil.getRestMin(dayKey); }
+function setRestMin(dayKey, min) { return MaptripUtil.setRestMin(dayKey, min); }
+function workMs(trips, restMin) { return MaptripUtil.workMs(trips, restMin); }
 
 function setGpsBadge(state, text) {
   const el = document.getElementById('gps-badge');
