@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.259';
+const APP_VERSION  = '1.1.260';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -52,8 +52,7 @@ let soloFromHistory = false;  // 從歷史紀錄進入 solo 模式時為 true
 let soloHistoryTile = null;   // 歷史 solo 時換用的無標示底圖
 let autoFollow = false, wakeLock = null;
 let headingUp = false;          // 朝車頭模式（地圖旋轉跟隨行進方向）
-let lastHeading = 0, headingRefPos = null;
-let deviceCompassOn = false, lastMoveSpeed = 0;
+let lastHeading = 0;            // headingRefPos/deviceCompassOn/lastMoveSpeed 已隨 orient.js 搬入
 let _mapTouching = 0;           // 手指目前在地圖上的數量（>0 時暫停自動跟隨/旋轉）
 let _mapZooming = false;        // 縮放動畫進行中（期間不可改動線條，否則整條線會飛走）
 let _lineResyncPending = false; // 縮放/手勢期間累積的新點 → 結束後一次補畫
@@ -200,10 +199,8 @@ function initMap() {
     map.on('rotate', () => {
       updateCompassNeedle();
       updateMyHeadingArrow();
-      // 手動雙指旋轉時，同步平滑旋轉器的內部角度（動畫中則不干預）
-      if (_bearingRAF == null) {
-        _animBearing = _targetBearing = ((map.getBearing() % 360) + 360) % 360;
-      }
+      // 手動雙指旋轉時，同步平滑旋轉器的內部角度（動畫中則不干預）。動畫狀態已搬入 orient.js。
+      MaptripOrient.syncBearingFromMap();
     });
     updateCompassNeedle();
   }
@@ -247,10 +244,8 @@ function initMap() {
   const mapEl = document.getElementById('map');
   const trackTouch = (e) => {
     _mapTouching = e.touches ? e.touches.length : 0;
-    if (_mapTouching > 0 && _bearingRAF != null) {
-      cancelAnimationFrame(_bearingRAF); _bearingRAF = null;
-      _animBearing = _targetBearing = ((map.getBearing() % 360) + 360) % 360;
-    }
+    // 手勢開始 → 停掉朝車頭旋轉動畫（角度對齊目前地圖 bearing）。動畫狀態已搬入 orient.js。
+    if (_mapTouching > 0) MaptripOrient.cancelBearingAnim();
   };
   // 計數掛在 document（不能只掛 #map）：手指在地圖按下、卻在懸浮按鈕/彈窗上放開時，
   // #map 收不到那個 touchend，計數會永遠卡在 >0 → 跟隨/旋轉/歸位全部停擺
@@ -606,75 +601,15 @@ function _pushCommission(tripId, commission, dispatch) {
   } catch (_) {}
 }
 
-// 叫車費：固定 10 元，用切換按鈕決定「有／無」（司機不必每趟打字）
-const DISPATCH_FEE = 10;
-let _dispatchOn = false;   // 車資對話框目前叫車費開關
-let _dispatchAmt = DISPATCH_FEE;  // 目前金額（載入舊趟時沿用該趟的值）
-
-function updateDispatchToggle() {
-  const btn = document.getElementById('fare-dispatch-toggle');
-  if (!btn) return;
-  btn.classList.toggle('on', _dispatchOn);
-  btn.querySelector('.fare-toggle-val').textContent = _dispatchOn ? ('$' + _dispatchAmt) : '無';
-}
-function toggleDispatch() {
-  _dispatchOn = !_dispatchOn;
-  if (_dispatchOn && (!_dispatchAmt || _dispatchAmt <= 0)) _dispatchAmt = DISPATCH_FEE;
-  updateDispatchToggle();
-}
-
-// 讀 / 寫車資對話框的「抽成 / 叫車費」欄位
-function _readFareExtra() {
-  return {
-    commission: parseInt(document.getElementById('fare-commission').value) || 0,
-    dispatch: _dispatchOn ? (_dispatchAmt || DISPATCH_FEE) : 0
-  };
-}
-function _setFareExtra(commission, dispatch) {
-  document.getElementById('fare-commission').value = commission || '';
-  _dispatchOn = (dispatch || 0) > 0;
-  _dispatchAmt = _dispatchOn ? dispatch : DISPATCH_FEE;
-  updateDispatchToggle();
-}
-// 控制抽成欄位顯示：完成當下隱藏（抽成兩天後才知道，改在歷史批次補），編輯時顯示
-function _showCommissionField(show) {
-  const wrap = document.getElementById('fare-commission-wrap');
-  if (wrap) wrap.style.display = show ? '' : 'none';
-}
-
-function showFareDialog(trip) {
-  document.getElementById('fs-start').textContent  = fmtTime(trip.startTime);
-  document.getElementById('fs-end').textContent    = fmtTime(trip.endTime);
-  document.getElementById('fs-dur').textContent    = fmtDur(trip.endTime - trip.startTime);
-  document.getElementById('fs-dist').textContent   = fmtDist(trip.totalDist);
-  document.getElementById('fare-input').value = '';
-  _setFareExtra(0, DISPATCH_FEE);   // 叫車費預設「有」10 元；沒叫車費再點一下關掉
-  _showCommissionField(false);   // 完成當下不問抽成（兩天後才知道）
-
-  document.getElementById('fare-overlay').style.display = 'block';
-  document.getElementById('fare-dialog').classList.add('show');
-  setTimeout(() => document.getElementById('fare-input').focus(), 300);
-
-  const cashBtn = document.getElementById('fare-cash');
-  const cardBtn = document.getElementById('fare-card');
-  const skipBtn = document.getElementById('fare-skip');
-
-  const save = (fare, paymentMethod, label) => {
-    // 行程在 endTrip 時已落盤；這裡立即關閉對話框，車資與貼路在背景補上
-    const ex = _readFareExtra();
-    document.getElementById('fare-overlay').style.display = 'none';
-    document.getElementById('fare-dialog').classList.remove('show');
-    finalizeSavedTrip(trip, fare, paymentMethod, label || '', ex.commission, ex.dispatch);
-  };
-
-  cashBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'cash');
-  cardBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'card');
-  // 其他：輸入名稱（如「騎腳踏車」），不需金額，時間照算進工作時間
-  skipBtn.onclick = () => {
-    const name = (prompt('輸入名稱（例如：騎腳踏車）', '') || '').trim();
-    save(0, 'other', name);
-  };
-}
+// 車資對話框（叫車費切換/抽成欄/付款）已抽成模組 js/fare-dialog.js（MaptripFareDialog，
+// body 逐字不變、狀態 _dispatchOn/_dispatchAmt 為模組私有）。以下為同名薄包裝轉呼叫，
+// 呼叫端（editFare/editHistoryFare、recorder.js showFareDialog、HTML onclick）零改動。
+// （DISPATCH_FEE 已隨對話框搬入 fare-dialog.js；app.js 內已無引用處）
+function toggleDispatch() { return MaptripFareDialog.toggleDispatch(); }
+function _readFareExtra() { return MaptripFareDialog._readFareExtra(); }
+function _setFareExtra(commission, dispatch) { return MaptripFareDialog._setFareExtra(commission, dispatch); }
+function _showCommissionField(show) { return MaptripFareDialog._showCommissionField(show); }
+function showFareDialog(trip) { return MaptripFareDialog.showFareDialog(trip); }
 
 function saveTripFinal(trip) {
   if (todayTrips.length > 0) {
@@ -837,63 +772,14 @@ function _isDark() {
 const NOLABEL_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
 const NOLABEL_DARK  = 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
 
-// dark=true 時：淺色填色配深色外框/數字（深色底圖才看得見）
-function makeNumberIcon(n, color, dark) {
-  const edge = dark ? '#1a1a1a' : '#fff';
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:20px;height:20px;border-radius:50%;background:${color};border:2px solid ${edge};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:${edge};">${n}</div>`,
-    iconSize: [20, 20], iconAnchor: [10, 10]
-  });
-}
-
-function makeDotIcon(color) {
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:14px;height:14px;border-radius:50%;background:${color};border:2px solid #fff;"></div>`,
-    iconSize: [14, 14], iconAnchor: [7, 7]
-  });
-}
-
-// 起點：綠色圓形＋「起」
-function makeStartIcon() {
-  return L.divIcon({
-    className: '',
-    html: '<div style="width:16px;height:16px;border-radius:50%;background:#34A853;border:2px solid #fff;'
-        + 'box-shadow:0 1px 4px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
-        + '<span style="color:#fff;font-size:7px;font-weight:700;line-height:1;font-family:sans-serif">起</span></div>',
-    iconSize: [16, 16], iconAnchor: [8, 8]
-  });
-}
-
-// 終點：紅色圓形＋白色實心小圓
-function makeEndIcon() {
-  return L.divIcon({
-    className: '',
-    html: '<div style="width:16px;height:16px;border-radius:50%;background:#EA4335;border:2px solid #fff;'
-        + 'box-shadow:0 1px 4px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;">'
-        + '<div style="width:5px;height:5px;background:#fff;border-radius:50%;"></div></div>',
-    iconSize: [16, 16], iconAnchor: [8, 8]
-  });
-}
-
-
-function makePreviewDotIcon() {
-  return L.divIcon({
-    className: '',
-    html: '<div style="width:18px;height:18px;border-radius:50%;background:#1a1a1a;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>',
-    iconSize: [18, 18], iconAnchor: [9, 9]
-  });
-}
-
-function makePreviewSquareIcon(dark) {
-  const fill = dark ? '#f1f3f4' : '#1a1a1a';
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:16px;height:16px;background:${fill};border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,0.35);"></div>`,
-    iconSize: [16, 16], iconAnchor: [8, 8]
-  });
-}
+// 地圖標記圖示工廠已抽成模組 js/icons.js（MaptripIcons，純函式，body 逐字不變）。
+// 以下為同名薄包裝轉呼叫，呼叫端零改動。
+function makeNumberIcon(n, color, dark) { return MaptripIcons.makeNumberIcon(n, color, dark); }
+function makeDotIcon(color) { return MaptripIcons.makeDotIcon(color); }
+function makeStartIcon() { return MaptripIcons.makeStartIcon(); }
+function makeEndIcon() { return MaptripIcons.makeEndIcon(); }
+function makePreviewDotIcon() { return MaptripIcons.makePreviewDotIcon(); }
+function makePreviewSquareIcon(dark) { return MaptripIcons.makePreviewSquareIcon(dark); }
 
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
@@ -905,178 +791,31 @@ function centerOnMe() {
 }
 
 // 兩點間方位角（度，正北為 0，順時針）
-function bearingBetween(a, b) {
-  const toR = d => d * Math.PI / 180, toD = r => r * 180 / Math.PI;
-  const dLon = toR(b.lng - a.lng);
-  const y = Math.sin(dLon) * Math.cos(toR(b.lat));
-  const x = Math.cos(toR(a.lat)) * Math.sin(toR(b.lat)) -
-            Math.sin(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.cos(dLon);
-  return (toD(Math.atan2(y, x)) + 360) % 360;
-}
-
-// 角度累積器：讓 CSS transition 永遠走最短路徑，
-// 跨 0°/360° 時不會反向繞一整圈（例：350°→10° 只轉 +20°，不轉 -340°）
-function _accumAngle(prev, targetDeg) {
-  const diff = ((targetDeg - prev) % 360 + 540) % 360 - 180;
-  return prev + diff;
-}
-
-// 指北針針頭旋轉，永遠指向真北（= 地圖 bearing 的反向）
-let _needleAnim = 0;
-function updateCompassNeedle() {
-  const n = document.getElementById('compass-needle');
-  if (!n || !map.getBearing) return;
-  _needleAnim = _accumAngle(_needleAnim, -map.getBearing());
-  n.style.transform = `rotate(${_needleAnim}deg)`;
-}
-
-// 我的位置方向光束：指向 myHeading（考慮地圖旋轉，畫面上永遠指對方向）
-let _beamAnim = null;
-function updateMyHeadingArrow() {
-  if (!myDotMarker || !myDotMarker.getElement) return;
-  const el = myDotMarker.getElement();
-  if (!el) return;
-  const rot = el.querySelector('.myloc-rot');
-  if (!rot) return;
-  if (myHeading == null) return;   // 尚無方向資料，維持現狀（一旦顯示就不再隱藏）
-  const mapB = (map.getBearing && map.getBearing()) || 0;
-  const target = myHeading + mapB;
-  rot.style.display = '';
-  if (_beamAnim == null) {
-    // 第一次顯示：直接定位、不做動畫（避免從 0 度掃一圈過去）
-    rot.style.transition = 'none';
-    _beamAnim = target;
-    rot.style.transform = `rotate(${_beamAnim}deg)`;
-    void rot.offsetWidth;
-    rot.style.transition = '';
-    return;
-  }
-  _beamAnim = _accumAngle(_beamAnim, target);
-  rot.style.transform = `rotate(${_beamAnim}deg)`;
-}
-
-// 平滑旋轉：以 rAF 緩動到目標角度（走最短角度差），避免硬切造成卡頓
-let _targetBearing = 0, _animBearing = 0, _bearingRAF = null;
-function setTargetBearing(deg) {
-  if (!map.setBearing) return;
-  _targetBearing = ((deg % 360) + 360) % 360;
-  if (_bearingRAF == null) _bearingRAF = requestAnimationFrame(_stepBearing);
-}
-function _stepBearing() {
-  let diff = ((_targetBearing - _animBearing + 540) % 360) - 180;   // -180..180 最短路徑
-  if (Math.abs(diff) < 0.4) {
-    _animBearing = _targetBearing;
-    map.setBearing(_animBearing);
-    _bearingRAF = null;
-    return;
-  }
-  _animBearing = (_animBearing + diff * 0.2 + 360) % 360;            // 每幀補 20%
-  map.setBearing(_animBearing);
-  _bearingRAF = requestAnimationFrame(_stepBearing);
-}
-// 立即歸位指北（切換到預覽/單趟時用，不做動畫）
-function resetBearingNow() {
-  if (!map.setBearing) return;
-  if (_bearingRAF != null) { cancelAnimationFrame(_bearingRAF); _bearingRAF = null; }
-  _targetBearing = _animBearing = 0;
-  map.setBearing(0);
-}
-
-// 按指北針：在「朝車頭」與「鎖定指北」間切換
-function toggleCompass() {
-  if (!map.setBearing) return;
-  headingUp = !headingUp;
-  try { localStorage.setItem('maptrip_headup', headingUp ? '1' : '0'); } catch (_) {}
-  const btn = document.getElementById('compass-btn');
-  if (headingUp) {
-    btn.classList.add('heading-on');
-    enableDeviceCompass();                            // 啟用手機羅盤（停著也能轉）
-    if (lastHeading) setTargetBearing(-lastHeading);
-    toast('地圖朝行進方向');
-  } else {
-    btn.classList.remove('heading-on');
-    setTargetBearing(0);                              // 平滑轉回指北
-    toast('地圖已鎖定指北');
-  }
-}
-
-// 啟用手機羅盤：iOS 需經使用者手勢請求權限（指北針點擊即手勢）。
-// silent=true 用於開機自動嘗試：先前授權過就直接生效（不會跳視窗），
-// 尚未授權則安靜略過，等使用者按指北針/定位鈕時再正式請求。
-function enableDeviceCompass(silent) {
-  if (deviceCompassOn) return;
-  const start = () => {
-    window.addEventListener('deviceorientationabsolute', onDeviceOrient, true);
-    window.addEventListener('deviceorientation', onDeviceOrient, true);
-    deviceCompassOn = true;
-  };
-  try {
-    if (typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function') {
-      DeviceOrientationEvent.requestPermission()
-        .then(res => {
-          if (res === 'granted') start();
-          else if (!silent) toast('未授權羅盤，移動時仍會依 GPS 轉向');
-        })
-        .catch(() => {});
-    } else { start(); }
-  } catch (_) {}
-}
-
-// 羅盤回呼：停著或低速時用手機朝向轉地圖；高速行駛時交給 GPS 方向。
-// 節流＋死區（關鍵）：iOS 羅盤每秒回報 ~60 次且靜止時恆抖 ±1-2°，
-// 若全量餵進旋轉動畫，目標角永遠在變、動畫迴圈永不停 → 地圖 60fps 無限重繪
-// → GPU/CPU 滿載、手機發燙、記憶體+熱壓力 → WKWebView 行程每隔幾秒被 iOS 砍掉。
-// 節流到最多 ~7 次/秒；並與「目前已套用的方向」比較，差 <2.5° 一律不動
-// （比「與上一筆比」強：抖動繞著錨點慢慢晃也擋得住）。靜止零重繪，真轉向瞬間通過。
-let _lastOrientT = 0;
-function onDeviceOrient(e) {
-  let h = null;
-  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
-    h = e.webkitCompassHeading;                  // iOS：0=北、順時針
-  } else if (e.alpha != null && (e.absolute || e.absolute === undefined)) {
-    h = (360 - e.alpha) % 360;                   // Android
-  }
-  if (h == null || isNaN(h)) return;
-  const _now = Date.now();
-  if (_now - _lastOrientT < 150) return;
-  _lastOrientT = _now;
-  if (myHeading != null &&
-      Math.abs(((h - myHeading + 540) % 360) - 180) < 2.5) return;
-  // 只要在移動就優先用 GPS 行進方向（不限記錄中）：
-  // 手機架在車上時羅盤指的是「手機面向」而非行進方向，行進中會與實際方向不符
-  const driving = lastMoveSpeed > 1.2;
-  if (!driving) {
-    myHeading = h;                                // 停/慢速：羅盤朝向 = 我的朝向
-    updateMyHeadingArrow();
-    lastHeading = h;
-    if (headingUp && map.setBearing && autoFollow && !_mapTouching && !inBrowsingMode()) setTargetBearing(-h);   // 拖動/手勢/歷史檢視中不搶地圖
-  }
-}
-
-// 記錄中每筆 GPS：若開啟朝車頭，讓地圖旋轉到行進方向。
-// 使用者拖動地圖（autoFollow 關閉）時暫停自動旋轉，地圖可自由移動；
-// 按「我的位置」恢復跟隨後旋轉才繼續（同 Google 地圖行為）。
-function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) {
-  lastMoveSpeed = effectiveSpeed || 0;
-  if (!headingUp || !map.setBearing) return;
-  if (soloSet.length || dayPreviewKey || isReplaying()) return;   // 預覽/單趟/回放模式不旋轉
-  let heading = gpsHeading;
-  if (heading == null || isNaN(heading) || heading < 0) {
-    if (headingRefPos && effectiveSpeed > 1) heading = bearingBetween(headingRefPos, { lat, lng });
-    else heading = lastHeading;
-  }
-  if (effectiveSpeed > 1) { lastHeading = heading; headingRefPos = { lat, lng }; }
-  if (!autoFollow || _mapTouching) return;        // 使用者正在自由瀏覽/操作手勢 → 不搶地圖
-  if (effectiveSpeed > 0.8) {
-    // 死區：直線行駛時 GPS 方向每秒恆抖 ±2~5°，全量餵進旋轉動畫會讓記錄中的地圖
-    // 近乎連續重繪（發燙/卡頓主因之一）。與目前地圖方向差 <3° 不轉；
-    // 真正轉彎遠超過 3°，瞬間通過、跟隨體感不變。
-    const tgt = (((-lastHeading) % 360) + 360) % 360;
-    const diff = Math.abs(((tgt - _targetBearing + 540) % 360) - 180);
-    if (diff >= 3) setTargetBearing(-lastHeading);
-  }
-}
+// 地圖朝向/羅盤/方向光束（朝車頭旋轉）已抽成模組 js/orient.js（MaptripOrient，body 逐字不變，
+// 依賴注入 map 與共用活狀態 myHeading/headingUp/lastHeading/autoFollow/_mapTouching/soloSet/
+// dayPreviewKey）。以下為同名薄包裝轉呼叫，呼叫端（onGpsUpdate/scheduleFollowResume/預覽/
+// HTML onclick/boot）零改動。手勢動畫中止改呼叫 MaptripOrient.cancelBearingAnim()（見 initMap）。
+// headingRefPos/deviceCompassOn/lastMoveSpeed 與動畫角度/RAF handle 隨模組搬入。
+function bearingBetween(a, b) { return MaptripOrient.bearingBetween(a, b); }
+function updateCompassNeedle() { return MaptripOrient.updateCompassNeedle(); }
+function updateMyHeadingArrow() { return MaptripOrient.updateMyHeadingArrow(); }
+function setTargetBearing(deg) { return MaptripOrient.setTargetBearing(deg); }
+function resetBearingNow() { return MaptripOrient.resetBearingNow(); }
+function toggleCompass() { return MaptripOrient.toggleCompass(); }
+function enableDeviceCompass(silent) { return MaptripOrient.enableDeviceCompass(silent); }
+function applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading) { return MaptripOrient.applyHeadingUp(lat, lng, effectiveSpeed, gpsHeading); }
+// 注入 map 與共用活狀態存取器（getter 呼叫時才讀 → map 於 initMap 建立後仍取得最新）。
+MaptripOrient.init({
+  getMap: () => map,
+  getMyDotMarker: () => myDotMarker,
+  getMyHeading: () => myHeading,        setMyHeading: (v) => { myHeading = v; },
+  getHeadingUp: () => headingUp,        setHeadingUp: (v) => { headingUp = v; },
+  getLastHeading: () => lastHeading,    setLastHeading: (v) => { lastHeading = v; },
+  getAutoFollow: () => autoFollow,
+  getMapTouching: () => _mapTouching,
+  getSoloSet: () => soloSet,
+  getDayPreviewKey: () => dayPreviewKey
+});
 
 let _uiDayKey = null;   // 目前 UI 顯示的營業日，跨 7:00 換日時用來觸發刷新
 function updateTopBar() {
@@ -1905,96 +1644,15 @@ function closeScreenshotPreview() { return MaptripShot.closeScreenshotPreview();
 
 // ===== 雲端同步 UI =====
 
-function openSyncDialog() {
-  renderSyncPanel();
-  document.getElementById('sync-overlay').style.display = 'block';
-  document.getElementById('sync-dialog').style.display = 'block';
-}
-
-function closeSyncDialog() {
-  document.getElementById('sync-overlay').style.display = 'none';
-  document.getElementById('sync-dialog').style.display = 'none';
-}
-
-function applyLoginGate(state) {
-  const gate = document.getElementById('login-gate');
-  if (!gate) return;
-  // 只有「Firebase 已就緒且未登入」才強制擋；未設定/離線時不擋，避免 App 無法使用
-  if (state === 'signedout') {
-    gate.style.display = 'flex';
-    const ver = document.getElementById('gate-version');
-    if (ver) ver.textContent = 'v' + APP_VERSION;
-    // logo 帶版本參數防快取（避免 WKWebView 用到舊的含標語版本）
-    const logoImg = document.getElementById('gate-logo-img');
-    if (logoImg && !logoImg.src.includes('?v=' + APP_VERSION)) logoImg.src = 'icons/logo.svg?v=' + APP_VERSION;
-    const btn = document.getElementById('gate-btn');
-    if (btn) {
-      const busy = window.MaptripSync && MaptripSync.isBusy && MaptripSync.isBusy();
-      btn.disabled = !!busy;
-      btn.textContent = busy ? '登入中…' : '登入 / 註冊';
-    }
-  } else {
-    gate.style.display = 'none';
-  }
-}
-
-function submitGateLogin() {
-  const email = (document.getElementById('gate-email') || {}).value || '';
-  const pw = (document.getElementById('gate-pw') || {}).value || '';
-  MaptripSync.signIn(email, pw);
-}
-
-let _nameAsking = false;
-// 登入後若沒設定名字 → 要求輸入（取消/留空直接登出）。記帳者辨識用。
-function maybeAskName(st) {
-  if (!st || !st.needsName || _nameAsking) return;
-  _nameAsking = true;
-  setTimeout(() => {
-    const name = (prompt('請輸入你的名字\n（讓記帳者辨識，例如：阿明）', '') || '').trim();
-    if (!name) { MaptripSync.signOut(); toast('未輸入名字，已登出'); }
-    else { MaptripSync.setName(name); toast('名字已設定：' + name); }
-    _nameAsking = false;
-  }, 150);
-}
-
-function renderSyncPanel() {
-  if (!window.MaptripSync) return;
-  const st = MaptripSync.status();
-  applyLoginGate(st.state);
-  maybeAskName(st);
-  const statusEl = document.getElementById('sync-status');
-  const actEl = document.getElementById('sync-actions');
-  if (!statusEl) return;
-  const busy = MaptripSync.isBusy && MaptripSync.isBusy();
-  if (st.state === 'unconfigured') {
-    statusEl.innerHTML = '雲端同步尚未設定完成，請稍後再試。';
-    actEl.innerHTML = '';
-  } else if (st.state === 'signedout') {
-    // 保留已輸入的值（重繪時不清空）
-    const prevEmail = (document.getElementById('sync-email') || {}).value || '';
-    const prevPw = (document.getElementById('sync-pw') || {}).value || '';
-    statusEl.innerHTML = '登入後行程會自動備份到雲端。<br>換手機或重裝 App，登入同一帳號即可還原。<br><span class="sync-hint">第一次輸入即自動建立帳號。</span>';
-    actEl.innerHTML =
-      '<input id="sync-email" class="sync-input" type="email" inputmode="email" ' +
-      'autocomplete="username" placeholder="電子郵件" value="' + prevEmail + '">' +
-      '<input id="sync-pw" class="sync-input" type="password" ' +
-      'autocomplete="current-password" placeholder="密碼（至少 6 碼）" value="' + prevPw + '">' +
-      '<button class="sync-google" ' + (busy ? 'disabled' : '') + ' onclick="submitSyncLogin()">' +
-      (busy ? '登入中…' : '登入 / 註冊') + '</button>';
-  } else {
-    const c = st.cloud || { days: 0, trips: 0 };
-    statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>'
-      + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟'
-      + '　本機：' + (TripStore.bytes() / 1048576).toFixed(1) + ' MB（' + TripStore.mode() + '）</span>';
-    actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>';
-  }
-}
-
-function submitSyncLogin() {
-  const email = (document.getElementById('sync-email') || {}).value || '';
-  const pw = (document.getElementById('sync-pw') || {}).value || '';
-  MaptripSync.signIn(email, pw);
-}
+// 雲端登入閘門 / 同步面板 UI 已抽成模組 js/sync-ui.js（MaptripSyncUI，body 逐字不變，
+// APP_VERSION 經 init 注入）。以下為同名薄包裝轉呼叫，呼叫端（HTML onclick、選單、
+// sync.js 的 window.renderSyncPanel 回呼）零改動。refreshAfterSync 留 app.js（見下）。
+MaptripSyncUI.init({ appVersion: APP_VERSION });
+function openSyncDialog() { return MaptripSyncUI.openSyncDialog(); }
+function closeSyncDialog() { return MaptripSyncUI.closeSyncDialog(); }
+function submitGateLogin() { return MaptripSyncUI.submitGateLogin(); }
+function renderSyncPanel() { return MaptripSyncUI.renderSyncPanel(); }
+function submitSyncLogin() { return MaptripSyncUI.submitSyncLogin(); }
 
 // 雲端把新資料併進 localStorage 後呼叫：重繪今日 + 更新開啟中的清單
 function refreshAfterSync() {
@@ -2044,171 +1702,18 @@ function clearReplayTempLayers() { return MaptripReplay.clearReplayTempLayers();
 
 // 每日以早上 7:00 為分界：07:00 之前算前一天
 // （例：6/16 的紀錄＝6/16 早上 7:00 ～ 6/17 早上 6:59）
-const DAY_SPLIT_HOUR = 7;
-
-function businessDayKey(ts = Date.now()) {
-  const d = new Date(ts - DAY_SPLIT_HOUR * 3600 * 1000);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function todayKey() { return businessDayKey(); }
-
-// 座標 5 位小數 ≈ 1.1m 精度：對顯示/統計無感，但 JSON 體積省一半以上
-function _r5(v) { return Math.round(v * 1e5) / 1e5; }
-
-// Douglas-Peucker 路線簡化（迭代版，tol 以「度」為單位，0.00004 ≈ 4.4m）。
-// 只用在道路貼合線（畫線用），totalDist 統計早已存好，不受影響。
-function _simplifyPath(pts, tol) {
-  if (!pts || pts.length <= 2) return pts;
-  const keep = new Uint8Array(pts.length);
-  keep[0] = keep[pts.length - 1] = 1;
-  const stack = [[0, pts.length - 1]];
-  while (stack.length) {
-    const [a, b] = stack.pop();
-    let maxD = 0, maxI = -1;
-    const ax = pts[a].lng, ay = pts[a].lat, bx = pts[b].lng, by = pts[b].lat;
-    const dx = bx - ax, dy = by - ay;
-    const len2 = dx * dx + dy * dy;
-    for (let i = a + 1; i < b; i++) {
-      let d;
-      if (len2 === 0) {
-        d = Math.hypot(pts[i].lng - ax, pts[i].lat - ay);
-      } else {
-        const t = ((pts[i].lng - ax) * dx + (pts[i].lat - ay) * dy) / len2;
-        const cl = Math.max(0, Math.min(1, t));
-        d = Math.hypot(pts[i].lng - (ax + cl * dx), pts[i].lat - (ay + cl * dy));
-      }
-      if (d > maxD) { maxD = d; maxI = i; }
-    }
-    if (maxD > tol && maxI > 0) { keep[maxI] = 1; stack.push([a, maxI], [maxI, b]); }
-  }
-  const out = [];
-  for (let i = 0; i < pts.length; i++) if (keep[i]) out.push(pts[i]);
-  return out;
-}
-
-function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label, commission, dispatch }) {
-  // 注意：t 可能不存在（壓實後的舊資料）。絕不能寫成 t: undefined —
-  // Firestore 會以 invalid-argument 拒收整份文件，導致雲端備份失敗。
-  const slimCoords = (coords || []).map(c =>
-    (typeof c.t === 'number' && isFinite(c.t))
-      ? { lat: _r5(c.lat), lng: _r5(c.lng), t: c.t }
-      : { lat: _r5(c.lat), lng: _r5(c.lng) });
-  let slimRoad = null;
-  if (roadCoords) {
-    slimRoad = _simplifyPath(roadCoords, 0.00004).map(c => ({ lat: _r5(c.lat), lng: _r5(c.lng) }));
-  }
-  return { id, startTime, endTime, coords: slimCoords, totalDist, fare: fare || 0, paymentMethod: paymentMethod || '',
-    ...(label ? { label } : {}),
-    ...(commission ? { commission } : {}),   // 抽成
-    ...(dispatch ? { dispatch } : {}),        // 叫車費
-    ...(slimRoad ? { roadCoords: slimRoad } : {}) };
-}
-
-// 給 sync.js 用：雲端資料「進入本機前」先瘦身。
-// 沒有這層的話，雲端殘留的胖資料（壓實前的全量座標）會在同步時
-// 把剛壓實的本機資料再灌肥回去（2MB → 10MB 的元兇）。
-window.slimTripForStorage = function (t) {
-  try {
-    const slim = serializeTrip(t);
-    // 假路線防線（同步層）：「繞遠假路線」（roadCoords 遠長於記錄距離）進入合併前
-    // 直接剝除。否則合併評分偏好「帶 roadCoords 的版本」→ 修復後的乾淨版永遠
-    // 輸給雲端殘留的假路線版 → 每次開機修復、每次同步又被蓋回 → 無限來回，
-    // 而每一回合都是全量合併＋回推（資料量大後就是記憶體/CPU 風暴）
-    if (slim.roadCoords && slim.totalDist > 0 &&
-        calcTotalDist(slim.roadCoords) > slim.totalDist * 1.4 + 500) {
-      delete slim.roadCoords;
-    }
-    const day = businessDayKey(slim.startTime);
-    if (day !== todayKey()) {
-      if (slim.roadCoords && slim.coords && slim.coords.length > 2) {
-        slim.coords = [slim.coords[0], slim.coords[slim.coords.length - 1]]
-          .map(c => ({ lat: c.lat, lng: c.lng }));
-      } else if (slim.coords && slim.coords.length > 20) {
-        slim.coords = _simplifyPath(slim.coords.map(c => ({ lat: c.lat, lng: c.lng })), 0.00004);
-      }
-    }
-    return slim;
-  } catch (_) { return t; }
-};
-
-// 合併式存檔：以趟 id 為鍵，todayTrips（目前/編輯後）優先覆蓋；
-// localStorage 既有、但 todayTrips 這次沒帶到的趟「保留」，
-// 這樣即使 todayTrips 一時不完整，也絕不會把本機既有的行程弄丟。
-// （刪除走 removeTripFromStorage，不經過這裡的合併。）
-function _deletedIdSet() {
-  try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]').map(d => d && d.id).filter(v => v != null)); }
-  catch (_) { return new Set(); }
-}
-function saveTodayToStorage() {
-  const raw = loadTrips();
-  const dead = _deletedIdSet();
-  const affected = new Set([todayKey()]);
-  const grouped = {};
-  for (const t of todayTrips) {
-    const key = businessDayKey(t.startTime);
-    affected.add(key);
-    (grouped[key] = grouped[key] || []).push(serializeTrip(t));
-  }
-  affected.forEach(day => {
-    const byId = new Map();
-    (raw[day] || []).forEach(t => { if (t && t.id != null && !dead.has(t.id)) byId.set(t.id, t); });
-    (grouped[day] || []).forEach(t => { if (t && t.id != null && !dead.has(t.id)) byId.set(t.id, t); });
-    const merged = [...byId.values()].sort((a, b) => a.startTime - b.startTime);
-    if (merged.length) raw[day] = merged; else delete raw[day];
-  });
-  try {
-    saveTrips(raw);
-  } catch (e) {
-    // 儲存空間滿：先壓實歷史資料再重試一次，仍失敗才提示
-    compactStorage(true);
-    try {
-      saveTrips(raw);
-      toast('儲存空間已自動整理');
-    } catch (e2) {
-      toast('⚠ 本機儲存空間不足，行程可能無法保存！');
-    }
-  }
-  if (window.MaptripSync) MaptripSync.syncDays([...affected]);
-}
-
-// ===== 儲存空間壓實 =====
-// 歷史行程重新序列化（座標降精度＋路線簡化）；aggressive=true 時，
-// 已有貼路線的行程原始 GPS 座標只留頭尾（畫圖/回放本來就優先用 roadCoords）。
-// 解決「localStorage 滿 → 每次存檔靜默失敗 → 重整後行程消失」的根本問題。
-function compactStorage(aggressive) {
-  try {
-    const raw = loadTrips();
-    if (!Object.keys(raw).length) return true;
-    const dropCut = businessDayKey(Date.now() - 7 * 864e5);   // 7 天前
-    const tk = todayKey();
-    Object.keys(raw).forEach(day => {
-      raw[day] = (raw[day] || []).map(t => {
-        const slim = serializeTrip(t);
-        // 非今日：原始座標的每點時間戳已無用途（貼路只在存檔當下做）→ 丟棄
-        if (day !== tk && slim.coords) {
-          slim.coords = slim.coords.map(c => ({ lat: c.lat, lng: c.lng }));
-        }
-        // 7 天前（或緊急模式時非今日）且已有貼路線 → 原始座標只留頭尾
-        // （畫線/回放/截圖一律優先用 roadCoords，不受影響）
-        if (slim.roadCoords && slim.coords && slim.coords.length > 2 &&
-            (day < dropCut || (aggressive && day !== tk))) {
-          slim.coords = [slim.coords[0], slim.coords[slim.coords.length - 1]];
-        } else if (!slim.roadCoords && day !== tk && slim.coords && slim.coords.length > 20) {
-          // 沒有貼路線的舊行程（歷史上貼路失敗的）：座標本身做路徑簡化，
-          // 形狀不變、點數大減（距離統計早已存好，不受影響）
-          slim.coords = _simplifyPath(slim.coords, 0.00004);
-        }
-        return slim;
-      });
-    });
-    saveTrips(raw);
-    return true;
-  } catch (e) { return false; }
-}
+// 序列化 / 合併存檔 / 壓實 / 刪除墓碑 / 營業日已抽成模組 js/storage.js（MaptripStorage，
+// body 逐字不變）。以下為同名薄包裝轉呼叫，呼叫端（含 recorder.js、finance.js window.* 存取）零改動。
+// slimTripForStorage 由模組直接掛 window。DAY_SPLIT_HOUR/DELETED_KEY 隨模組搬入。
+MaptripStorage.init({ testMode: TEST_MODE_ON, getTodayTrips: () => todayTrips });
+const DAY_SPLIT_HOUR = 7;   // updateTopBar 顯示營業日仍直接用（模組內另有同值，各自 scope）
+function businessDayKey(ts = Date.now()) { return MaptripStorage.businessDayKey(ts); }
+function todayKey() { return MaptripStorage.todayKey(); }
+function _r5(v) { return MaptripStorage._r5(v); }
+function _simplifyPath(pts, tol) { return MaptripStorage._simplifyPath(pts, tol); }
+function serializeTrip(t) { return MaptripStorage.serializeTrip(t); }
+function saveTodayToStorage() { return MaptripStorage.saveTodayToStorage(); }
+function compactStorage(aggressive) { return MaptripStorage.compactStorage(aggressive); }
 
 // 開機補貼路：歷史上貼路失敗的趟重試貼路，成功後把原始座標縮成頭尾。
 // 每次開機最多處理 maxTrips 趟（對公用 OSRM 客氣一點），失敗的下次再試。
@@ -2287,48 +1792,9 @@ async function retrySnapBacklog(maxTrips = 5) {
 }
 
 // 本機儲存用量（bytes，UTF-16 估算）
-function storageBytes() {
-  let n = 0;
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      n += k.length + (localStorage.getItem(k) || '').length;
-    }
-  } catch (_) {}
-  return n * 2;
-}
-
-// 刪除墓碑：記住已刪除的趟 id，讓合併同步不會把它加回來
-const DELETED_KEY = TEST_MODE_ON ? 'maptrip_deleted_test' : 'maptrip_deleted';
-function addDeletedId(id) {
-  let arr;
-  try { arr = JSON.parse(localStorage.getItem(DELETED_KEY) || '[]'); } catch (_) { arr = []; }
-  arr = arr.filter(d => d && d.id !== id);
-  arr.push({ id, at: Date.now() });
-  const cutoff = Date.now() - 90 * 864e5;   // 保留 90 天的墓碑
-  arr = arr.filter(d => (d.at || 0) > cutoff);
-  localStorage.setItem(DELETED_KEY, JSON.stringify(arr));
-}
-
-// 明確從本機移除某趟（供刪除使用，不會被合併存檔／雲端救回）
-function removeTripFromStorage(id) {
-  addDeletedId(id);   // 先立墓碑，避免同步又加回來
-  const raw = loadTrips();
-  const affected = [];
-  Object.keys(raw).forEach(day => {
-    if (!Array.isArray(raw[day])) return;
-    const before = raw[day].length;
-    raw[day] = raw[day].filter(t => t.id !== id);
-    if (raw[day].length !== before) affected.push(day);
-    if (!raw[day].length) delete raw[day];
-  });
-  saveTrips(raw);
-  // 從雲端移除該趟 + 把刪除名單推上雲端（跨裝置生效）
-  if (window.MaptripSync) {
-    if (MaptripSync.deleteTripFromCloud) affected.forEach(day => MaptripSync.deleteTripFromCloud(day, id));
-    if (MaptripSync.pushDeleted) MaptripSync.pushDeleted();
-  }
-}
+// storageBytes / addDeletedId / removeTripFromStorage / DELETED_KEY 已隨 storage.js 搬入。
+function storageBytes() { return MaptripStorage.storageBytes(); }
+function removeTripFromStorage(id) { return MaptripStorage.removeTripFromStorage(id); }
 
 function loadTodayFromStorage() {
   let raw = {};

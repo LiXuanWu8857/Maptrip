@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.259**（2026-07-28）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.260**（2026-07-28）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -173,5 +173,10 @@
   已抽：`util.js`（工具）、`geo-gate.js`（品質閘門）、`geo-clean.js`（飄移清理）、`snap.js`（OSRM 貼路）、
   `screenshot.js`（截圖）、`replay.js`（回放，第一個依賴注入）、`recorder.js`（錄製狀態機，v259，
   生命週期/復原/鎖屏方塊/GPS 監看；共用活狀態 activeTrip/activePolyline 留 app.js 經注入，
-  onGpsUpdate 逐點收錄刻意留 app.js＝GPS 熱路徑零改動；見 `docs/錄製狀態機-功能與運作邏輯.md`）。
-  app.js 至此無大塊未拆，剩多為地圖繪製/UI（耦合於 map，逐一小抽即可）。
+  onGpsUpdate 逐點收錄刻意留 app.js＝GPS 熱路徑零改動；見 `docs/錄製狀態機-功能與運作邏輯.md`）、
+  **v260 一批再抽 5 個**：`icons.js`（地圖圖示工廠，純函式）、`fare-dialog.js`（車資對話框，只碰 DOM）、
+  `storage.js`（序列化/合併存檔/壓實/墓碑/營業日，store.js 之上的高階持久化；注入 getTodayTrips；
+  retrySnapBacklog/loadTodayFromStorage 因重畫地圖留 app.js）、`sync-ui.js`（登入閘門/同步面板 UI，
+  sync.js 之上；refreshAfterSync 留 app.js）、`orient.js`（羅盤/朝車頭/方向光束，依賴注入 map 與
+  heading 狀態；對外開 cancelBearingAnim/syncBearingFromMap 供 initMap 手勢/rotate 呼叫）。
+  **app.js 3909→2225 行**。剩多為歷史清單/單趟預覽 UI（重耦合 map/圖層/DOM，逐一小抽即可）。
