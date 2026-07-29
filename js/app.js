@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.261';
+const APP_VERSION  = '1.1.262';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -396,7 +396,7 @@ function runSimulation(base) { return MaptripRecorder.runSimulation(base); }
 function restartSimulation() { return MaptripRecorder.restartSimulation(); }
 
 function onGpsUpdate(pos) {
-  const { latitude: lat, longitude: lng, accuracy: acc, speed } = pos.coords;
+  const { latitude: lat, longitude: lng, accuracy: acc, speed, altitude: alt, altitudeAccuracy: altAcc } = pos.coords;
 
   // 計算有效速度（GPS 不提供時從位置差推算）
   let effectiveSpeed = speed;
@@ -484,6 +484,9 @@ function onGpsUpdate(pos) {
         if (last) activeTrip._dist = activeDist() + haversine(last, { lat, lng });  // 增量累加距離
         activeTrip.coords.push({ lat, lng, t: Date.now() });
         saveActiveTrip();   // 每存一個座標就更新復原暫存（內部節流 5 秒）
+        // GPS 高度黑盒子（橋上/橋下量測用）：獨立於行程座標，不影響貼路/壓實/同步。
+        // altitude/altitudeAccuracy 由外掛回傳，之前被丟棄；這裡收進 mt_altlog 供事後判讀。
+        if (window.MaptripAlt) MaptripAlt.record({ t: Date.now(), lat, lng, alt, altAcc, spd: effectiveSpeed });
         // 定期把累積軌跡貼合到道路上（即時更新折線）
         const n = activeTrip.coords.length;
         if (n >= 4 && n % LIVE_SNAP_PTS === 0 && !activeSnapPending) {
@@ -1874,7 +1877,16 @@ function showBootLog() {
     + (flags ? '── 旗標 ──\n' + flags + '\n' : '')
     + '── 事件（新→舊）──\n'
     + (log.length ? log.slice().reverse().join('\n') : '（尚無記錄）');
-  box.onclick = () => box.remove();
+  box.onclick = (e) => { if (e.target === box) box.remove(); };
+  // 高度診斷入口（GPS 高度黑盒子；橋上/橋下量測）
+  if (window.MaptripAlt) {
+    const ab = document.createElement('div');
+    ab.textContent = '📈 高度診斷（點我）';
+    ab.style.cssText = 'position:sticky;bottom:0;margin-top:10px;padding:10px;text-align:center;'
+      + 'background:#1a73e8;color:#fff;border-radius:8px;cursor:pointer;font:13px sans-serif';
+    ab.onclick = (e) => { e.stopPropagation(); MaptripAlt.showPanel(); };
+    box.appendChild(ab);
+  }
   document.body.appendChild(box);
 }
 

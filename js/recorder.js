@@ -61,7 +61,9 @@
         latitude:  location.latitude,
         longitude: location.longitude,
         accuracy:  location.accuracy,
-        speed:     location.speed
+        speed:     location.speed,
+        altitude:  location.altitude,           // 海拔高度（公尺），橋上/橋下量測用
+        altitudeAccuracy: location.altitudeAccuracy   // 垂直精度（公尺）
       }});
     });
     // addWatcher 在不同版本可能回傳 Promise<id> 或直接回傳 id 字串，兩者皆相容
