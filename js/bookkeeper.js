@@ -8,6 +8,8 @@
   var _view = null;        // null=清單首頁；{driverUid,name}=某司機檢視
   var _editId = null;      // 正在編輯抽成的趟 id
   var _cache = null;       // 某司機的 { days, commissions, name }
+  var _bks = [];           // 目前清單：授權我的記帳者（供 onclick 只傳 uid、名字改用查表，杜絕名字注入）
+  var _drivers = [];       // 目前清單：我協助記帳的司機
 
   function S() { return window.MaptripSync; }
   function nf(n) { return (Math.round(n) || 0).toLocaleString(); }
@@ -79,6 +81,7 @@
     try { if (s.processInviteClaims) await s.processInviteClaims(); } catch (_) {}
     try { bks = await s.listBookkeepers(); } catch (_) {}
     try { drivers = await s.listLinkedDrivers(); } catch (_) {}
+    _bks = bks || []; _drivers = drivers || [];   // 存起來供 onclick 查名字（onclick 只傳安全的 uid）
 
     var h = '';
     // A. 授權我的記帳者（司機視角）
@@ -86,9 +89,11 @@
     h += '<button class="bk-btn" onclick="MaptripBookkeeper.invite()">＋ 產生邀請碼給記帳者</button>';
     h += '<div class="bk-note">把碼給記帳者輸入即可授權；對方只能看你的行程與編輯抽成。</div>';
     if (!bks.length) h += '<div class="bk-empty">尚未授權任何記帳者</div>';
+    // 名字只以 esc() 輸出到 HTML 文字節點；onclick 一律只帶 uid（Firebase uid 為英數，安全），
+    // 名字改用 _bks/_drivers 查表 → 徹底杜絕名字含單引號時的 onclick 注入。
     else bks.forEach(function (b) {
       h += '<div class="bk-row"><div class="nm">' + esc(b.name || '（未命名）') + '</div>' +
-        '<button class="op" onclick="MaptripBookkeeper.removeBk(\'' + b.uid + '\',\'' + esc(b.name) + '\')">撤銷</button></div>';
+        '<button class="op" onclick="MaptripBookkeeper.removeBk(\'' + esc(b.uid) + '\')">撤銷</button></div>';
     });
 
     // B. 我協助記帳的司機（記帳者視角）
@@ -96,9 +101,9 @@
     h += '<button class="bk-btn" onclick="MaptripBookkeeper.join()">輸入邀請碼加入一位司機</button>';
     if (!drivers.length) h += '<div class="bk-empty">尚未加入任何司機</div>';
     else drivers.forEach(function (d) {
-      h += '<div class="bk-row" onclick="MaptripBookkeeper.openDriver(\'' + d.driverUid + '\',\'' + esc(d.name) + '\')">' +
+      h += '<div class="bk-row" onclick="MaptripBookkeeper.openDriver(\'' + esc(d.driverUid) + '\')">' +
         '<div class="nm">' + esc(d.name || '（未命名司機）') + '</div>' +
-        '<button class="op" onclick="event.stopPropagation();MaptripBookkeeper.unlink(\'' + d.driverUid + '\',\'' + esc(d.name) + '\')">移除</button>' +
+        '<button class="op" onclick="event.stopPropagation();MaptripBookkeeper.unlink(\'' + esc(d.driverUid) + '\')">移除</button>' +
         '<span class="go">›</span></div>';
     });
     setBody(h);
@@ -192,15 +197,17 @@
       render();
     } catch (e) { if (window.toast) toast(((e && e.message) || '加入失敗')); }
   }
-  async function removeBk(uid, name) {
-    if (!confirm('撤銷「' + (name || '') + '」的記帳者授權？')) return;
+  function _bkName(uid) { var b = _bks.find(function (x) { return x.uid === uid; }); return (b && b.name) || ''; }
+  function _drvName(uid) { var d = _drivers.find(function (x) { return x.driverUid === uid; }); return (d && d.name) || ''; }
+  async function removeBk(uid) {
+    if (!confirm('撤銷「' + _bkName(uid) + '」的記帳者授權？\n（對方將無法再看你的行程）')) return;
     try { await S().removeBookkeeper(uid); render(); if (window.toast) toast('已撤銷'); } catch (_) {}
   }
-  async function unlink(driverUid, name) {
-    if (!confirm('從清單移除司機「' + (name || '') + '」？')) return;
+  async function unlink(driverUid) {
+    if (!confirm('從你的清單移除司機「' + _drvName(driverUid) + '」？\n（注意：這只移除你這邊的清單，司機端對你的授權仍在，需請司機自行撤銷）')) return;
     try { await S().unlinkDriver(driverUid); render(); } catch (_) {}
   }
-  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name }; _editId = null; renderDriver(); }
+  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name || _drvName(driverUid) }; _editId = null; renderDriver(); }
   function back() { _view = null; _editId = null; renderHome(); }
   function edit(tripId) { _editId = tripId; renderDriver(); }
   async function saveComm(tripId) {

@@ -93,6 +93,20 @@
     }
     throw new Error('請再試一次');
   }
+  // 純函式（供測試）：邀請碼是否可被 myUid 兌換 → 回傳阻擋原因字串，null=可兌換。
+  // 一碼一用：已被別人兌換就擋（先兌換者贏）；同一人重複兌換視為冪等（放行）。
+  function _claimBlock(d, myUid) {
+    if (!d) return '邀請碼不存在';
+    if (d.exp && d.exp < Date.now()) return '邀請碼已過期';
+    if (d.driverUid === myUid) return '不能加入自己';
+    if (d.claimedBy && d.claimedBy !== myUid) return '此邀請碼已被使用，請向司機索取新的一組';
+    return null;
+  }
+  // 純函式（供測試）：司機端 processInviteClaims 是否該把此邀請的兌換者加進授權清單。
+  // 跳過 revoked（撤銷後標記）→ 撤銷才不會被下一次自動處理又加回來。
+  function _shouldAuthorize(d, bk) {
+    return !!(d && d.claimedBy && !d.revoked && bk[d.claimedBy] === undefined);
+  }
   // 記帳者：輸入邀請碼綁定
   async function redeemInvite(code) {
     if (!ready || !user) throw new Error('尚未登入');
@@ -100,10 +114,9 @@
     if (!code) throw new Error('請輸入邀請碼');
     var ref = db.collection('invites').doc(code);
     var snap = await ref.get();
-    if (!snap.exists) throw new Error('邀請碼不存在');
-    var d = snap.data();
-    if (d.exp && d.exp < Date.now()) throw new Error('邀請碼已過期');
-    if (d.driverUid === user.uid) throw new Error('不能加入自己');
+    var d = snap.exists ? snap.data() : null;
+    var block = _claimBlock(d, user.uid);
+    if (block) throw new Error(block);
     await ref.set({ claimedBy: user.uid, claimedName: myName() }, { merge: true });   // 回填 → 司機端自動授權
     await db.collection('users').doc(user.uid).collection('linkedDrivers').doc(d.driverUid)
       .set({ name: d.driverName || '', since: Date.now() }, { merge: true });
@@ -120,7 +133,7 @@
       var changed = false;
       q.forEach(function (doc) {
         var d = doc.data();
-        if (d.claimedBy && bk[d.claimedBy] === undefined) { bk[d.claimedBy] = d.claimedName || ''; changed = true; }
+        if (_shouldAuthorize(d, bk)) { bk[d.claimedBy] = d.claimedName || ''; changed = true; }
       });
       if (changed) { await accessRef.set({ bookkeepers: bk }, { merge: true }); updateUI(); }
     } catch (_) {}
@@ -134,7 +147,8 @@
       return Object.keys(bk).map(function (uid) { return { uid: uid, name: bk[uid] || '' }; });
     } catch (_) { return []; }
   }
-  // 司機：移除某記帳者授權
+  // 司機：移除某記帳者授權（並把他兌換過的邀請碼標記 revoked，
+  // 否則下次 processInviteClaims 會看到舊 claimedBy 又把他加回來＝撤銷無效）
   async function removeBookkeeper(uid) {
     if (!ready || !user) return;
     var ref = db.collection('users').doc(user.uid).collection('meta').doc('access');
@@ -142,6 +156,15 @@
     var bk = (snap.exists && snap.data().bookkeepers) || {};
     delete bk[uid];
     await ref.set({ bookkeepers: bk }, { merge: true });
+    // 撤銷持久化：把此記帳者兌換過的邀請碼標記 revoked
+    try {
+      var q = await db.collection('invites').where('driverUid', '==', user.uid).get();
+      var ps = [];
+      q.forEach(function (doc) {
+        if ((doc.data() || {}).claimedBy === uid) ps.push(doc.ref.set({ revoked: true }, { merge: true }));
+      });
+      await Promise.all(ps);
+    } catch (_) {}
     updateUI();
   }
   // 記帳者：我協助記帳的司機清單
@@ -438,5 +461,6 @@
     createInvite: createInvite, redeemInvite: redeemInvite, processInviteClaims: processInviteClaims,
     listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,
     listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
-    readDriverData: readDriverData, writeCommission: writeCommission };
+    readDriverData: readDriverData, writeCommission: writeCommission,
+    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize };
 })();
