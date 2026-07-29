@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.263';
+const APP_VERSION  = '1.1.264';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -373,8 +373,13 @@ function initMap() {
   });
 
   loadTodayFromStorage();
-  restoreActiveTripIfAny();   // 若上次重載/當掉時正在記錄，自動接回
-  startGpsWatch();
+  // 電腦版「檢視台模式」：藏/停用 GPS 記錄相關 UI、選單補滑鼠點擊、加切換鈕（原生 App 不受影響）
+  try { if (window.MaptripDesktop) MaptripDesktop.apply(); } catch (_) {}
+  const _review = !!(window.MaptripDesktop && MaptripDesktop.isReview());
+  if (!_review) {
+    restoreActiveTripIfAny();   // 若上次重載/當掉時正在記錄，自動接回
+    startGpsWatch();            // 檢視台版不啟動 GPS（記帳者/回放不需要定位）
+  }
   updateTopBar();
   setInterval(updateTopBar, 30000);
   // 頁面即將卸載（重載/切走）前，把進行中的行程再存一次，把損失壓到最小
@@ -884,6 +889,15 @@ function _menuTouchEnd(e) {
   const hit = _menuHitBtn(e);
   const action = hit ? hit.getAttribute('data-menu') : null;
   closeTopMenu();
+  _dispatchMenu(action);
+}
+// 選單派發（touch 與電腦版滑鼠點擊共用）。防重：400ms 內同一次點的 touch+click 只派一次。
+let _lastMenuAt = 0;
+function _dispatchMenu(action) {
+  if (!action) return;
+  const now = Date.now();
+  if (now - _lastMenuAt < 400) return;
+  _lastMenuAt = now;
   if (action === 'today') toggleTripList();
   else if (action === 'finance') { closeSheet(); if (window.openFinance) window.openFinance(); }
   else if (action === 'bookkeeper') { closeSheet(); if (window.openBookkeeper) window.openBookkeeper(); }
@@ -891,7 +905,9 @@ function _menuTouchEnd(e) {
   else if (action === 'sync') openSyncDialog();
   else if (action === 'hotspot') { closeSheet(); if (window.openHotspots) window.openHotspots(); }
   else if (action === 'glmap') toggleGlEngine();
+  else if (action === 'reviewtoggle') { if (window.MaptripDesktop) MaptripDesktop.toggle(); }
 }
+window._dispatchMenu = _dispatchMenu;
 
 // 切換地圖引擎：向量（MapLibre GL，旋轉時文字保持正立）↔ 標準（Leaflet）
 function toggleGlEngine() {
