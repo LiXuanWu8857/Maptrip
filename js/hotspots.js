@@ -42,6 +42,33 @@
   }
   function bucketRange(bi) { var b = BUCKETS[bi]; return b ? (b.s + '–' + b.e + ' 點') : ''; }
 
+  // ---- 星期幾 / 國定假日加權（研究：day-of-week 為需求預測前三大特徵）----
+  // 假日的需求型態≈週末休閒（無通勤尖峰、景點/夜生活上升），故把「國定假日」視同「休息日」。
+  // 表僅 2026（民國115年，人事行政總處辦公日曆表；2026 起只補假不補班）——**每年需更新**。
+  var HOLIDAYS = {
+    2026: new Set([
+      '2026-01-01',                                                                                         // 元旦
+      '2026-02-14','2026-02-15','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-21','2026-02-22', // 春節 9 連假
+      '2026-02-28','2026-03-02',                                                                            // 和平紀念日＋補假
+      '2026-04-04','2026-04-05','2026-04-06',                                                               // 兒童節/清明＋補假
+      '2026-05-01','2026-05-02','2026-05-03',                                                               // 勞動節 3 連假
+      '2026-06-19','2026-06-20','2026-06-21',                                                               // 端午 3 連假
+      '2026-09-25','2026-09-26','2026-09-27','2026-09-28',                                                  // 中秋＋教師節 4 連假
+      '2026-10-10','2026-10-11','2026-10-12',                                                               // 國慶＋補假
+      '2026-10-25','2026-10-26',                                                                            // 光復節＋補假
+      '2026-12-25'                                                                                          // 行憲紀念日
+    ])
+  };
+  function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function isOffDay(d) { var wd = d.getDay(); if (wd === 0 || wd === 6) return true; var s = HOLIDAYS[d.getFullYear()]; return !!(s && s.has(ymd(d))); }
+  function dayInfo(d) { return { off: isOffDay(d), wd: d.getDay() }; }
+  // 上車時間 ts 相對「今天」的星期權重：同一星期幾 ×1.4、同日型（都休或都上班）×1.0、日型不同 ×0.65
+  function dayFactor(ts, today) {
+    var d = new Date(ts), off = isOffDay(d);
+    if (off === today.off) return d.getDay() === today.wd ? 1.4 : 1.0;
+    return 0.65;
+  }
+
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
   function gmap() { return window.__mtLive && window.__mtLive.map; }
   function say(m) { if (window.toast) window.toast(m); }
@@ -148,20 +175,30 @@
     return Math.floor(xy.x / CELL) + '_' + Math.floor(xy.y / CELL);
   }
   function buildHistoryNow(me) {
-    var bi = bucketOf(new Date().getHours());
+    var nowT = new Date(), bi = bucketOf(nowT.getHours());
+    var nowH = nowT.getHours() + nowT.getMinutes() / 60, today = dayInfo(nowT);
     var now = Date.now(), DAY = 86400000, cells = {};
     historyPickups().forEach(function (hp) {
       if (!hp.t) return;
       var p = { lat: hp.lat, lng: hp.lng };
       if (H(me, p) > RADIUS) return;
-      if (bucketOf(new Date(hp.t).getHours()) !== bi) return;   // 只算當前時段
+      // 軟時段窗（±2h，1h 內滿權）取代硬分桶：不再「差幾分鐘就整筆漏掉」（8:59 vs 9:01）
+      var pd = new Date(hp.t), ph = pd.getHours() + pd.getMinutes() / 60;
+      var hd = Math.abs(ph - nowH); hd = Math.min(hd, 24 - hd);
+      var tw = hd <= 1 ? 1.0 : (hd <= 2 ? 0.6 : 0);
+      if (tw === 0) return;
       var age = (now - hp.t) / DAY;
       var rf = age <= 30 ? 1.5 : (age <= 90 ? 1.0 : 0.6);        // 近期權重高
+      var w = rf * tw * dayFactor(hp.t, today);                  // 近期 × 時段 × 星期幾/假日
       var k = cellOf(me, p);
       var c = cells[k] || (cells[k] = { n: 0, score: 0, wlat: 0, wlng: 0, wsum: 0 });
-      c.n++; c.score += rf; c.wlat += p.lat * rf; c.wlng += p.lng * rf; c.wsum += rf;
+      c.n++; c.score += w; c.wlat += p.lat * w; c.wlng += p.lng * w; c.wsum += w;
     });
-    var list = Object.keys(cells).map(function (k) {
+    // 最少趟數門檻：優先只留 ≥2 趟的格（去單筆雜訊）；若全都是單筆才放寬到 1（免退回網路）
+    var keys = Object.keys(cells);
+    var solid = keys.filter(function (k) { return cells[k].n >= 2; });
+    var use = solid.length ? solid : keys;
+    var list = use.map(function (k) {
       var c = cells[k], center = { lat: c.wlat / c.wsum, lng: c.wlng / c.wsum };
       return {
         center: center, score: c.score, count: c.n, cats: { history: c.score },
@@ -225,8 +262,9 @@
       add(p, key, cat.base * cat.tod(hour));
     });
 
-    // B. 歷史上車點（近 30 天 ×1.5、30-90 天 ×1.0、更久 ×0.6；同時段±2h ×1.5；每格上限 30）
-    var now = Date.now(), DAY = 86400000;
+    // B. 歷史上車點（近 30 天 ×1.5、30-90 天 ×1.0、更久 ×0.6；同時段±2h ×1.5；
+    //    同星期幾/同日型加權；每格上限 30）
+    var now = Date.now(), DAY = 86400000, today = dayInfo(new Date());
     historyPickups().forEach(function (h) {
       var p = { lat: h.lat, lng: h.lng };
       if (H(me, p) > RADIUS) return;
@@ -234,8 +272,9 @@
       var rf = age <= 30 ? 1.5 : (age <= 90 ? 1.0 : 0.6);
       var todM = 1.0;
       if (h.t) { var dh = Math.abs(new Date(h.t).getHours() - hour); if (Math.min(dh, 24 - dh) <= 2) todM = 1.5; }
+      var dayM = h.t ? dayFactor(h.t, today) : 1;
       var c = bucket(p);
-      var cur = c.cats.history || 0, addW = CATS.history.base * rf * todM;
+      var cur = c.cats.history || 0, addW = CATS.history.base * rf * todM * dayM;
       if (cur + addW > 30) addW = Math.max(0, 30 - cur);
       add(p, 'history', addW);
     });
@@ -334,9 +373,8 @@
       ? '🔥 找客熱區 · 現在【' + (BUCKETS[meta.bucket] ? BUCKETS[meta.bucket].label : '此時段') + '】'
       : '🔥 找客熱區（2 公里內）';
     var note = histMode
-      ? '只看你「' + (BUCKETS[meta.bucket] ? BUCKETS[meta.bucket].label + ' ' + bucketRange(meta.bucket) : '這個時段') +
-        '」在附近 2km 的歷史上車點（即時，越上面越常上車）'
-      : '依「會聚人的場所＋你的歷史上車點＋現在時段」估算，越上面越有機會';
+      ? '你在附近 2km、這個時段的歷史上車點（同星期幾/假日加權，越上面越常上車）'
+      : '依「會聚人的場所＋你的歷史上車點＋現在時段/星期」估算，越上面越有機會';
     panel.innerHTML = '<div class="hs-head"><span>' + title + '</span>' +
       '<button class="hs-close" onclick="MaptripHotspots.close()">✕</button></div>' +
       '<div class="hs-note">' + note + '</div>' +
@@ -399,6 +437,6 @@
   }
 
   window.MaptripHotspots = { run: run, close: close, focus: focusZone,
-    _buildHistoryNow: buildHistoryNow, _bucketOf: bucketOf };
+    _buildHistoryNow: buildHistoryNow, _bucketOf: bucketOf, _isOffDay: isOffDay, _dayFactor: dayFactor };
   window.openHotspots = run;
 })();
