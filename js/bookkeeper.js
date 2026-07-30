@@ -37,6 +37,13 @@
       '.bk-row .op{background:none;border:none;color:#c5221f;font-size:.8rem;font-family:inherit;cursor:pointer;padding:4px 6px}' +
       '.bk-row .go{color:#9aa0a6;font-size:1rem}' +
       '.bk-empty{text-align:center;color:#9aa0a6;font-size:.85rem;padding:18px 0}' +
+      '.bk-sum{background:#e8f0fe;border-radius:14px;padding:12px 14px;margin:8px 0 4px}' +
+      '.bk-sum .r{display:flex;align-items:baseline;justify-content:space-between}' +
+      '.bk-sum .k{font-size:.8rem;color:#5f6368;font-weight:600}' +
+      '.bk-sum .v{font-size:1.5rem;font-weight:800;color:#1a73e8}' +
+      '.bk-sum .sub{font-size:.72rem;color:#5f6368;margin-top:2px}' +
+      '.bk-sum .r2{display:flex;align-items:baseline;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.07)}' +
+      '.bk-sum .r2 .v{font-size:1rem}.bk-sum .sub2{font-size:.72rem;color:#9aa0a6;margin-left:auto}' +
       '.bk-day{font-size:.8rem;font-weight:700;color:#3c4043;margin:14px 2px 4px;background:#f1f3f4;border-radius:8px;padding:6px 10px}' +
       '.bk-trip{padding:9px 4px;border-bottom:1px solid rgba(0,0,0,.05)}' +
       '.bk-trip .l1{display:flex;align-items:center;gap:8px;font-size:.86rem;color:#202124}' +
@@ -50,6 +57,7 @@
       '.bk-note{font-size:.74rem;color:#9aa0a6;margin:2px 2px 8px}' +
       '@media (prefers-color-scheme: dark){#bk-sheet{background:#1a1a1a;border-top-color:rgba(255,255,255,.07)}' +
       '.bk-sec{color:#9aa0a6}.bk-row .nm,.bk-trip .l1{color:#e8eaed}.bk-day{background:#242424;color:#c8ccd2}' +
+      '.bk-sum{background:#1f2a3a}.bk-sum .k,.bk-sum .sub{color:#aab4c0}.bk-sum .v{color:#8ab4f8}' +
       '.bk-editrow input{background:#242424;border-color:rgba(255,255,255,.15);color:#e8eaed}}';
     document.head.appendChild(s);
   }
@@ -131,6 +139,14 @@
 
     var days = Object.keys(data.days).sort().reverse();
     var h = '<button class="bk-back" onclick="MaptripBookkeeper.back()">‹ 返回</button>';
+    // 抽成累計小計：記帳者最想看的數字（這個月/全部幫這位司機記了多少）
+    var sm = _summary(data.days, data.commissions);
+    h += '<div class="bk-sum">' +
+      '<div class="r"><span class="k">本月抽成（' + sm.ym + '）</span><span class="v">NT$ ' + nf(sm.month.comm) + '</span></div>' +
+      '<div class="sub">' + sm.month.n + ' 趟' + (sm.month.disp ? '　叫車 NT$ ' + nf(sm.month.disp) : '') + '</div>' +
+      '<div class="r2"><span class="k">全部抽成</span><span class="v">NT$ ' + nf(sm.all.comm) + '</span>' +
+      '<span class="sub2">' + sm.all.n + ' 趟' + (sm.all.disp ? '　叫車 ' + nf(sm.all.disp) : '') + '</span></div>' +
+      '</div>';
     h += '<div class="bk-note">你可以編輯每趟的「抽成／叫車費」；行程本身唯讀。</div>';
     var any = false;
     days.forEach(function (day) {
@@ -162,6 +178,24 @@
     });
     if (!any) h += '<div class="bk-empty">這位司機還沒有行程紀錄</div>';
     setBody(h);
+  }
+
+  // 抽成累計小計（純函式，供測試）：跨所有日子加總「本月」與「全部」的抽成/叫車/趟數。
+  // comm/disp 解析與逐趟顯示一致：記帳者填的 commissions 優先，否則沿用行程自帶值。
+  function _summary(days, commissions, now) {
+    var d = now ? new Date(now) : new Date();
+    var ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    var all = { n: 0, comm: 0, disp: 0 }, month = { n: 0, comm: 0, disp: 0 };
+    Object.keys(days || {}).forEach(function (day) {
+      (days[day] || []).forEach(function (t) {
+        var c = (commissions && commissions[String(t.id)]) || {};
+        var comm = c.commission != null ? c.commission : (t.commission || 0);
+        var disp = c.dispatch != null ? c.dispatch : (t.dispatch || 0);
+        all.n++; all.comm += comm; all.disp += disp;
+        if (String(day).slice(0, 7) === ym) { month.n++; month.comm += comm; month.disp += disp; }
+      });
+    });
+    return { ym: ym, all: all, month: month };
   }
 
   function render() { if (_view) renderDriver(); else renderHome(); }
@@ -231,7 +265,8 @@
 
   window.MaptripBookkeeper = {
     open: open, close: close, render: render, invite: invite, copy: copy, join: join,
-    removeBk: removeBk, unlink: unlink, openDriver: openDriver, back: back, edit: edit, saveComm: saveComm
+    removeBk: removeBk, unlink: unlink, openDriver: openDriver, back: back, edit: edit, saveComm: saveComm,
+    _summary: _summary
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;
