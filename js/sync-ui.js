@@ -96,7 +96,10 @@
       statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>'
         + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟'
         + '　本機：' + (TripStore.bytes() / 1048576).toFixed(1) + ' MB（' + TripStore.mode() + '）</span>';
-      actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>';
+      actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
+        '<button class="sync-out" style="margin-top:6px" ' +
+        'onclick="if(confirm(\'清除這台裝置的本機行程，改從雲端重新下載？（用於：換帳號後仍看到別帳號的行程）\'))MaptripSync.resetLocal()">' +
+        '🧹 清除本機並重抓雲端</button>';
     }
   }
 

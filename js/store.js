@@ -162,5 +162,25 @@ window.TripStore = (function () {
   // 某日趟數（不做深拷貝，供每秒更新的 UI 使用）
   function dayCount(day) { return (cache[day] || []).length; }
 
-  return { init, getAll, setAll, flush, bytes, mode, dayCount };
+  // 徹底清空本機行程（換帳號用）：記憶體快取＋IndexedDB 物件庫內容＋localStorage 舊備份＋搬移旗標。
+  // 少清任何一處都會在下次開機被聯集合併「復活」回來，所以四處都要清。
+  function clearAll() {
+    cache = {}; dayJson = {};
+    try { localStorage.removeItem(lsKey); localStorage.removeItem(lsKey + '_migrated'); } catch (_) {}
+    if (useLS) { try { localStorage.setItem(lsKey, '{}'); } catch (_) {} return Promise.resolve(); }
+    writeChain = writeChain.then(function () {
+      return new Promise(function (res) {
+        try {
+          var tx = db.transaction('days', 'readwrite');
+          tx.objectStore('days').clear();
+          tx.oncomplete = function () { res(); };
+          tx.onerror = function () { res(); };
+          tx.onabort = function () { res(); };
+        } catch (_) { res(); }
+      });
+    });
+    return writeChain;
+  }
+
+  return { init, getAll, setAll, flush, bytes, mode, dayCount, clearAll };
 })();

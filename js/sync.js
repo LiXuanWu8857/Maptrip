@@ -39,13 +39,51 @@
 
   function onAuth(u) {
     updateUI();
-    if (u) { pullAndListen(); loadProfile(); setTimeout(processInviteClaims, 1500); }
+    if (u) {
+      // 帳號隔離：本機（IndexedDB/localStorage）不是照帳號分開的。換帳號時若不清，
+      // 會① 顯示到上一個帳號的行程 ② 首快照把上一個帳號的「本機獨有日子」回推進新帳號雲端（污染）。
+      var prev = _getDataUid();
+      var dec = _switchDecision(prev, u.uid);
+      _pushLocalOK = dec.pushLocalOK;          // 只有「延續同帳號」才可回推本機獨有日子
+      if (dec.clear) _clearLocalForSwitch();   // 換帳號 → 先清本機
+      _setDataUid(u.uid);
+      pullAndListen(); loadProfile(); setTimeout(processInviteClaims, 1500);
+    }
     else {
       profileName = ''; needsName = false;
       if (unsub) { unsub(); unsub = null; }
       if (unsubDel) { unsubDel(); unsubDel = null; }
       if (unsubComm) { unsubComm(); unsubComm = null; }
     }
+  }
+
+  // ===== 帳號隔離（換帳號不再看到/回推上一個帳號的行程）=====
+  var DATAUID_KEY = 'maptrip_data_uid';
+  var _pushLocalOK = false;   // 是否可把「本機有、雲端沒有」的日子回推雲端（延續同帳號才安全）
+  function _getDataUid() { try { return localStorage.getItem(DATAUID_KEY) || ''; } catch (_) { return ''; } }
+  function _setDataUid(uid) { try { localStorage.setItem(DATAUID_KEY, uid || ''); } catch (_) {} }
+  // 純函式（供測試）：prev＝上一個擁有本機資料的帳號；uid＝現在登入的帳號。
+  //   clear＝是否清本機（換帳號才清）；pushLocalOK＝是否可回推本機獨有日子（延續同帳號才可）。
+  function _switchDecision(prev, uid) {
+    return { clear: !!(prev && prev !== uid), pushLocalOK: prev === uid };
+  }
+  function _clearLocalForSwitch() {
+    try { if (window.TripStore && TripStore.clearAll) TripStore.clearAll(); } catch (_) {}
+    try { localStorage.removeItem('maptrip_deleted'); } catch (_) {}
+    try { localStorage.removeItem('maptrip_active'); } catch (_) {}
+    try { if (window.refreshAfterSync) window.refreshAfterSync(); } catch (_) {}
+    log('account switch → local cleared');
+  }
+  // 手動：清本機並重新從雲端下載（換帳號後、或本機顯示到別帳號資料時修復）
+  function resetLocal() {
+    if (!ready || !user) { toastMsg('請先登入雲端'); return; }
+    _clearLocalForSwitch();
+    _pushLocalOK = false;                     // 剛清完、未驗證延續 → 這次不回推（避免污染雲端）
+    if (unsub) { unsub(); unsub = null; }
+    if (unsubDel) { unsubDel(); unsubDel = null; }
+    if (unsubComm) { unsubComm(); unsubComm = null; }
+    pullAndListen();
+    toastMsg('已清除本機並重新從雲端下載');
   }
 
   // ===== 使用者顯示名稱（記帳者/司機互相辨識用）=====
@@ -407,8 +445,10 @@
       : Object.keys(cloud));
     days.forEach(day => {
       const merged = mergeTrips(local[day], cloud[day]);
-      // 雲端與瘦身後的合併結果不同（缺趟或仍是胖資料）→ 回推，雲端也跟著瘦身
-      if (JSON.stringify(merged) !== JSON.stringify(cloud[day] || [])) toPush.push(day);
+      // 雲端與瘦身後的合併結果不同（缺趟或仍是胖資料）→ 回推，雲端也跟著瘦身。
+      // 但「本機獨有日子」只在延續同帳號（_pushLocalOK）時才回推——否則會把上一個帳號
+      // 殘留在本機的行程灌進現在這個帳號的雲端（跨帳號污染）。
+      if (_pushLocalOK && JSON.stringify(merged) !== JSON.stringify(cloud[day] || [])) toPush.push(day);
       if (JSON.stringify(merged) !== JSON.stringify(local[day] || [])) {
         if (merged.length) local[day] = merged; else delete local[day];
         changed = true;
@@ -462,5 +502,6 @@
     listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,
     listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
     readDriverData: readDriverData, writeCommission: writeCommission,
-    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize };
+    resetLocal: resetLocal,
+    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision };
 })();
