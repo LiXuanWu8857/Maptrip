@@ -111,14 +111,18 @@
   `_claimBlock/_shouldAuthorize` 純函式供測試（自檢 18 項全過）。
   **安全根仍在 Firestore 規則（不在 repo，我無法實測）**——見 `docs/記帳者-firestore規則參考.md`，
   **務必用第二帳號＋Rules Playground 實測**。待辦：readDriverData 無分頁（重度司機慢/吃額度）、記帳者
-  看到的是一次性快照（非即時）
+  看到的是一次性快照（非即時）。
+  **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
+  指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
+  記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取
+  都靠規則放行——規則沒到位，整條授權+讀取都會 permission-denied
 - **歷史行程**：月/日收合清單、日預覽（白底黑線＋編號）、回放、刪除、休息時間設定
 - **回放**：今日或歷史日，鏡頭跟隨、速度調整；回放中所有自動運鏡讓路
 - **截圖**：單趟/全日，含日期時間、金額、「其他」顯示備註；分享／儲存合一
 - **台灣道路標誌**：gl-compat 內建（國道梅花、省道盾、縣道、快速道路），
   校準工具 `MaptripTwShields.sample`
 - **地圖朝車頭**：預設開；羅盤（靜止）＋GPS 方向（行駛）雙來源
-- **電腦版檢視台模式（v264）** `js/desktop-mode.js`（MaptripDesktop）：電腦（瀏覽器）當「記帳者＋回放
+- **電腦版記帳者模式（v264；v266 更名，原叫「檢視台版」）** `js/desktop-mode.js`（MaptripDesktop）：電腦（瀏覽器）當「記帳者＋回放
   檢視台」，藏掉並停用 GPS/記錄相關（開始記錄、找客熱區、定位、指北針、GPS 標記、底部列、
   選單今日/找客熱區），保留記帳者/回放/歷史/雲端同步/收支。**判定＝手動切換鈕**（選單「切換
   檢視台版/司機版」，data-menu=reviewtoggle，旗標 `maptrip_review` 記在裝置）；**原生 App 永遠司機版**

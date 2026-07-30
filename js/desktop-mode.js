@@ -50,7 +50,8 @@
     if (!menu || menu.querySelector('button[data-menu="reviewtoggle"]')) return;
     var b = document.createElement('button');
     b.setAttribute('data-menu', 'reviewtoggle');
-    b.textContent = isReview() ? '🚕 切換司機版' : '🖥 切換檢視台版';
+    // 使用者要求：改叫「記帳者模式」（原本叫「檢視台版/電腦版」）。功能不變、旗標鍵不變。
+    b.textContent = isReview() ? '🚕 切換回司機版' : '🧾 切換記帳者模式';
     menu.appendChild(b);
   }
 

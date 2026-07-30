@@ -116,8 +116,14 @@
     var data;
     try { data = await S().readDriverData(_view.driverUid); }
     catch (e) {
+      // 顯示真正的 Firestore 錯誤碼 → 精準判斷是「權限（規則/授權）」還是別的
+      var code = (e && (e.code || e.message)) || '未知錯誤';
+      var perm = /permission|denied|insufficient|missing/i.test(String(code));
+      var msg = perm
+        ? '沒有讀取權限（' + esc(code) + '）。<br>常見兩個原因：<br>① 司機還沒「打開一次 App」完成授權（授權要司機端 App 開一次才寫入雲端）。<br>② 雲端還沒部署「記帳者」的 Firestore 安全規則（見 docs/記帳者-firestore規則參考.md）。'
+        : '讀取失敗（' + esc(code) + '）。<br>請司機打開一次 App 再試。';
       setBody('<button class="bk-back" onclick="MaptripBookkeeper.back()">‹ 返回</button>' +
-        '<div class="bk-empty">讀取失敗，可能司機尚未完成授權。<br>請司機打開 App 一次再試。</div>');
+        '<div class="bk-empty" style="text-align:left;line-height:1.7">' + msg + '</div>');
       return;
     }
     _cache = data;
