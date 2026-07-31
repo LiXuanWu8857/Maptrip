@@ -69,14 +69,40 @@
     });
   }
 
+  // 記帳者滿版首頁：純覆蓋層（鋪在地圖上、頂列之下；不碰 #map、不重 init 地圖）。
+  // 內容交給 MaptripBookkeeper.mountAsHome 渲染（與 sheet 同一套）。頂選單保留＝
+  // 同步（登入）/歷史/收支仍可用（呼應「B 模式保留收支報表」）。
+  function mountHome() {
+    if (!window.MaptripBookkeeper || !MaptripBookkeeper.mountAsHome) return;
+    var home = document.getElementById('bk-home');
+    if (!home) {
+      home = document.createElement('div');
+      home.id = 'bk-home';
+      home.innerHTML =
+        '<div id="bk-home-hdr"><span class="ti">記帳者</span>' +
+        '<button class="sw" onclick="MaptripDesktop.toggle()">→ 切回司機版</button></div>' +
+        '<div id="bk-home-body"></div>';
+      document.body.appendChild(home);
+    }
+    home.classList.add('show');
+    var uid = null;
+    try { uid = window.MaptripSync && MaptripSync.myUid && MaptripSync.myUid(); } catch (_) {}
+    if (uid) MaptripBookkeeper.mountAsHome(document.getElementById('bk-home-body'));
+    else document.getElementById('bk-home-body').innerHTML =
+      '<div style="text-align:center;color:#9aa0a6;font-size:.9rem;padding:32px 12px;line-height:1.8">' +
+      '請先從右上選單「同步」登入雲端，<br>登入後點下方按鈕載入記帳頁。' +
+      '<br><br><button onclick="MaptripBookkeeper.mountAsHome(document.getElementById(\'bk-home-body\'))" ' +
+      'style="border:none;background:#1a73e8;color:#fff;border-radius:10px;padding:10px 18px;font-size:.9rem;cursor:pointer">載入記帳頁</button></div>';
+  }
+
   function apply() {
     if (!isBrowser()) return;   // 原生 App 完全不動（司機版）
     injectCss();
     wireMouseMenu();
     addToggleItem();
-    if (isReview()) document.body.classList.add('dm-review');
+    if (isReview()) { document.body.classList.add('dm-review'); mountHome(); }
   }
 
-  global.MaptripDesktop = { apply: apply, toggle: toggle, isReview: isReview, isBrowser: isBrowser };
+  global.MaptripDesktop = { apply: apply, toggle: toggle, isReview: isReview, isBrowser: isBrowser, mountHome: mountHome };
 
 })(typeof window !== 'undefined' ? window : globalThis);

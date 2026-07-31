@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.269**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.270**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -133,6 +133,21 @@
   expSave/expCancel/expDel`，onclick 全帶引號（id 為字串）。renderDriver 存/刪後重讀 readDriverData（同抽成編輯流程）。
   測試 `bkexp.js` 12 項（列出/本月小計/＋記一筆表單/存寫到 driverUid/改帶值/取消/刪針對 driverUid/字串 id，按鈕真的點）
   全過，零 pageerror。
+  **v270 記帳者 UI 報表化重寫（依使用者 UI 設計規格/視覺稿）**：`bookkeeper.js` 渲染層整個重寫成報表導向
+  （設計 token CSS 變數、tabular-nums、grid 對齊、深色自適應），**邏輯層零改動**（授權/同步/抽成/支出/`_summary` 本質不動）。
+  重點：①`renderDriver` 拆成 `loadDriver`（抓 readDriverData）＋`paintDriver`（純畫，**月份切換/編輯免重抓**，改用
+  optimistic `_cache` 更新）；②`_summary(days,commissions,ym)` 加月份參數（`_ymOf` 容錯 'YYYY-MM' 或日期字串）；
+  ③首頁記帳者視角優先（司機卡片在上、授權 hairline 在下）；④司機檢視：月份 chip（從 days 掃出）＋司機切換下拉
+  （`_drivers` 查表、切換免回首頁）＋**未填抽成整列黃底＋待填**（`filled=touched||comm>0||'other'`，其他/自用不標）＋
+  點列 inline 展開編輯；⑤邀請碼三步驟卡（30 天效期、複製→✓ 回饋）。**月報表（§5）**：`finance.js` 抽出**單一算錢純函式**
+  `monthReport(days,commissions,expenses,ym)`（營收/抽成 commissions 覆蓋/叫車/支出/淨利、排除「其他」、月份過濾），
+  `revenueOfMonth` 改走它（工時 workMs 仍就地），**bookkeeper 報表與 finance 共用一份、不分岔**；記帳者面板顯示每月淨利。
+  **電腦滿版記帳者模式（§6）**：`bookkeeper.js` `_mount` 雙容器（sheet='bk-body'／滿版='bk-home-body'）＋`mountAsHome(el)`；
+  `desktop-mode.js` `mountHome()` 建 **純覆蓋層 `#bk-home`**（鋪地圖上、頂列之下 z=15，**不碰 #map、不 re-init 地圖**——
+  比原規格「re-init 地圖」風險低），頂列選單保留＝同步/歷史/收支仍可用（呼應 B 模式保留收支報表）；未登入顯示登入提示。
+  測試：`bkui.js` 26（monthReport 淨利/覆蓋/排除 other/月份、首頁、月份 chip 切換、warn 待填、inline 編輯寫 driverUid、
+  司機切換）、`bkmount.js` 7（mountAsHome/雙容器/滿版建置/未登入提示）、`desktopcheck` 19、`bksummary` 11、`bkexp` 12
+  全過，零 pageerror。**§6 待你最終確認**：目前滿版保留頂選單（sync/歷史/收支可用）；若要「其他全藏」再收。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

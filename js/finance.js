@@ -93,22 +93,42 @@
   function curMonth() { return monthOf(window.todayKey ? todayKey() : new Date().toISOString().slice(0, 10)); }
   function nf(n) { return (Math.round(n) || 0).toLocaleString(); }
 
-  // 某月營收（載客車資，排除「其他」）＋里程＋趟數＋現金/刷卡
-  function revenueOfMonth(month) {
-    var raw = (window.loadTrips ? loadTrips() : {}) || {};
-    var fare = 0, cash = 0, card = 0, dist = 0, trips = 0, workMs = 0, comm = 0, disp = 0;
-    Object.keys(raw).forEach(function (day) {
-      if (monthOf(day) !== month) return;
-      var arr = raw[day] || [];
-      arr.forEach(function (t) {
+  // 月報表核心（純函式，單一算錢來源）：吃 days/commissions/expenses/月份 → 營收/抽成/叫車/支出/淨利。
+  // 記帳者報表用 readDriverData 餵、finance 自己用 loadTrips 餵（commissions=null→用行程自帶 t.commission）。
+  //   - 排除「其他」付款（多為自用/非載客）
+  //   - 抽成/叫車：commissions[id] 有值優先（明確填 0 也優先），否則沿用行程自帶 t.commission/t.dispatch
+  //   - 淨利 = 營收 − 抽成 − 叫車 − 支出
+  function monthReport(days, commissions, expenses, ym) {
+    var month = ym ? String(ym).slice(0, 7) : curMonth();
+    var fare = 0, cash = 0, card = 0, dist = 0, trips = 0, comm = 0, disp = 0;
+    Object.keys(days || {}).forEach(function (day) {
+      if (String(day).slice(0, 7) !== month) return;
+      (days[day] || []).forEach(function (t) {
         if (t.paymentMethod === 'other') return;
         var f = t.fare || 0; fare += f; dist += t.totalDist || 0; trips++;
-        comm += t.commission || 0; disp += t.dispatch || 0;   // 抽成 / 叫車費
+        var c = commissions && commissions[String(t.id)];
+        comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
+        disp += (c && c.dispatch != null) ? c.dispatch : (t.dispatch || 0);
         if (t.paymentMethod === 'card') card += f; else cash += f;
       });
-      if (window.workMs && window.getRestMin) workMs += workMs0(arr, getRestMin(day));
     });
-    return { fare: fare, cash: cash, card: card, dist: dist, trips: trips, workMs: workMs, comm: comm, disp: disp };
+    var expTotal = 0;
+    (expenses || []).forEach(function (e) { if (String(e.day || '').slice(0, 7) === month) expTotal += e.amount || 0; });
+    return { month: month, fare: fare, cash: cash, card: card, dist: dist, trips: trips,
+      comm: comm, disp: disp, expTotal: expTotal, net: fare - comm - disp - expTotal };
+  }
+
+  // 某月營收（載客車資，排除「其他」）＋里程＋趟數＋現金/刷卡＋工時。
+  // 算錢部分改走共用 monthReport（單一來源）；工時 workMs 仍在此就地累加（需 app.js 全域）。
+  function revenueOfMonth(month) {
+    var raw = (window.loadTrips ? loadTrips() : {}) || {};
+    var rep = monthReport(raw, null, null, month);   // commissions=null → 用行程自帶 t.commission
+    var workMs = 0;
+    Object.keys(raw).forEach(function (day) {
+      if (monthOf(day) !== month) return;
+      if (window.workMs && window.getRestMin) workMs += workMs0(raw[day] || [], getRestMin(day));
+    });
+    return { fare: rep.fare, cash: rep.cash, card: rep.card, dist: rep.dist, trips: rep.trips, workMs: workMs, comm: rep.comm, disp: rep.disp };
   }
   function workMs0(arr, restMin) { try { return workMs(arr, restMin); } catch (_) { return 0; } }
 
@@ -605,6 +625,7 @@
   window.MaptripFinance = { open: open, close: close, shiftMonth: shiftMonth, tab: tab, toggleAdd: toggleAdd, pickCat: pickCat, saveAdd: saveAdd, delExp: delExp,
     bindExpenseSync: bindExpenseSync, resetExpenseSync: resetExpenseSync,
     CATS: CATS, CAT_MAP: CAT_MAP,   // 供 bookkeeper.js 沿用同一套支出分類（單一來源）
+    monthReport: monthReport,       // 單一算錢來源：記帳者月報表與 finance 共用
     _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName };
   window.openFinance = open;
   window.closeFinance = close;
