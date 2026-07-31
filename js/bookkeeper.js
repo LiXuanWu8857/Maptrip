@@ -7,8 +7,9 @@
   'use strict';
   var WD = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
   var _view = null;        // null=清單首頁；{driverUid,name}=某司機檢視
-  var _editId = null;      // 正在編輯抽成的趟 id（點列 inline 展開）
+  var _editId = null;      // 正在編輯抽成的趟 id（點列 inline 展開；一律存成字串，相容手動紀錄字串 id）
   var _expEdit = null;     // 支出編輯狀態：null=無／'__new__'=新增中／<id>=編輯該筆
+  var _addDay = null;      // 正在新增手動紀錄的日期 'YYYY-MM-DD'（null=無）
   var _month = null;       // 司機檢視目前選的月份 'YYYY-MM'（null=用最近月份）
   var _cache = null;       // 某司機的 { days, commissions, expenses, name }
   var _bks = [];           // 目前清單：授權我的記帳者（onclick 只傳 uid、名字查表，杜絕注入）
@@ -94,8 +95,30 @@
       '.bk-rrow.net{border-top:.5px solid var(--bk-bd2);margin-top:4px;padding-top:8px;font-weight:600;color:var(--bk-text)}' +
       '.bk-rrow.net .rv{font-size:1.05rem;color:var(--bk-acc-t)}' +
       // ---- 每趟報表列 ----
+      // 日標題列：左＝收折鈕/日期/新增紀錄/已完成，右＝趟數＋當日抽成/叫車總計
       '.bk-daygrp{background:var(--bk-s1);color:var(--bk-t2);font-size:.76rem;font-weight:600;border-radius:8px;' +
-      'padding:6px 10px;margin:10px 0 2px;display:flex;justify-content:space-between}' +
+      'padding:7px 10px;margin:10px 0 2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}' +
+      '.bk-daygrp .dg-l{display:flex;align-items:center;gap:7px;min-width:0}' +
+      '.bk-daygrp .dg-r{display:flex;align-items:center;gap:10px;margin-left:auto;white-space:nowrap}' +
+      '.bk-daygrp .dg-x{border:none;background:none;color:var(--bk-t2);cursor:pointer;font-size:.9rem;padding:0;line-height:1}' +
+      '.bk-daygrp .dg-d{font-weight:600;color:var(--bk-text)}' +
+      '.bk-daygrp .dg-add{border:.5px solid var(--bk-acc-bd);background:var(--bk-acc-bg);color:var(--bk-acc-t);' +
+      'border-radius:12px;padding:3px 9px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}' +
+      '.bk-daygrp .dg-done{border:.5px solid var(--bk-bd2);background:transparent;color:var(--bk-t2);' +
+      'border-radius:12px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:inherit}' +
+      '.bk-daygrp .dg-done.on{color:var(--bk-muted)}' +
+      '.bk-daygrp .dg-n{color:var(--bk-t2)}.bk-daygrp .dg-t{color:var(--bk-text);font-variant-numeric:tabular-nums}' +
+      // 手動新增紀錄的表單
+      '.bk-tripform{background:var(--bk-s1);border-radius:10px;padding:10px;margin:2px 0 8px}' +
+      '.bk-tripform .tf-row{display:flex;gap:8px;margin-top:8px}.bk-tripform .tf-row:first-child{margin-top:0}' +
+      '.bk-tripform input,.bk-tripform select{flex:1;min-width:0;box-sizing:border-box;padding:9px 10px;' +
+      'border:.5px solid var(--bk-bd2);border-radius:8px;font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text)}' +
+      '.bk-tripform button{flex:1;padding:9px;border:none;border-radius:8px;background:var(--bk-acc-fill);color:#fff;font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.bk-tripform button.gh{background:var(--bk-s2);color:var(--bk-t2);border:.5px solid var(--bk-bd2)}' +
+      // 手動小標＋現金反灰輸入
+      '.bk-trow .man{font-size:.6rem;color:var(--bk-acc-t);background:var(--bk-acc-bg);border-radius:4px;padding:0 4px;margin-left:3px}' +
+      '.bk-tedit input:disabled{opacity:.45;background:var(--bk-s1);cursor:not-allowed}' +
+      '.bk-tedit .del{background:var(--bk-s1);color:var(--bk-danger)}' +
       '.bk-trow{border-bottom:.5px solid var(--bk-bd);padding:10px 8px;cursor:pointer;display:grid;' +
       'grid-template-columns:52px 38px 1fr auto;align-items:center;gap:8px;font-size:.86rem;font-variant-numeric:tabular-nums}' +
       '.bk-trow.warn{background:var(--bk-warn-bg);border-radius:8px}' +
@@ -168,7 +191,7 @@
     injectCss();
     if (!el.id) el.id = 'bk-home-body';
     _mount = el.id;
-    _view = null; _editId = null; _expEdit = null; _month = null;
+    _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null;
     render();
   }
 
@@ -251,8 +274,9 @@
     if (!_cache) return;
     setTitle('司機：' + (_view.name || ''));
     var data = _cache;
-    var months = _monthsOf(data.days);
-    var sm = _summary(data.days, data.commissions, _month);
+    var days = _mergeManual(data.days, data.manualTrips);   // 併入手動紀錄後統一顯示/計算
+    var months = _monthsOf(days);
+    var sm = _summary(days, data.commissions, _month);
 
     var h = '';
     // header：返回 + 司機切換下拉
@@ -280,38 +304,58 @@
       '<div class="sub">' + sm.all.n + ' 趟' + (sm.all.disp ? ' · 叫車 ' + nf(sm.all.disp) : '') + '</div></div></div>';
 
     // 月報表（淨利，含支出）
-    h += _reportSection(data, _month);
+    h += _reportSection({ days: days, commissions: data.commissions, expenses: data.expenses }, _month);
 
     // 支出
     h += _expensesSection(data.expenses || []);
 
     // 每趟（依選定月份過濾）＋日期分組
-    var dayKeys = Object.keys(data.days).filter(function (d) { return String(d).slice(0, 7) === _month; }).sort().reverse();
+    var dayKeys = Object.keys(days).filter(function (d) { return String(d).slice(0, 7) === _month; }).sort().reverse();
     var any = false;
     dayKeys.forEach(function (day) {
-      var trips = (data.days[day] || []).slice().sort(function (a, b) { return a.startTime - b.startTime; });
+      var trips = (days[day] || []).slice().sort(function (a, b) { return (a.startTime || 0) - (b.startTime || 0); });
       if (!trips.length) return;
       any = true;
-      h += '<div class="bk-daygrp"><span>' + day + ' ' + wdOf(day) + '</span><span>' + trips.length + ' 趟</span></div>';
+      var tot = _dayTotals(trips, data.commissions);
+      var done = _isDone(day);
+      // 日標題列：收折鈕／日期／＋新增紀錄／已完成，右側趟數＋當日抽成/叫車總計
+      h += '<div class="bk-daygrp">' +
+        '<div class="dg-l">' +
+          '<button class="dg-x" onclick="MaptripBookkeeper.toggleDay(\'' + day + '\')">' + (done ? '▸' : '▾') + '</button>' +
+          '<span class="dg-d">' + day + ' ' + wdOf(day) + '</span>' +
+          '<button class="dg-add" onclick="event.stopPropagation();MaptripBookkeeper.addTrip(\'' + day + '\')">＋ 新增紀錄</button>' +
+          '<button class="dg-done' + (done ? ' on' : '') + '" onclick="event.stopPropagation();MaptripBookkeeper.toggleDay(\'' + day + '\')">' +
+            (done ? '↺ 展開' : '✓ 已完成紀錄') + '</button>' +
+        '</div>' +
+        '<div class="dg-r"><span class="dg-n">' + trips.length + ' 趟</span>' +
+          '<span class="dg-t">抽成 ' + nf(tot.comm) + '　叫車 ' + nf(tot.disp) + '</span></div>' +
+        '</div>';
+      // 新增紀錄表單（不受收折影響，方便補登）
+      if (_addDay === day) h += _tripForm(day);
+      if (done) return;   // 已完成＝收折：不畫每趟
       trips.forEach(function (t) {
-        var c = data.commissions[String(t.id)] || {};
+        var idS = String(t.id);
+        var c = data.commissions[idS] || {};
         var touched = c.commission != null;
-        var comm = touched ? c.commission : (t.commission || 0);
+        var cashLock = t.paymentMethod === 'cash';   // 現金：抽成鎖 0、不可輸入
+        var comm = cashLock ? 0 : (touched ? c.commission : (t.commission || 0));
         var disp = c.dispatch != null ? c.dispatch : (t.dispatch || 0);
-        // 「其他（自用/非載客）」不需要抽成 → 不標待填
-        var filled = touched || comm > 0 || t.paymentMethod === 'other';
+        // 「其他（自用）」與「現金」不需填抽成 → 不標待填
+        var filled = touched || comm > 0 || t.paymentMethod === 'other' || cashLock;
         var pay = t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'cash' ? '現金' : (t.paymentMethod === 'other' ? (t.label || '其他') : ''));
-        h += '<div class="bk-trow' + (filled ? '' : ' warn') + '" onclick="MaptripBookkeeper.edit(' + t.id + ')">' +
-          '<span class="t">' + fmtT(t.startTime) + '</span>' +
+        h += '<div class="bk-trow' + (filled ? '' : ' warn') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
+          '<span class="t">' + fmtT(t.startTime) + (t._manual ? '<br><span class="man">手動</span>' : '') + '</span>' +
           '<span class="p">' + esc(pay) + '</span>' +
           '<span class="f">車資 ' + nf(t.fare) + '</span>' +
-          '<span class="c' + (filled ? '' : ' todo') + '">' + (filled ? nf(comm) + (disp ? '／' + nf(disp) : '') : '待填') + '</span></div>';
-        if (_editId === t.id) {
+          '<span class="c' + (filled ? '' : ' todo') + '">' + (filled ? nf(comm) + '／' + nf(disp) : '待填') + '</span></div>';
+        if (String(_editId) === idS) {
           h += '<div class="bk-tedit">' +
-            '<span class="lb">抽成</span><input id="bk-c" type="number" inputmode="numeric" value="' + comm + '">' +
+            '<span class="lb">抽成</span><input id="bk-c" type="number" inputmode="numeric" value="' + comm + '"' + (cashLock ? ' disabled' : '') + '>' +
             '<span class="lb">叫車</span><input id="bk-d" type="number" inputmode="numeric" value="' + disp + '">' +
-            '<button onclick="MaptripBookkeeper.saveComm(' + t.id + ')">存</button>' +
-            '<button class="gh" onclick="MaptripBookkeeper.edit(' + t.id + ')">取消</button></div>';
+            '<button onclick="MaptripBookkeeper.saveComm(\'' + esc(idS) + '\')">存</button>' +
+            '<button class="gh" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">取消</button>' +
+            (t._manual ? '<button class="del" onclick="MaptripBookkeeper.delTrip(\'' + day + '\',\'' + esc(idS) + '\')">刪</button>' : '') +
+            '</div>';
         }
       });
     });
@@ -352,6 +396,102 @@
       });
     });
     return { ym: target, all: all, month: month };
+  }
+
+  // ---------- 手動紀錄 / 當日總計 / 收折（純函式，供測試） ----------
+  function _localDay(ts) {
+    try { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    catch (_) { return ''; }
+  }
+  // 併入手動紀錄：回傳「新的 days map」（不改原物件），手動趟標 _manual=true。
+  // 手動紀錄放進 m.day（沒有就用 startTime 推當地日期）對應的那天，之後由 paint 依 startTime 排序插入。
+  function _mergeManual(days, manualTrips) {
+    var out = {};
+    Object.keys(days || {}).forEach(function (d) { out[d] = (days[d] || []).slice(); });
+    (manualTrips || []).forEach(function (m) {
+      var day = m.day || (m.startTime ? _localDay(m.startTime) : '');
+      if (!day) return;
+      if (!out[day]) out[day] = [];
+      out[day].push({ id: m.id, fare: (m.fare != null ? m.fare : 0), paymentMethod: m.paymentMethod || 'cash',
+        startTime: m.startTime || 0, label: m.label || '', commission: m.commission, dispatch: m.dispatch, _manual: true });
+    });
+    return out;
+  }
+  // 當日抽成/叫車總計（與逐趟顯示一致：commissions 優先，否則行程自帶）。
+  function _dayTotals(trips, commissions) {
+    var comm = 0, disp = 0;
+    (trips || []).forEach(function (t) {
+      var c = (commissions && commissions[String(t.id)]) || {};
+      comm += c.commission != null ? c.commission : (t.commission || 0);
+      disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
+    });
+    return { comm: comm, disp: disp };
+  }
+  // 「已完成紀錄」收折狀態：記在本機（依司機分開）。回傳/切換某日是否已完成（＝收折）。
+  function _doneKey() { return 'bk_done_' + ((_view && _view.driverUid) || ''); }
+  function _doneList() { try { return JSON.parse(localStorage.getItem(_doneKey()) || '[]') || []; } catch (_) { return []; } }
+  function _isDone(day) { return _doneList().indexOf(day) >= 0; }
+  function _setDone(day, on) {
+    var l = _doneList().filter(function (d) { return d !== day; });
+    if (on) l.push(day);
+    try { localStorage.setItem(_doneKey(), JSON.stringify(l)); } catch (_) {}
+  }
+
+  // 新增手動紀錄表單：車資／時間／付款方式
+  function _tripForm(day) {
+    var now = new Date();
+    var hh = String(now.getHours()).padStart(2, '0'), mm = String(now.getMinutes()).padStart(2, '0');
+    return '<div class="bk-tripform">' +
+      '<div class="tf-row">' +
+        '<input id="bk-nf" type="number" inputmode="numeric" placeholder="車資">' +
+        '<input id="bk-nt" type="time" value="' + hh + ':' + mm + '">' +
+      '</div>' +
+      '<div class="tf-row">' +
+        '<select id="bk-np"><option value="cash">現金</option><option value="card">刷卡</option></select>' +
+        '<button onclick="MaptripBookkeeper.saveTrip(\'' + day + '\')">新增</button>' +
+        '<button class="gh" onclick="MaptripBookkeeper.addTrip(\'' + day + '\')">取消</button>' +
+      '</div></div>';
+  }
+
+  // 從併入手動後的 days 找某趟（給 saveComm 判斷是否現金）
+  function _findTrip(id) {
+    if (!_cache) return null;
+    var days = _mergeManual(_cache.days, _cache.manualTrips), found = null;
+    Object.keys(days).forEach(function (d) {
+      (days[d] || []).forEach(function (t) { if (String(t.id) === String(id)) found = t; });
+    });
+    return found;
+  }
+
+  function toggleDay(day) { _setDone(day, !_isDone(day)); paintDriver(); }
+  function addTrip(day) { _addDay = (_addDay === day ? null : day); _editId = null; paintDriver(); }
+  async function saveTrip(day) {
+    var fare = parseInt((document.getElementById('bk-nf') || {}).value, 10) || 0;
+    var time = (document.getElementById('bk-nt') || {}).value || '';
+    var pay = (document.getElementById('bk-np') || {}).value || 'cash';
+    if (!fare || fare <= 0) { if (window.toast) toast('請輸入車資'); return; }
+    if (!/^\d{2}:\d{2}$/.test(time)) { if (window.toast) toast('請輸入時間'); return; }
+    var startTime = new Date(day + 'T' + time + ':00').getTime();
+    try {
+      var rec = { fare: fare, paymentMethod: pay, startTime: startTime, day: day };
+      var id = await S().writeManualTrip(_view.driverUid, rec);
+      if (!_cache.manualTrips) _cache.manualTrips = [];
+      _cache.manualTrips.push({ id: id, fare: fare, paymentMethod: pay, startTime: startTime, day: day, manual: true });
+      _addDay = null;
+      paintDriver();
+      if (window.toast) toast('已新增紀錄');
+    } catch (e) { if (window.toast) toast('新增失敗：' + ((e && (e.code || e.message)) || e)); }
+  }
+  async function delTrip(day, id) {
+    if (!confirm('刪除這筆手動紀錄？')) return;
+    try {
+      await S().deleteManualTrip(_view.driverUid, id);
+      if (_cache && _cache.manualTrips) _cache.manualTrips = _cache.manualTrips.filter(function (m) { return String(m.id) !== String(id); });
+      if (_cache && _cache.commissions) delete _cache.commissions[String(id)];
+      _editId = null;
+      paintDriver();
+      if (window.toast) toast('已刪除');
+    } catch (e) { if (window.toast) toast('刪除失敗：' + ((e && (e.code || e.message)) || e)); }
   }
 
   // 月報表（淨利）：重用 finance 的共用純函式 monthReport（單一算錢來源）
@@ -459,7 +599,7 @@
     if (!S() || !(S().myUid && S().myUid())) { if (window.toast) toast('請先登入雲端'); return; }
     ensureSheet();
     _mount = 'bk-body';   // sheet 模式一律寫回 sheet body（可能被滿版改過）
-    _view = null; _editId = null; _expEdit = null; _month = null;
+    _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null;
     document.getElementById('bk-sheet').classList.add('show');
     var ov = document.getElementById('sheet-overlay');
     if (ov) { ov.style.display = 'block'; ov.onclick = close; }
@@ -469,7 +609,7 @@
     var s = document.getElementById('bk-sheet'); if (s) s.classList.remove('show');
     var ov = document.getElementById('sheet-overlay');
     if (ov) { ov.style.display = 'none'; ov.onclick = window.closeActiveSheet || null; }
-    _view = null; _editId = null; _expEdit = null; _month = null;
+    _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null;
   }
   async function invite() {
     try {
@@ -513,21 +653,23 @@
     if (!_view) return;
     var uid = _view.driverUid;
     await unlink(uid);
-    _view = null; _editId = null; _expEdit = null; _month = null;
+    _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null;
     renderHome();
   }
-  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name || _drvName(driverUid) }; _editId = null; _expEdit = null; _month = null; loadDriver(); }
+  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name || _drvName(driverUid) }; _editId = null; _expEdit = null; _addDay = null; _month = null; loadDriver(); }
   function switchDriver(driverUid) {
     var m = document.getElementById('bk-drvmenu'); if (m) m.classList.remove('show');
     if (_view && driverUid === _view.driverUid) return;
     openDriver(driverUid);
   }
   function toggleDrvMenu() { var m = document.getElementById('bk-drvmenu'); if (m) m.classList.toggle('show'); }
-  function setMonth(ym) { _month = ym; _editId = null; _expEdit = null; paintDriver(); }
-  function back() { _view = null; _editId = null; _expEdit = null; _month = null; renderHome(); }
-  function edit(tripId) { _editId = (_editId === tripId ? null : tripId); paintDriver(); }
+  function setMonth(ym) { _month = ym; _editId = null; _expEdit = null; _addDay = null; paintDriver(); }
+  function back() { _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null; renderHome(); }
+  function edit(tripId) { var s = String(tripId); _editId = (String(_editId) === s ? null : s); paintDriver(); }
   async function saveComm(tripId) {
-    var comm = parseInt((document.getElementById('bk-c') || {}).value) || 0;
+    var t = _findTrip(tripId);
+    var cashLock = !!(t && t.paymentMethod === 'cash');   // 現金：抽成強制 0
+    var comm = cashLock ? 0 : (parseInt((document.getElementById('bk-c') || {}).value) || 0);
     var disp = parseInt((document.getElementById('bk-d') || {}).value) || 0;
     try {
       await S().writeCommission(_view.driverUid, tripId, comm, disp);
@@ -544,7 +686,8 @@
     openDriver: openDriver, switchDriver: switchDriver, toggleDrvMenu: toggleDrvMenu, setMonth: setMonth,
     back: back, edit: edit, saveComm: saveComm,
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
-    _summary: _summary
+    toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
+    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _localDay: _localDay
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;

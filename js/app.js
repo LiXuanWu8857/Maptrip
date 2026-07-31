@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.270';
+const APP_VERSION  = '1.1.271';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1670,7 +1670,13 @@ MaptripSyncUI.init({ appVersion: APP_VERSION });
 function openSyncDialog() { return MaptripSyncUI.openSyncDialog(); }
 function closeSyncDialog() { return MaptripSyncUI.closeSyncDialog(); }
 function submitGateLogin() { return MaptripSyncUI.submitGateLogin(); }
-function renderSyncPanel() { return MaptripSyncUI.renderSyncPanel(); }
+function renderSyncPanel() {
+  var r = MaptripSyncUI.renderSyncPanel();
+  // 記帳者滿版模式：登入狀態一變（登入成功）就自動把記帳頁掛上，
+  // 使用者不用再手動點「載入記帳頁」（v271 req1：進入直接載入、跳出選司機）。
+  try { if (window.MaptripDesktop && MaptripDesktop.isReview()) MaptripDesktop.mountHome(); } catch (_) {}
+  return r;
+}
 function submitSyncLogin() { return MaptripSyncUI.submitSyncLogin(); }
 
 // 雲端把新資料併進 localStorage 後呼叫：重繪今日 + 更新開啟中的清單

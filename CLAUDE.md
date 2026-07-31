@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.270**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.271**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -148,6 +148,17 @@
   測試：`bkui.js` 26（monthReport 淨利/覆蓋/排除 other/月份、首頁、月份 chip 切換、warn 待填、inline 編輯寫 driverUid、
   司機切換）、`bkmount.js` 7（mountAsHome/雙容器/滿版建置/未登入提示）、`desktopcheck` 19、`bksummary` 11、`bkexp` 12
   全過，零 pageerror。**§6 待你最終確認**：目前滿版保留頂選單（sync/歷史/收支可用）；若要「其他全藏」再收。
+  **v271 記帳者四項（依 RTFD 設計稿）**：①**登入自動載入**——`app.js renderSyncPanel` 包裝在 review 模式時
+  自動 `MaptripDesktop.mountHome()`，登入後不用再手動點「載入記帳頁」、直接落在選司機頁；②**加速選司機**——
+  `sync.js readDriverData` 五個子集合（profile/days/commissions/expenses/manualTrips）改 `Promise.all` 併發，
+  序列 5 趟 round-trip → 1 批，明顯變快（days 仍不吞錯＝授權關鍵）；③**每日收折＋手動補登＋當日總計**——
+  日標題右側顯示「N 趟／抽成 xxx 叫車 xxx」（`_dayTotals`），左側加「＋新增紀錄」「✓ 已完成紀錄（＝收折，本機
+  `bk_done_<uid>` 記狀態）」；新增紀錄填車資/時間/付款 → 寫 `manualTrips` 子集合（**不寫進 days**、避免蓋掉司機
+  GPS 行程），讀取時 `_mergeManual` 依 startTime 排序插入、標「手動」小字，可刪；④**現金抽成鎖定**——現金列
+  inline 編輯抽成 input `disabled` 反灰、`saveComm` 強制 0，現金/其他不標「待填」。純函式 `_mergeManual/
+  _dayTotals/_localDay` 供測試；`sync.js` 加 `writeManualTrip/deleteManualTrip`。**安全根仍在 Firestore 規則**：
+  `manualTrips` 需比照 commissions 開 read+write 給記帳者（見規則參考 doc；沒部署則補登靜默沒上雲，UI 樂觀更新仍看得到）。
+  測試 `bktaxi.js` 25 項（合併/總計/收折/新增排序/手動標記/刪除/現金鎖）全過、`bkui.js` 25 更新為新現金行為、零 pageerror。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

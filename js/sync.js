@@ -225,24 +225,27 @@
   }
   // 記帳者：讀某司機的行程 + 抽成 + 名稱
   async function readDriverData(driverUid) {
-    var res = { days: {}, commissions: {}, expenses: [], name: '' };
+    var res = { days: {}, commissions: {}, expenses: [], manualTrips: [], name: '' };
     if (!ready || !user) return res;
-    try {
-      var p = await db.collection('users').doc(driverUid).collection('meta').doc('profile').get();
-      res.name = (p.exists && p.data().name) || '';
-    } catch (_) {}
-    try {
-      var q = await db.collection('users').doc(driverUid).collection('days').get();
-      q.forEach(function (doc) { res.days[doc.id] = (doc.data() || {}).trips || []; });
-    } catch (e) { throw e; }   // 讀行程失敗（多半是還沒授權）→ 讓上層提示
-    try {
-      var cq = await db.collection('users').doc(driverUid).collection('commissions').get();
-      cq.forEach(function (doc) { res.commissions[doc.id] = doc.data() || {}; });
-    } catch (_) {}
-    try {
-      var eq = await db.collection('users').doc(driverUid).collection('expenses').get();
-      eq.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; res.expenses.push(e); });
-    } catch (_) {}   // 支出讀不到不擋（規則未部署時報表照樣顯示營收側）
+    var base = db.collection('users').doc(driverUid);
+    // 五個子集合原本逐一 await（序列 5 趟 round-trip，記帳者選司機後常等很久）。
+    // 改成 Promise.all 一次併發送出，總延遲≈最慢的那一個 → 明顯加快（v271）。
+    // days 是授權關鍵：讀不到多半＝未授權/規則未部署 → 必須讓錯誤往上拋出提示；
+    // 其餘（profile/commissions/expenses/manualTrips）讀不到不擋，各自吞掉。
+    var soft = function (p) { return p.then(function (s) { return s; }, function () { return null; }); };
+    var r = await Promise.all([
+      soft(base.collection('meta').doc('profile').get()),
+      base.collection('days').get(),                 // 不吞：失敗要拋
+      soft(base.collection('commissions').get()),
+      soft(base.collection('expenses').get()),
+      soft(base.collection('manualTrips').get())
+    ]);
+    var p = r[0], q = r[1], cq = r[2], eq = r[3], mq = r[4];
+    if (p && p.exists) res.name = (p.data().name) || '';
+    q.forEach(function (doc) { res.days[doc.id] = (doc.data() || {}).trips || []; });
+    if (cq) cq.forEach(function (doc) { res.commissions[doc.id] = doc.data() || {}; });
+    if (eq) eq.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; res.expenses.push(e); });
+    if (mq) mq.forEach(function (doc) { var m = doc.data() || {}; m.id = doc.id; res.manualTrips.push(m); });
     return res;
   }
   // 司機本人或記帳者：寫某司機某趟的抽成
@@ -277,6 +280,24 @@
     if (!ready || !user) throw new Error('尚未登入');
     await db.collection('users').doc(driverUid).collection('expenses').doc(String(id)).delete();
   }
+  // ── 手動紀錄（manualTrips）：記帳者代司機補登當日路程（司機忘記按/現金單）──
+  // 獨立子集合 users/{driverUid}/manualTrips/{id}，id＝<寫入者uid>_<ts>，
+  // 刻意「不寫進司機的 days 文件」以免蓋掉司機 App 的 GPS 行程；記帳者端讀取時再併進當日顯示。
+  // 抽成/叫車沿用既有 commissions 集合（key＝此 id），機制單一。
+  async function writeManualTrip(driverUid, t) {
+    if (!ready || !user) throw new Error('尚未登入');
+    var id = (t && t.id) ? String(t.id) : (user.uid + '_' + Date.now());
+    await db.collection('users').doc(driverUid).collection('manualTrips').doc(id)
+      .set({ fare: (t && t.fare) || 0, paymentMethod: (t && t.paymentMethod) || 'cash',
+             startTime: (t && t.startTime) || Date.now(), day: (t && t.day) || '',
+             label: (t && t.label) || '', manual: true, by: user.uid }, { merge: true });
+    return id;
+  }
+  async function deleteManualTrip(driverUid, id) {
+    if (!ready || !user) throw new Error('尚未登入');
+    await db.collection('users').doc(driverUid).collection('manualTrips').doc(String(id)).delete();
+  }
+
   // 訂閱某司機支出的即時變動（司機端本機用，記帳者改的支出即時回讀）。
   // cb 收到完整陣列；回傳 unsubscribe 函式。
   function listenExpenses(driverUid, cb) {
@@ -545,6 +566,7 @@
     listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
     readDriverData: readDriverData, writeCommission: writeCommission,
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
+    writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
     resetLocal: resetLocal,
     _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision };
 })();

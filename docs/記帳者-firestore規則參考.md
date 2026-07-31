@@ -12,6 +12,7 @@
 - `users/{driverUid}/days/{day}`　　行程（司機寫；記帳者讀）
 - `users/{driverUid}/commissions/{tripId}`　抽成（司機寫；**記帳者可寫**；司機端訂閱回讀）
 - `users/{driverUid}/expenses/{expId}`　支出（加油等；司機寫；**記帳者可讀可寫可刪**；雙向訂閱回讀）
+- `users/{driverUid}/manualTrips/{tripId}`　手動紀錄（記帳者代補登；**記帳者可讀可寫可刪**；不寫進 days）
 - `users/{driverUid}/meta/access`　`{ bookkeepers: {uid:name}, ... }` 授權清單（只司機自己）
 - `users/{driverUid}/meta/profile`　`{ name }`（司機寫；記帳者讀，用來顯示司機名）
 - `users/{driverUid}/meta/deleted`　刪除墓碑（只司機自己）
@@ -54,6 +55,12 @@ service cloud.firestore {
       //   allow read:  if isOwner(uid) || isBookkeeper(uid);
       //   allow write: if isOwner(uid);
       match /expenses/{expId} {
+        allow read, write: if isOwner(uid) || isBookkeeper(uid);
+      }
+
+      // 手動紀錄：記帳者代司機補登當日路程（司機忘記按/現金單）。
+      // 獨立子集合，不寫進 days（避免蓋掉司機 App 的 GPS 行程）；本人＋記帳者可讀寫刪。
+      match /manualTrips/{tripId} {
         allow read, write: if isOwner(uid) || isBookkeeper(uid);
       }
 
