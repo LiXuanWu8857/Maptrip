@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.267**（2026-07-30）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.268**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -116,6 +116,17 @@
   小計卡，答「這個月幫這位司機記了多少」。純函式 `_summary(days,commissions,now)`（commissions 優先、
   0 也優先於行程自帶，`day.slice(0,7)` 切當月）供測試（11 項全過）。B 模式（記帳者模式）取捨底定＝
   記帳者面板＋歷史唯讀＋回放＋雲端同步＋收支報表（含熱點分析），藏 GPS/找客/定位；desktop-mode.js 現況即 B。
+  **v268 支出上雲＋記帳者可讀寫刪支出**：支出（加油等）原本只存 localStorage、綁單一裝置 → 電腦看不到手機記的支出、
+  收支報表淨利算錯。改**雲端為主＋localStorage 快取**：`sync.js` 新增 `readExpenses/writeExpense/deleteExpense/
+  listenExpenses`（`users/{driverUid}/expenses/{expId}`，id＝`<uid>_<ts>` 防撞號）、`readDriverData` 一併回傳 expenses；
+  `finance.js` `bindExpenseSync`（開報表時：一次性遷移舊本機支出上雲＋onSnapshot 回填快取，`maptrip_exp_migrated` 旗標）、
+  saveAdd/delExp 樂觀更新＋推雲。**兩個必修**（血淚）：①刪除鈕 id 從數字改字串**必須加引號**（`delExp(\'...\')`，
+  否則 onclick 把字串當變數→ReferenceError 刪不掉；delExp 改 `String()` 比對相容舊數字 id）；②**換帳號 `resetExpenseSync`**
+  （取消訂閱＋清支出快取＋放開 `_expBound`，由 sync `_clearLocalForSwitch` 呼叫，與 v265 行程隔離同類坑，
+  不清 `maptrip_exp_migrated`＝裝置級旗標與帳號無關）。**安全根仍在 Firestore 規則**：expenses 開 read+write 給記帳者
+  ＝把「看帳全貌＋可刪」給記帳者（使用者「自己人」確認要可讀可刪可改），規則沒部署則新子集合被預設 deny、
+  司機連自己支出都同步不上（UI 樂觀更新仍看得到、靜默沒上雲）。務必第二帳號實測規則第 6–8 項。
+  純函式測試 `expsync.js` 13 項（遷移/訂閱/saveAdd 字串 id/**刪除鈕真的點得下去**/String 比對刪舊 id/reset/換帳號重綁）全過，零 pageerror。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

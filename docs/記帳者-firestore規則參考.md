@@ -11,6 +11,7 @@
 
 - `users/{driverUid}/days/{day}`　　行程（司機寫；記帳者讀）
 - `users/{driverUid}/commissions/{tripId}`　抽成（司機寫；**記帳者可寫**；司機端訂閱回讀）
+- `users/{driverUid}/expenses/{expId}`　支出（加油等；司機寫；**記帳者可讀可寫可刪**；雙向訂閱回讀）
 - `users/{driverUid}/meta/access`　`{ bookkeepers: {uid:name}, ... }` 授權清單（只司機自己）
 - `users/{driverUid}/meta/profile`　`{ name }`（司機寫；記帳者讀，用來顯示司機名）
 - `users/{driverUid}/meta/deleted`　刪除墓碑（只司機自己）
@@ -45,6 +46,14 @@ service cloud.firestore {
 
       // 抽成：本人讀寫；記帳者可讀可寫（這是記帳者的核心權限）
       match /commissions/{tripId} {
+        allow read, write: if isOwner(uid) || isBookkeeper(uid);
+      }
+
+      // 支出：本人讀寫；記帳者可讀可寫可刪（記帳者報表要看淨利＝營收−抽成−支出）
+      // 比照 commissions 同級待遇。若只想給記帳者「看」不給「改」，把下行 write 收回本人：
+      //   allow read:  if isOwner(uid) || isBookkeeper(uid);
+      //   allow write: if isOwner(uid);
+      match /expenses/{expId} {
         allow read, write: if isOwner(uid) || isBookkeeper(uid);
       }
 
@@ -89,9 +98,18 @@ service cloud.firestore {
 2. **未授權者讀不到**：C（沒兌換）直接呼叫讀 A 的 days → **必須被拒**。
 3. **一碼一用**：B 兌換後，C 再兌換同一碼 → 應被 `_claimBlock` 擋（「已被使用」）。
 4. **撤銷持久**：A 撤銷 B → 邀請碼被標 revoked → A 重開面板/重登，B **不會**又被加回；B 端讀 A 行程被拒。
-5. **記帳者不能改行程**：B 嘗試寫 A 的 `days` → 必須被拒（只能寫 commissions）。
+5. **記帳者不能改行程**：B 嘗試寫 A 的 `days` → 必須被拒（只能寫 commissions / expenses）。
+6. **記帳者讀寫支出**：B 讀 A 的 `expenses` → 可讀；B 新增/刪一筆 A 的支出 → 可寫；A 端 `listenExpenses` 即時看到。
+7. **未授權者碰不到支出**：C（沒兌換）讀或寫 A 的 `expenses` → **必須被拒**。
+8. **撤銷後支出也讀不到**：A 撤銷 B 後，B 讀 A 的 `expenses` → **必須被拒**（`isBookkeeper` 已不成立）。
+
+> ⚠️ 支出含加油等個人成本，開放記帳者讀寫＝把「看帳全貌」給了記帳者。發佈前想清楚這是你要的授權範圍；
+> 若只想給「看」不給「改」，用規則裡註解的唯讀版本（read 給記帳者、write 收回本人）。
 
 ## 對應的程式端（已修，v262 之後）
 
 - `sync.js`：`_claimBlock`（一碼一用）、`_shouldAuthorize`（跳過 revoked）、`removeBookkeeper` 撤銷時標 revoked。
+  新增 `readExpenses` / `writeExpense` / `deleteExpense` / `listenExpenses`；`readDriverData` 一併回傳 `expenses`。
 - `bookkeeper.js`：onclick 只帶 uid、名字查表（杜絕名字注入）；移除司機的提示講清楚「授權仍在」。
+- `finance.js`：支出改雲端為主＋localStorage 快取；首次啟用遷移舊資料上雲；`listenExpenses` 即時同步；
+  換帳號 `resetExpenseSync`（取消訂閱＋清支出快取，防跨帳號殘留）。

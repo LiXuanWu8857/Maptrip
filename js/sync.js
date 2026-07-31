@@ -71,6 +71,9 @@
     try { if (window.TripStore && TripStore.clearAll) TripStore.clearAll(); } catch (_) {}
     try { localStorage.removeItem('maptrip_deleted'); } catch (_) {}
     try { localStorage.removeItem('maptrip_active'); } catch (_) {}
+    // 換帳號一併重置支出雲端同步（取消舊訂閱、清支出快取、下次開報表重新綁新帳號），
+    // 否則會顯示上一個帳號的支出、舊訂閱還在跑（與 v265 行程隔離同一類坑）。
+    try { if (window.MaptripFinance && MaptripFinance.resetExpenseSync) MaptripFinance.resetExpenseSync(); } catch (_) {}
     try { if (window.refreshAfterSync) window.refreshAfterSync(); } catch (_) {}
     log('account switch → local cleared');
   }
@@ -222,7 +225,7 @@
   }
   // 記帳者：讀某司機的行程 + 抽成 + 名稱
   async function readDriverData(driverUid) {
-    var res = { days: {}, commissions: {}, name: '' };
+    var res = { days: {}, commissions: {}, expenses: [], name: '' };
     if (!ready || !user) return res;
     try {
       var p = await db.collection('users').doc(driverUid).collection('meta').doc('profile').get();
@@ -236,6 +239,10 @@
       var cq = await db.collection('users').doc(driverUid).collection('commissions').get();
       cq.forEach(function (doc) { res.commissions[doc.id] = doc.data() || {}; });
     } catch (_) {}
+    try {
+      var eq = await db.collection('users').doc(driverUid).collection('expenses').get();
+      eq.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; res.expenses.push(e); });
+    } catch (_) {}   // 支出讀不到不擋（規則未部署時報表照樣顯示營收側）
     return res;
   }
   // 司機本人或記帳者：寫某司機某趟的抽成
@@ -243,6 +250,41 @@
     if (!ready || !user) throw new Error('尚未登入');
     await db.collection('users').doc(driverUid).collection('commissions').doc(String(tripId))
       .set({ commission: commission || 0, dispatch: dispatch || 0, updatedAt: Date.now(), by: user.uid }, { merge: true });
+  }
+
+  // ── 支出（expenses）：司機本人或記帳者皆可讀寫某司機的支出集合 ──
+  // 文件 id 用 <寫入者uid>_<ts>，避免司機/記帳者同毫秒雙寫撞號。
+  // 讀取某司機全部支出（回傳陣列，每筆帶 id）。
+  async function readExpenses(driverUid) {
+    var out = [];
+    if (!ready || !user) return out;
+    var eq = await db.collection('users').doc(driverUid).collection('expenses').get();
+    eq.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; out.push(e); });
+    return out;
+  }
+  // 寫一筆支出。傳入的 e = { id?, cat, amount, note, day, ts }；回傳最終 id。
+  async function writeExpense(driverUid, e) {
+    if (!ready || !user) throw new Error('尚未登入');
+    var id = (e && e.id) ? String(e.id) : (user.uid + '_' + Date.now());
+    await db.collection('users').doc(driverUid).collection('expenses').doc(id)
+      .set({ cat: (e && e.cat) || 'other', amount: (e && e.amount) || 0,
+             note: (e && e.note) || '', day: (e && e.day) || '',
+             ts: (e && e.ts) || Date.now(), by: user.uid }, { merge: true });
+    return id;
+  }
+  // 刪一筆支出。
+  async function deleteExpense(driverUid, id) {
+    if (!ready || !user) throw new Error('尚未登入');
+    await db.collection('users').doc(driverUid).collection('expenses').doc(String(id)).delete();
+  }
+  // 訂閱某司機支出的即時變動（司機端本機用，記帳者改的支出即時回讀）。
+  // cb 收到完整陣列；回傳 unsubscribe 函式。
+  function listenExpenses(driverUid, cb) {
+    if (!ready || !user) return function () {};
+    return db.collection('users').doc(driverUid).collection('expenses').onSnapshot(function (snap) {
+      var out = []; snap.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; out.push(e); });
+      try { cb(out); } catch (_) {}
+    }, function () {});
   }
 
   // Email + 密碼登入：純 API、不靠彈窗/轉址，在 App 內嵌瀏覽器 100% 可用。
@@ -502,6 +544,7 @@
     listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,
     listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
     readDriverData: readDriverData, writeCommission: writeCommission,
+    readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     resetLocal: resetLocal,
     _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision };
 })();

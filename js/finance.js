@@ -40,8 +40,55 @@
   var _pkToken = 0;        // 地名補上的世代序號（避免舊 render 的非同步覆寫）
 
   // ---------- 資料 ----------
+  // 支出＝雲端為主＋localStorage 快取：
+  //   - loadExp()/saveExp() 仍是「同步快取層」，所有計算（revenueOfMonth 等）照舊只讀快取，一行不改。
+  //   - 快取由雲端 onSnapshot 餵飽（bindExpenseSync）；本機新增/刪除先寫快取（樂觀更新）再推雲。
+  //   - 離線時退回純快取，體驗不斷。
+  var MIGRATED_KEY = TEST ? 'maptrip_exp_migrated_test' : 'maptrip_exp_migrated';
+  var _unsubExp = null;
+  var _expBound = false;
   function loadExp() { try { return JSON.parse(localStorage.getItem(EXPENSE_KEY) || '[]'); } catch (_) { return []; } }
   function saveExp(list) { try { localStorage.setItem(EXPENSE_KEY, JSON.stringify(list)); } catch (_) {} }
+  function S() { return window.MaptripSync; }
+  function myUid() { try { return S() && S().myUid && S().myUid(); } catch (_) { return null; } }
+
+  // 綁定雲端支出同步（登入後、開報表時呼叫一次）：先遷移舊資料，再訂閱即時快照回填快取。
+  async function bindExpenseSync() {
+    var s = S(), uid = myUid();
+    if (_expBound || !s || !uid || !s.listenExpenses) return;
+    _expBound = true;
+    // 一次性遷移：把本機既有支出推上雲（只做一次，用旗標防重）。
+    try {
+      if (localStorage.getItem(MIGRATED_KEY) !== '1') {
+        var local = loadExp();
+        for (var i = 0; i < local.length; i++) {
+          var e = local[i];
+          // 舊資料 id 是 Date.now()，統一成 <uid>_<id> 讓雲端不撞號、可辨識來源。
+          await s.writeExpense(uid, { id: uid + '_' + (e.id || (Date.now() + i)),
+            cat: e.cat, amount: e.amount, note: e.note, day: e.day, ts: e.ts || e.id || Date.now() });
+        }
+        localStorage.setItem(MIGRATED_KEY, '1');
+      }
+    } catch (_) {}   // 遷移失敗不擋（下次啟用再試，writeExpense 用 merge 冪等）
+    // 訂閱：雲端變動 → 覆蓋快取 → 若報表開著就重繪。
+    try {
+      _unsubExp = s.listenExpenses(uid, function (list) {
+        saveExp(list || []);
+        if (document.getElementById('finance-sheet') &&
+            document.getElementById('finance-sheet').classList.contains('show')) render();
+      });
+    } catch (_) {}
+  }
+
+  // 換帳號時重置：取消訂閱、清支出快取、放開綁定旗標（下次開報表重新綁新帳號）。
+  // 由 sync.js 的 _clearLocalForSwitch 呼叫（與 v265 行程隔離同一類坑）。
+  // 注意：不清 MIGRATED_KEY——它是「這台裝置的舊本機支出是否已搬雲端」的一次性裝置級旗標，
+  //       與帳號無關；清了會讓換回舊帳號時又把（已清空的）本機當成待遷移。
+  function resetExpenseSync() {
+    try { if (_unsubExp) _unsubExp(); } catch (_) {}
+    _unsubExp = null; _expBound = false;
+    saveExp([]);   // 清掉上一個帳號殘留的支出快取
+  }
   function monthOf(dayKey) { return String(dayKey || '').slice(0, 7); }
   function curMonth() { return monthOf(window.todayKey ? todayKey() : new Date().toISOString().slice(0, 10)); }
   function nf(n) { return (Math.round(n) || 0).toLocaleString(); }
@@ -389,7 +436,8 @@
           '<div class="mid"><div class="t1">' + c.label + (e.note ? '：' + esc(e.note) : '') + '</div>' +
           '<div class="t2">' + e.day + '</div></div>' +
           '<span class="am">-' + nf(e.amount) + '</span>' +
-          '<button class="del" onclick="MaptripFinance.delExp(' + e.id + ')">🗑</button></div>';
+          // id 現在是字串（<uid>_<ts>）→ 一定要加引號，否則 onclick 把它當變數→ReferenceError 刪不掉。
+          '<button class="del" onclick="MaptripFinance.delExp(\'' + esc(String(e.id)) + '\')">🗑</button></div>';
       });
       h += '</div>';
     }
@@ -503,6 +551,7 @@
   // ---------- 動作 ----------
   function open() {
     ensureSheet();
+    bindExpenseSync();   // 確保雲端支出同步已啟動（首次會遷移舊資料＋訂閱）
     _month = _month || curMonth();
     _view = 'io'; _addOpen = false;
     document.getElementById('finance-sheet').classList.add('show');
@@ -529,22 +578,32 @@
     if (!amt || amt <= 0) { if (window.toast) toast('請輸入金額'); return; }
     var note = ((document.getElementById('fin-note') || {}).value || '').trim();
     var day = (document.getElementById('fin-day') || {}).value || (window.todayKey ? todayKey() : _month + '-01');
+    var uid = myUid();
+    var id = (uid || 'local') + '_' + Date.now();
+    var rec = { id: id, cat: _formCat, amount: amt, note: note, day: day, ts: Date.now() };
     var list = loadExp();
-    list.push({ id: Date.now(), cat: _formCat, amount: amt, note: note, day: day, ts: Date.now() });
-    saveExp(list);
+    list.push(rec);
+    saveExp(list);                                   // 樂觀更新快取（離線也先看得到）
     _addOpen = false;
     // 若記到別的月份，跳到那個月才看得到
     if (monthOf(day) !== _month) _month = monthOf(day);
     render();
     if (window.toast) toast('已記錄支出 NT$ ' + nf(amt));
+    // 推雲端（成功後 onSnapshot 會再回填一次，冪等）。離線／未登入就只留快取。
+    var s = S();
+    if (s && uid && s.writeExpense) { s.writeExpense(uid, rec).catch(function () {}); }
   }
   function delExp(id) {
     if (!confirm('刪除這筆支出？')) return;
-    saveExp(loadExp().filter(function (e) { return e.id !== id; }));
+    // 用字串比對：新 id 是字串、舊快取可能還是數字，String() 兩邊都吃得到。
+    saveExp(loadExp().filter(function (e) { return String(e.id) !== String(id); }));   // 樂觀更新快取
     render();
+    var s = S(), uid = myUid();
+    if (s && uid && s.deleteExpense) { s.deleteExpense(uid, id).catch(function () {}); }
   }
 
   window.MaptripFinance = { open: open, close: close, shiftMonth: shiftMonth, tab: tab, toggleAdd: toggleAdd, pickCat: pickCat, saveAdd: saveAdd, delExp: delExp,
+    bindExpenseSync: bindExpenseSync, resetExpenseSync: resetExpenseSync,
     _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName };
   window.openFinance = open;
   window.closeFinance = close;
