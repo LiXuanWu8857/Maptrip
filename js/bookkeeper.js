@@ -134,8 +134,8 @@
       'grid-template-columns:52px 38px 1fr auto;align-items:center;gap:8px;font-size:.86rem;font-variant-numeric:tabular-nums}' +
       '.bk-trow.warn{background:var(--bk-warn-bg);border-radius:8px}' +
       '.bk-trow .t{color:var(--bk-t2)}.bk-trow .p{color:var(--bk-muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-      '.bk-trow .f{text-align:right;color:var(--bk-t2)}' +
-      '.bk-trow .c{text-align:right;font-weight:600;min-width:52px;color:var(--bk-text)}.bk-trow .c.todo{color:var(--bk-warn-t)}' +
+      '.bk-trow .f{text-align:left;color:var(--bk-t2)}' +
+      '.bk-trow .c{text-align:right;font-weight:600;min-width:52px;color:var(--bk-text);white-space:nowrap}.bk-trow .c.todo{color:var(--bk-warn-t)}' +
       '.bk-tedit{display:flex;gap:8px;padding:8px 4px 12px;align-items:center}' +
       '.bk-tedit .lb{font-size:.76rem;color:var(--bk-t2)}' +
       '.bk-tedit input{flex:1;min-width:0;box-sizing:border-box;padding:9px 10px;border:.5px solid var(--bk-bd2);border-radius:8px;' +
@@ -487,12 +487,13 @@
     });
     return out;
   }
-  // 每趟最右欄顯示：現金（抽成鎖）→ 只顯示「叫車 N」，沒叫車就「-」；
-  // 非現金 → 「抽成／叫車」，兩者皆 0（完全沒有）→「-」。
+  // 每趟最右欄顯示：帶標籤「抽成：X／叫車：Y」。
+  //   現金（抽成鎖）→ 抽成顯示「-」（不適用），有叫車就「抽成：-／叫車：N」、沒叫車整格「-」；
+  //   非現金 → 「抽成：X／叫車：Y」；兩者皆 0（完全沒有）→「-」。
   function _cCell(cashLock, comm, disp) {
-    if (cashLock) return disp > 0 ? '叫車 ' + nf(disp) : '-';
+    if (cashLock) return disp > 0 ? '抽成：-／叫車：' + nf(disp) : '-';
     if (!comm && !disp) return '-';
-    return nf(comm) + '／' + nf(disp);
+    return '抽成：' + nf(comm) + '／叫車：' + nf(disp);
   }
   // 當日抽成/叫車總計（與逐趟顯示一致：commissions 優先，否則行程自帶）。
   function _dayTotals(trips, commissions) {
