@@ -29,10 +29,10 @@
     var s = document.createElement('style'); s.id = 'bk-css';
     s.textContent =
       // ---- 設計 token（對接視覺稿；深色自適應）----
-      '#bk-body,#bk-home{--bk-text:#202124;--bk-t2:#5f6368;--bk-muted:#9aa0a6;--bk-acc-t:#1a4b8c;' +
+      '#bk-sheet,#bk-body,#bk-home{--bk-text:#202124;--bk-t2:#5f6368;--bk-muted:#9aa0a6;--bk-acc-t:#1a4b8c;' +
       '--bk-warn-t:#8a5a00;--bk-danger:#d93025;--bk-s1:#f1f3f4;--bk-s2:#fff;--bk-bd:#e0e2e6;--bk-bd2:#c8ccd2;' +
       '--bk-acc-bg:#e8f0fe;--bk-acc-bd:#a8c7fa;--bk-acc-fill:#1a73e8;--bk-on-acc:#fff;--bk-warn-bg:#fef7e0;--bk-warn-fill:#f9ab00}' +
-      '@media (prefers-color-scheme:dark){#bk-body,#bk-home{--bk-text:#e8eaed;--bk-t2:#c8ccd2;--bk-muted:#9aa0a6;' +
+      '@media (prefers-color-scheme:dark){#bk-sheet,#bk-body,#bk-home{--bk-text:#e8eaed;--bk-t2:#c8ccd2;--bk-muted:#9aa0a6;' +
       '--bk-acc-t:#a8c7fa;--bk-warn-t:#fdd663;--bk-danger:#f28b82;--bk-s1:#242424;--bk-s2:#1a1a1a;' +
       '--bk-bd:rgba(255,255,255,.1);--bk-bd2:rgba(255,255,255,.22);--bk-acc-bg:#1e3a5f;--bk-acc-bd:#2f5a9c;' +
       '--bk-acc-fill:#4285f4;--bk-warn-bg:#3a3000;--bk-warn-fill:#fdd663}}' +
@@ -88,6 +88,12 @@
       '.bk-card .lbl{font-size:.72rem;color:var(--bk-t2);margin-bottom:4px}.bk-card.acc .lbl{color:var(--bk-acc-t)}' +
       '.bk-card .val{font-size:1.5rem;font-weight:600;color:var(--bk-text);font-variant-numeric:tabular-nums}.bk-card.acc .val{color:var(--bk-acc-t)}' +
       '.bk-card .sub{font-size:.72rem;color:var(--bk-t2);margin-top:2px}.bk-card.acc .sub{color:var(--bk-acc-t);opacity:.85}' +
+      // 淨利卡：大數字（左）＋趟數/工時小字（右側疊放）
+      '.bk-netrow{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:2px}' +
+      '.bk-netrow .val{margin:0;font-size:1.35rem}' +
+      '.bk-ministat{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:.7rem;line-height:1.35;' +
+      'color:var(--bk-t2);white-space:nowrap;font-variant-numeric:tabular-nums}' +
+      '.bk-card.acc .bk-ministat{color:var(--bk-acc-t);opacity:.85}' +
       // ---- 月報表（淨利）----
       '.bk-report{background:var(--bk-s1);border-radius:12px;padding:10px 14px;margin-bottom:12px}' +
       '.bk-rrow{display:flex;justify-content:space-between;font-size:.82rem;color:var(--bk-t2);padding:4px 0}' +
@@ -119,6 +125,11 @@
       '.bk-trow .man{font-size:.6rem;color:var(--bk-acc-t);background:var(--bk-acc-bg);border-radius:4px;padding:0 4px;margin-left:3px}' +
       '.bk-tedit input:disabled{opacity:.45;background:var(--bk-s1);cursor:not-allowed}' +
       '.bk-tedit .del{background:var(--bk-s1);color:var(--bk-danger)}' +
+      // 字級調整（放頂列，不隨內文縮放）
+      '.bk-fontctl{display:inline-flex;align-items:center;gap:4px;margin-left:auto}' +
+      '.bk-fsbtn{border:.5px solid var(--bk-bd2);background:var(--bk-s1);color:var(--bk-text);border-radius:8px;' +
+      'width:30px;height:30px;font-size:.72rem;line-height:1;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center}' +
+      '.bk-fspct{font-size:.72rem;color:var(--bk-t2);min-width:38px;text-align:center;font-variant-numeric:tabular-nums}' +
       '.bk-trow{border-bottom:.5px solid var(--bk-bd);padding:10px 8px;cursor:pointer;display:grid;' +
       'grid-template-columns:52px 38px 1fr auto;align-items:center;gap:8px;font-size:.86rem;font-variant-numeric:tabular-nums}' +
       '.bk-trow.warn{background:var(--bk-warn-bg);border-radius:8px}' +
@@ -174,15 +185,34 @@
     el.id = 'bk-sheet';
     el.innerHTML =
       '<div class="sheet-handle"></div>' +
-      '<div class="sheet-header"><span id="bk-title">記帳者</span>' +
+      '<div class="sheet-header"><span id="bk-title">記帳者</span>' + _fontCtlHtml() +
       '<button class="sheet-close" onclick="closeBookkeeper()">✕</button></div>' +
       '<div id="bk-body"></div>';
     document.body.appendChild(el);
     return el;
   }
 
-  function setBody(html) { var b = document.getElementById(_mount); if (b) b.innerHTML = html; }
+  function setBody(html) { var b = document.getElementById(_mount); if (b) { b.innerHTML = html; try { b.style.zoom = _fontScale(); } catch (_) {} } }
   function setTitle(t) { var el = document.getElementById('bk-title'); if (el) el.textContent = t; }
+
+  // 字級：整個內文容器用 zoom 縮放（rem/em 都跟著變）；控制鈕放頂列不受縮放。存本機。
+  var FS_KEY = 'bk_fontscale';
+  function _fontScale() { var v = parseFloat(localStorage.getItem(FS_KEY)); return (v >= 0.7 && v <= 2) ? v : 1; }
+  function _fontCtlHtml() {
+    var pct = Math.round(_fontScale() * 100);
+    return '<div class="bk-fontctl"><button class="bk-fsbtn" title="縮小字級" onclick="MaptripBookkeeper.fontDown()">▼</button>' +
+      '<span class="bk-fspct">' + pct + '%</span>' +
+      '<button class="bk-fsbtn" title="放大字級" onclick="MaptripBookkeeper.fontUp()">▲</button></div>';
+  }
+  function bumpFont(dir) {
+    var sc = Math.round((_fontScale() + dir * 0.1) * 100) / 100;
+    if (sc < 0.8) sc = 0.8; if (sc > 1.6) sc = 1.6;
+    try { localStorage.setItem(FS_KEY, String(sc)); } catch (_) {}
+    var b = document.getElementById(_mount); if (b) b.style.zoom = sc;
+    Array.prototype.forEach.call(document.querySelectorAll('.bk-fspct'), function (el) { el.textContent = Math.round(sc * 100) + '%'; });
+  }
+  function fontUp() { bumpFont(1); }
+  function fontDown() { bumpFont(-1); }
 
   // 電腦滿版「記帳者模式」進入點：把同一套渲染塞進主容器（非 sheet）。
   // 由 desktop-mode.js 建好容器後呼叫；不碰 sheet 顯隱（原生/司機臨時叫 sheet 仍走 open()）。
@@ -294,14 +324,13 @@
       }).join('') + '</div>';
     }
 
-    // 小計卡：本月（選定月）＋全部
+    // 上方兩張卡：左＝當月淨利、右＝全部淨利；大數字右側疊放「趟數 / 工時」小字
+    var mNet = _netStats(days, data.commissions, data.expenses, _month);
+    var aNet = _netStats(days, data.commissions, data.expenses, null);
     h += '<div class="bk-cards">' +
-      '<div class="bk-card acc"><div class="lbl">抽成 · ' + sm.ym + '</div>' +
-      '<div class="val">' + nf(sm.month.comm) + '</div>' +
-      '<div class="sub">' + sm.month.n + ' 趟' + (sm.month.disp ? ' · 叫車 ' + nf(sm.month.disp) : '') + '</div></div>' +
-      '<div class="bk-card"><div class="lbl">全部抽成</div>' +
-      '<div class="val">' + nf(sm.all.comm) + '</div>' +
-      '<div class="sub">' + sm.all.n + ' 趟' + (sm.all.disp ? ' · 叫車 ' + nf(sm.all.disp) : '') + '</div></div></div>';
+      _netCard(true, '當月淨利 · ' + sm.ym, mNet) +
+      _netCard(false, '全部淨利', aNet) +
+      '</div>';
 
     // 月報表（淨利，含支出）
     h += _reportSection({ days: days, commissions: data.commissions, expenses: data.expenses }, _month);
@@ -347,7 +376,7 @@
           '<span class="t">' + fmtT(t.startTime) + (t._manual ? '<br><span class="man">手動</span>' : '') + '</span>' +
           '<span class="p">' + esc(pay) + '</span>' +
           '<span class="f">車資 ' + nf(t.fare) + '</span>' +
-          '<span class="c' + (filled ? '' : ' todo') + '">' + (filled ? nf(comm) + '／' + nf(disp) : '待填') + '</span></div>';
+          '<span class="c' + (filled ? '' : ' todo') + '">' + (filled ? _cCell(cashLock, comm, disp) : '待填') + '</span></div>';
         if (String(_editId) === idS) {
           h += '<div class="bk-tedit">' +
             '<span class="lb">抽成</span><input id="bk-c" type="number" inputmode="numeric" value="' + comm + '"' + (cashLock ? ' disabled' : '') + '>' +
@@ -398,6 +427,47 @@
     return { ym: target, all: all, month: month };
   }
 
+  // 淨利＋趟數＋工時（供上方兩張卡）。ym='YYYY-MM' 只算該月；null=全部。
+  //   net＝營收(排除「其他」)−抽成−叫車−支出（與 finance.monthReport 同口徑）。
+  //   trips＝載客趟數（排除「其他」，含手動補登）。
+  //   workMs＝工作時間；用每日「有 endTime 的載客趟」頭尾估（手動趟無 endTime 不計；
+  //           休息分鐘存在司機裝置本機、記帳者拿不到 → 一律 restMin=0，即營業時間毛估）。
+  function _netStats(days, commissions, expenses, ym) {
+    var U = window.MaptripUtil;
+    var fare = 0, comm = 0, disp = 0, trips = 0, work = 0;
+    Object.keys(days || {}).forEach(function (day) {
+      if (ym && String(day).slice(0, 7) !== ym) return;
+      var arr = days[day] || [];
+      arr.forEach(function (t) {
+        if (t.paymentMethod === 'other') return;
+        fare += t.fare || 0;
+        var c = commissions && commissions[String(t.id)];
+        comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
+        disp += (c && c.dispatch != null) ? c.dispatch : (t.dispatch || 0);
+        trips++;
+      });
+      var timed = arr.filter(function (t) { return t.endTime && t.paymentMethod !== 'other'; })
+        .sort(function (a, b) { return a.startTime - b.startTime; });
+      if (U && U.workMs && timed.length) work += U.workMs(timed, 0);
+    });
+    var exp = 0;
+    (expenses || []).forEach(function (e) { if (!ym || String(e.day || '').slice(0, 7) === ym) exp += e.amount || 0; });
+    return { net: fare - comm - disp - exp, trips: trips, workMs: work };
+  }
+  function _fmtWork(ms) {
+    var U = window.MaptripUtil;
+    if (U && U.fmtWork) { try { return U.fmtWork(ms); } catch (_) {} }
+    var min = Math.max(0, Math.round(ms / 60000)), h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? h + '小時' + m + '分' : m + '分';
+  }
+  function _netCard(acc, label, st) {
+    return '<div class="bk-card' + (acc ? ' acc' : '') + '">' +
+      '<div class="lbl">' + esc(label) + '</div>' +
+      '<div class="bk-netrow"><div class="val">' + nf(st.net) + '</div>' +
+      '<div class="bk-ministat"><span>' + st.trips + ' 趟</span><span>' + _fmtWork(st.workMs) + '</span></div>' +
+      '</div></div>';
+  }
+
   // ---------- 手動紀錄 / 當日總計 / 收折（純函式，供測試） ----------
   function _localDay(ts) {
     try { var d = new Date(ts); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -416,6 +486,13 @@
         startTime: m.startTime || 0, label: m.label || '', commission: m.commission, dispatch: m.dispatch, _manual: true });
     });
     return out;
+  }
+  // 每趟最右欄顯示：現金（抽成鎖）→ 只顯示「叫車 N」，沒叫車就「-」；
+  // 非現金 → 「抽成／叫車」，兩者皆 0（完全沒有）→「-」。
+  function _cCell(cashLock, comm, disp) {
+    if (cashLock) return disp > 0 ? '叫車 ' + nf(disp) : '-';
+    if (!comm && !disp) return '-';
+    return nf(comm) + '／' + nf(disp);
   }
   // 當日抽成/叫車總計（與逐趟顯示一致：commissions 優先，否則行程自帶）。
   function _dayTotals(trips, commissions) {
@@ -687,7 +764,8 @@
     back: back, edit: edit, saveComm: saveComm,
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
-    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _localDay: _localDay
+    fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
+    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _localDay: _localDay, _cCell: _cCell
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;

@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.271**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.272**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -159,6 +159,13 @@
   _dayTotals/_localDay` 供測試；`sync.js` 加 `writeManualTrip/deleteManualTrip`。**安全根仍在 Firestore 規則**：
   `manualTrips` 需比照 commissions 開 read+write 給記帳者（見規則參考 doc；沒部署則補登靜默沒上雲，UI 樂觀更新仍看得到）。
   測試 `bktaxi.js` 25 項（合併/總計/收折/新增排序/手動標記/刪除/現金鎖）全過、`bkui.js` 25 更新為新現金行為、零 pageerror。
+  **v272 記帳者三項（續 RTFD）**：①**字級調整**——sheet 頂列＋電腦滿版頂列加 ▼/▲ 兩顆箭頭鈕（`_fontCtlHtml`），
+  內文容器用 `zoom` 縮放（rem/em 全跟著變、控制鈕不縮），級距 0.8–1.6、存本機 `bk_fontscale`；`setBody` 每次套用當前 zoom。
+  ②**最右欄顯示精簡** `_cCell(cashLock,comm,disp)`：現金（抽成鎖）→只顯示「叫車 N」、沒叫車就「-」；非現金 0/0（完全沒有）→「-」；否則「抽成／叫車」。
+  ③**上方兩卡改淨利**——左＝當月淨利、右＝全部淨利（`_netStats(days,commissions,expenses,ym)`＝營收排除 other −抽成−叫車−支出，
+  ym=null 為全部），大數字右側疊放「趟數／工時」小字；工時＝每日「有 endTime 的載客趟」頭尾估（手動趟無 endTime 不計、
+  休息分鐘記帳者拿不到故 restMin=0，用 `MaptripUtil.workMs`）。純函式 `_cCell/_netStats/_fmtWork` 供測試；
+  `bktaxi.js` 擴到 42 項（字級/淨利卡/最右欄）、`bkui.js` 26、`bksummary` 改測淨利卡，全過零 pageerror。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

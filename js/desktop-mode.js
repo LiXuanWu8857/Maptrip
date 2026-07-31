@@ -78,8 +78,9 @@
     if (!home) {
       home = document.createElement('div');
       home.id = 'bk-home';
+      var fontCtl = (window.MaptripBookkeeper && MaptripBookkeeper._fontCtlHtml) ? MaptripBookkeeper._fontCtlHtml() : '';
       home.innerHTML =
-        '<div id="bk-home-hdr"><span class="ti">記帳者</span>' +
+        '<div id="bk-home-hdr"><span class="ti">記帳者</span>' + fontCtl +
         '<button class="sw" onclick="MaptripDesktop.toggle()">→ 切回司機版</button></div>' +
         '<div id="bk-home-body"></div>';
       document.body.appendChild(home);
