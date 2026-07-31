@@ -604,6 +604,7 @@
 
   window.MaptripFinance = { open: open, close: close, shiftMonth: shiftMonth, tab: tab, toggleAdd: toggleAdd, pickCat: pickCat, saveAdd: saveAdd, delExp: delExp,
     bindExpenseSync: bindExpenseSync, resetExpenseSync: resetExpenseSync,
+    CATS: CATS, CAT_MAP: CAT_MAP,   // 供 bookkeeper.js 沿用同一套支出分類（單一來源）
     _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName };
   window.openFinance = open;
   window.closeFinance = close;

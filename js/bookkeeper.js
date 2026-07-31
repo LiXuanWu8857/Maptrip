@@ -7,6 +7,7 @@
   var WD = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
   var _view = null;        // null=清單首頁；{driverUid,name}=某司機檢視
   var _editId = null;      // 正在編輯抽成的趟 id
+  var _expEdit = null;     // 支出編輯狀態：null=無／'__new__'=新增中／<id>=編輯該筆
   var _cache = null;       // 某司機的 { days, commissions, name }
   var _bks = [];           // 目前清單：授權我的記帳者（供 onclick 只傳 uid、名字改用查表，杜絕名字注入）
   var _drivers = [];       // 目前清單：我協助記帳的司機
@@ -55,10 +56,29 @@
       '.bk-editrow button{padding:9px 12px;border:none;border-radius:8px;background:#1a73e8;color:#fff;font-weight:600;font-family:inherit;cursor:pointer}' +
       '.bk-back{background:none;border:none;color:#1a73e8;font-size:.9rem;font-family:inherit;cursor:pointer;padding:6px 0}' +
       '.bk-note{font-size:.74rem;color:#9aa0a6;margin:2px 2px 8px}' +
+      '.bk-exprow{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(0,0,0,.05)}' +
+      '.bk-exprow .ic{font-size:1.1rem}.bk-exprow .mid{flex:1;min-width:0}' +
+      '.bk-exprow .t1{font-size:.86rem;color:#202124}.bk-exprow .t2{font-size:.72rem;color:#9aa0a6}' +
+      '.bk-exprow .am{color:#c5221f;font-weight:600;font-size:.86rem}' +
+      '.bk-mini{background:none;border:1px solid rgba(0,0,0,.15);border-radius:8px;padding:4px 9px;font-size:.78rem;font-family:inherit;color:#3c4043;cursor:pointer}' +
+      '.bk-mini.del{color:#c5221f;border-color:rgba(197,34,31,.3)}' +
+      '.bk-explink{background:none;border:none;color:#1a73e8;font-size:.82rem;font-family:inherit;cursor:pointer;font-weight:600;margin-left:8px}' +
+      '.bk-expform{background:#f8f9fa;border-radius:12px;padding:10px;margin:8px 0}' +
+      '.bk-expform select,.bk-expform>input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid rgba(0,0,0,.15);' +
+      'border-radius:8px;font-size:1rem;font-family:inherit;background:#fff;color:#202124;margin-top:8px}' +
+      '.bk-expform select{margin-top:0}' +
+      '.bk-erow{display:flex;gap:8px;margin-top:8px}.bk-erow input{flex:1;min-width:0;box-sizing:border-box;' +
+      'padding:9px 10px;border:1px solid rgba(0,0,0,.15);border-radius:8px;font-size:1rem;font-family:inherit;background:#fff;color:#202124}' +
+      '.bk-erow button{flex:1;padding:9px;border:none;border-radius:8px;background:#1a73e8;color:#fff;font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.bk-erow .bk-cancel{background:#e8eaed;color:#3c4043}' +
       '@media (prefers-color-scheme: dark){#bk-sheet{background:#1a1a1a;border-top-color:rgba(255,255,255,.07)}' +
       '.bk-sec{color:#9aa0a6}.bk-row .nm,.bk-trip .l1{color:#e8eaed}.bk-day{background:#242424;color:#c8ccd2}' +
       '.bk-sum{background:#1f2a3a}.bk-sum .k,.bk-sum .sub{color:#aab4c0}.bk-sum .v{color:#8ab4f8}' +
-      '.bk-editrow input{background:#242424;border-color:rgba(255,255,255,.15);color:#e8eaed}}';
+      '.bk-editrow input{background:#242424;border-color:rgba(255,255,255,.15);color:#e8eaed}' +
+      '.bk-exprow .t1{color:#e8eaed}.bk-mini{color:#c8ccd2;border-color:rgba(255,255,255,.18)}' +
+      '.bk-expform{background:#242424}' +
+      '.bk-expform select,.bk-expform>input,.bk-erow input{background:#1a1a1a;border-color:rgba(255,255,255,.15);color:#e8eaed}' +
+      '.bk-erow .bk-cancel{background:#333;color:#e8eaed}}';
     document.head.appendChild(s);
   }
 
@@ -148,6 +168,7 @@
       '<span class="sub2">' + sm.all.n + ' 趟' + (sm.all.disp ? '　叫車 ' + nf(sm.all.disp) : '') + '</span></div>' +
       '</div>';
     h += '<div class="bk-note">你可以編輯每趟的「抽成／叫車費」；行程本身唯讀。</div>';
+    h += _expensesSection(data.expenses || []);
     var any = false;
     days.forEach(function (day) {
       var trips = (data.days[day] || []).slice().sort(function (a, b) { return a.startTime - b.startTime; });
@@ -198,13 +219,97 @@
     return { ym: ym, all: all, month: month };
   }
 
+  // ---------- 司機支出（記帳者可讀寫刪；沿用 finance 的分類清單） ----------
+  function _cats() { return (window.MaptripFinance && MaptripFinance.CATS) || [{ k: 'other', label: '其他', icon: '📦' }]; }
+  function _catOf(k) { var m = (window.MaptripFinance && MaptripFinance.CAT_MAP) || {}; return m[k] || { label: k || '其他', icon: '📦' }; }
+  function _today() { try { return (window.todayKey && todayKey()) || new Date().toISOString().slice(0, 10); } catch (_) { return new Date().toISOString().slice(0, 10); } }
+  function _monthNow() { return _today().slice(0, 7); }
+
+  function _expForm(e) {
+    var cat = e ? (e.cat || 'other') : 'fuel';
+    var opts = _cats().map(function (c) {
+      return '<option value="' + c.k + '"' + (c.k === cat ? ' selected' : '') + '>' + c.icon + ' ' + esc(c.label) + '</option>';
+    }).join('');
+    var amt = e ? e.amount : '';
+    var day = e ? (e.day || _today()) : _today();
+    var note = e ? (e.note || '') : '';
+    var idAttr = e ? esc(String(e.id)) : '';   // 空＝新增
+    return '<div class="bk-expform">' +
+      '<select id="bk-ecat">' + opts + '</select>' +
+      '<div class="bk-erow">' +
+        '<input id="bk-eamt" type="number" inputmode="numeric" placeholder="金額" value="' + (amt === '' ? '' : amt) + '">' +
+        '<input id="bk-eday" type="date" value="' + esc(day) + '">' +
+      '</div>' +
+      '<input id="bk-enote" type="text" placeholder="備註（可空）" value="' + esc(note) + '">' +
+      '<div class="bk-erow">' +
+        '<button onclick="MaptripBookkeeper.expSave(\'' + idAttr + '\')">存</button>' +
+        '<button class="bk-cancel" onclick="MaptripBookkeeper.expCancel()">取消</button>' +
+      '</div></div>';
+  }
+
+  function _expensesSection(exps) {
+    var list = (exps || []).slice().sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+    var ym = _monthNow();
+    var mSum = 0; list.forEach(function (e) { if (String(e.day || '').slice(0, 7) === ym) mSum += (e.amount || 0); });
+    var h = '<div class="bk-sec">司機支出（' + list.length + '）　本月 NT$ ' + nf(mSum) +
+      '<button class="bk-explink" onclick="MaptripBookkeeper.expAdd()">＋ 記一筆</button></div>';
+    if (_expEdit === '__new__') h += _expForm(null);
+    if (!list.length && _expEdit !== '__new__') h += '<div class="bk-empty">尚無支出</div>';
+    list.forEach(function (e) {
+      var c = _catOf(e.cat);
+      h += '<div class="bk-exprow"><span class="ic">' + c.icon + '</span>' +
+        '<div class="mid"><div class="t1">' + esc(c.label) + (e.note ? '：' + esc(e.note) : '') + '</div>' +
+        '<div class="t2">' + esc(e.day || '') + '</div></div>' +
+        '<span class="am">-' + nf(e.amount) + '</span>' +
+        '<button class="bk-mini" onclick="MaptripBookkeeper.expEdit(\'' + esc(String(e.id)) + '\')">改</button>' +
+        '<button class="bk-mini del" onclick="MaptripBookkeeper.expDel(\'' + esc(String(e.id)) + '\')">刪</button></div>';
+      if (_expEdit === e.id) h += _expForm(e);   // 在該筆底下展開編輯表單
+    });
+    return h;
+  }
+
+  function expAdd() { _expEdit = '__new__'; renderDriver(); }
+  function expEdit(id) { _expEdit = id; renderDriver(); }
+  function expCancel() { _expEdit = null; renderDriver(); }
+  async function expSave(id) {
+    var cat = (document.getElementById('bk-ecat') || {}).value || 'other';
+    var amt = parseInt((document.getElementById('bk-eamt') || {}).value, 10) || 0;
+    var day = (document.getElementById('bk-eday') || {}).value || _today();
+    var note = ((document.getElementById('bk-enote') || {}).value || '').trim();
+    if (!amt || amt <= 0) { if (window.toast) toast('請輸入金額'); return; }
+    var editing = !!(id && id !== '__new__');
+    if (!_cache.expenses) _cache.expenses = [];
+    var old = editing ? _cache.expenses.filter(function (x) { return String(x.id) === String(id); })[0] : null;
+    var rec = { cat: cat, amount: amt, note: note, day: day, ts: (old && old.ts) || Date.now() };
+    if (editing) rec.id = id;
+    try {
+      var finalId = await S().writeExpense(_view.driverUid, rec);
+      var merged = { cat: cat, amount: amt, note: note, day: day, ts: rec.ts, id: editing ? id : finalId };
+      var i = -1;
+      for (var k = 0; k < _cache.expenses.length; k++) { if (String(_cache.expenses[k].id) === String(merged.id)) { i = k; break; } }
+      if (i >= 0) _cache.expenses[i] = merged; else _cache.expenses.push(merged);
+      _expEdit = null;
+      renderDriver();
+      if (window.toast) toast('已儲存支出');
+    } catch (e) { if (window.toast) toast('儲存失敗：' + ((e && (e.code || e.message)) || e)); }
+  }
+  async function expDel(id) {
+    if (!confirm('刪除這筆支出？')) return;
+    try {
+      await S().deleteExpense(_view.driverUid, id);
+      if (_cache && _cache.expenses) _cache.expenses = _cache.expenses.filter(function (x) { return String(x.id) !== String(id); });
+      renderDriver();
+      if (window.toast) toast('已刪除');
+    } catch (e) { if (window.toast) toast('刪除失敗：' + ((e && (e.code || e.message)) || e)); }
+  }
+
   function render() { if (_view) renderDriver(); else renderHome(); }
 
   // ---------- 動作 ----------
   function open() {
     if (!S() || !(S().myUid && S().myUid())) { if (window.toast) toast('請先登入雲端'); return; }
     ensureSheet();
-    _view = null; _editId = null;
+    _view = null; _editId = null; _expEdit = null;
     document.getElementById('bk-sheet').classList.add('show');
     var ov = document.getElementById('sheet-overlay');
     if (ov) { ov.style.display = 'block'; ov.onclick = close; }
@@ -214,7 +319,7 @@
     var s = document.getElementById('bk-sheet'); if (s) s.classList.remove('show');
     var ov = document.getElementById('sheet-overlay');
     if (ov) { ov.style.display = 'none'; ov.onclick = window.closeActiveSheet || null; }
-    _view = null; _editId = null;
+    _view = null; _editId = null; _expEdit = null;
   }
   async function invite() {
     try {
@@ -247,8 +352,8 @@
     if (!confirm('從你的清單移除司機「' + _drvName(driverUid) + '」？\n（注意：這只移除你這邊的清單，司機端對你的授權仍在，需請司機自行撤銷）')) return;
     try { await S().unlinkDriver(driverUid); render(); } catch (_) {}
   }
-  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name || _drvName(driverUid) }; _editId = null; renderDriver(); }
-  function back() { _view = null; _editId = null; renderHome(); }
+  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name || _drvName(driverUid) }; _editId = null; _expEdit = null; renderDriver(); }
+  function back() { _view = null; _editId = null; _expEdit = null; renderHome(); }
   function edit(tripId) { _editId = tripId; renderDriver(); }
   async function saveComm(tripId) {
     var comm = parseInt((document.getElementById('bk-c') || {}).value) || 0;
@@ -266,6 +371,7 @@
   window.MaptripBookkeeper = {
     open: open, close: close, render: render, invite: invite, copy: copy, join: join,
     removeBk: removeBk, unlink: unlink, openDriver: openDriver, back: back, edit: edit, saveComm: saveComm,
+    expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     _summary: _summary
   };
   window.openBookkeeper = open;
