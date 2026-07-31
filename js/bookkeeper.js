@@ -130,12 +130,17 @@
       '.bk-fsbtn{border:.5px solid var(--bk-bd2);background:var(--bk-s1);color:var(--bk-text);border-radius:8px;' +
       'width:30px;height:30px;font-size:.72rem;line-height:1;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center}' +
       '.bk-fspct{font-size:.72rem;color:var(--bk-t2);min-width:38px;text-align:center;font-variant-numeric:tabular-nums}' +
+      // 表頭（欄名置頂，sticky）＋每列（5 欄，只放數值）共用同一組 grid
+      '.bk-thead{position:sticky;top:0;z-index:2;display:grid;grid-template-columns:52px 38px 1fr auto auto;' +
+      'align-items:center;gap:8px;padding:8px;font-size:.72rem;font-weight:600;color:var(--bk-t2);' +
+      'background:var(--bk-s2);border-bottom:.5px solid var(--bk-bd2)}' +
+      '.bk-thead .f{text-align:left}.bk-thead .rc{text-align:right;min-width:44px}' +
       '.bk-trow{border-bottom:.5px solid var(--bk-bd);padding:10px 8px;cursor:pointer;display:grid;' +
-      'grid-template-columns:52px 38px 1fr auto;align-items:center;gap:8px;font-size:.86rem;font-variant-numeric:tabular-nums}' +
+      'grid-template-columns:52px 38px 1fr auto auto;align-items:center;gap:8px;font-size:.86rem;font-variant-numeric:tabular-nums}' +
       '.bk-trow.warn{background:var(--bk-warn-bg);border-radius:8px}' +
       '.bk-trow .t{color:var(--bk-t2)}.bk-trow .p{color:var(--bk-muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
       '.bk-trow .f{text-align:left;color:var(--bk-t2)}' +
-      '.bk-trow .c{text-align:right;font-weight:600;min-width:52px;color:var(--bk-text);white-space:nowrap}.bk-trow .c.todo{color:var(--bk-warn-t)}' +
+      '.bk-trow .rc{text-align:right;font-weight:600;min-width:44px;color:var(--bk-text);white-space:nowrap}.bk-trow .rc.todo{color:var(--bk-warn-t)}' +
       '.bk-tedit{display:flex;gap:8px;padding:8px 4px 12px;align-items:center}' +
       '.bk-tedit .lb{font-size:.76rem;color:var(--bk-t2)}' +
       '.bk-tedit input{flex:1;min-width:0;box-sizing:border-box;padding:9px 10px;border:.5px solid var(--bk-bd2);border-radius:8px;' +
@@ -338,8 +343,9 @@
     // 支出
     h += _expensesSection(data.expenses || []);
 
-    // 每趟（依選定月份過濾）＋日期分組
+    // 每趟（依選定月份過濾）＋日期分組。欄名置頂一列（時間/付款/車資/抽成/叫車），列內只放數值。
     var dayKeys = Object.keys(days).filter(function (d) { return String(d).slice(0, 7) === _month; }).sort().reverse();
+    if (dayKeys.some(function (d) { return (days[d] || []).length; })) h += _thead();
     var any = false;
     dayKeys.forEach(function (day) {
       var trips = (days[day] || []).slice().sort(function (a, b) { return (a.startTime || 0) - (b.startTime || 0); });
@@ -372,11 +378,13 @@
         // 「其他（自用）」與「現金」不需填抽成 → 不標待填
         var filled = touched || comm > 0 || t.paymentMethod === 'other' || cashLock;
         var pay = t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'cash' ? '現金' : (t.paymentMethod === 'other' ? (t.label || '其他') : ''));
+        var cells = _cells(cashLock, filled, comm, disp);
         h += '<div class="bk-trow' + (filled ? '' : ' warn') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
           '<span class="t">' + fmtT(t.startTime) + (t._manual ? '<br><span class="man">手動</span>' : '') + '</span>' +
           '<span class="p">' + esc(pay) + '</span>' +
-          '<span class="f">車資 ' + nf(t.fare) + '</span>' +
-          '<span class="c' + (filled ? '' : ' todo') + '">' + (filled ? _cCell(cashLock, comm, disp) : '待填') + '</span></div>';
+          '<span class="f">' + nf(t.fare) + '</span>' +
+          '<span class="rc' + (filled ? '' : ' todo') + '">' + cells.comm + '</span>' +
+          '<span class="rc">' + cells.disp + '</span></div>';
         if (String(_editId) === idS) {
           h += '<div class="bk-tedit">' +
             '<span class="lb">抽成</span><input id="bk-c" type="number" inputmode="numeric" value="' + comm + '"' + (cashLock ? ' disabled' : '') + '>' +
@@ -487,13 +495,18 @@
     });
     return out;
   }
-  // 每趟最右欄顯示：帶標籤「抽成：X／叫車：Y」。
-  //   現金（抽成鎖）→ 抽成顯示「-」（不適用），有叫車就「抽成：-／叫車：N」、沒叫車整格「-」；
-  //   非現金 → 「抽成：X／叫車：Y」；兩者皆 0（完全沒有）→「-」。
-  function _cCell(cashLock, comm, disp) {
-    if (cashLock) return disp > 0 ? '抽成：-／叫車：' + nf(disp) : '-';
-    if (!comm && !disp) return '-';
-    return '抽成：' + nf(comm) + '／叫車：' + nf(disp);
+  // 表格化：欄名置頂（時間/付款/車資/抽成/叫車），每列只放數值、不重複欄名。
+  // 抽成／叫車兩欄的「值」：現金抽成不適用→「-」；刷卡未填→「待填」；0→「-」；否則數字。
+  function _cells(cashLock, filled, comm, disp) {
+    var c;
+    if (cashLock) c = '-';            // 現金抽成不適用
+    else if (!filled) c = '待填';      // 刷卡未填抽成
+    else c = comm > 0 ? nf(comm) : '-';
+    return { comm: c, disp: disp > 0 ? nf(disp) : '-' };
+  }
+  function _thead() {
+    return '<div class="bk-thead"><span>時間</span><span>付款</span>' +
+      '<span class="f">車資</span><span class="rc">抽成</span><span class="rc">叫車</span></div>';
   }
   // 當日抽成/叫車總計（與逐趟顯示一致：commissions 優先，否則行程自帶）。
   function _dayTotals(trips, commissions) {
@@ -766,7 +779,7 @@
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
-    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _localDay: _localDay, _cCell: _cCell
+    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _localDay: _localDay, _cells: _cells
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;
