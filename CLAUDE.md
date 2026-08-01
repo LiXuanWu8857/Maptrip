@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.276**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.277**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -196,6 +196,10 @@
   `col(light,dark)` 選色，系統深色時卡片/鍵/切換鈕自動變深（卡 #1E1E1E、鍵 #2A2A2A、on #1E3A5F/#8AB4F8）。
   **只改原生 Java、web 完全沒動 → 不升 web 版號**（升了只會讓 web 使用者白換 SW 快取）；**需重編 Android app 才生效**。
   預覽圖 scratchpad `float-preview-theme.png`（淺/深各一）。
+  **v277 記帳者標題置頂（手機版全螢幕）**：手機版 `#bk-sheet` 全螢幕時「記帳者」標題上方留一大塊白
+  （安全區在 sheet padding-top 上、標題列自己又有 padding → 標題被推很低）。修法：安全區改成**只放在
+  標題列 `padding-top:calc(env(safe-area-inset-top)+6px)`（單一來源）**、`#bk-sheet` 拿掉 padding-top，
+  標題就貼到動態島下方＝跟 `#top-bar` 日期同高、上方不留白。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

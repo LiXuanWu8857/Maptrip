@@ -37,9 +37,12 @@
       '--bk-bd:rgba(255,255,255,.1);--bk-bd2:rgba(255,255,255,.22);--bk-acc-bg:#1e3a5f;--bk-acc-bd:#2f5a9c;' +
       '--bk-acc-fill:#4285f4;--bk-warn-bg:#3a3000;--bk-warn-fill:#fdd663}}' +
       // ---- sheet 外殼（手機版：直接全螢幕，不再是半截彈出視窗）----
+      // 安全區只放在標題列的 padding-top（單一來源，避免 sheet 再加一次造成標題上方留白）；
+      // 標題列比照 #top-bar 貼在動態島下方，「記帳者」置頂不留白。
       '#bk-sheet{position:fixed;inset:0;background:var(--bk-s2,#fff);border-radius:0;z-index:31;display:none;' +
-      'flex-direction:column;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .2s ease}' +
+      'flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .2s ease}' +
       '#bk-sheet.show{display:flex}#bk-sheet .sheet-handle{display:none}' +
+      '#bk-sheet .sheet-header{padding:6px 16px;padding-top:calc(env(safe-area-inset-top,0px) + 6px);border-bottom:.5px solid var(--bk-bd)}' +
       '#bk-body{overflow-y:auto;overflow-x:hidden;flex:1;padding:6px 16px 18px;font-variant-numeric:tabular-nums}' +
       // ---- 電腦滿版容器（純覆蓋層，鋪在地圖上、頂列之下；z 低於 sheet 的 31，地圖不被碰、不重 init）----
       '#bk-home{position:fixed;left:0;right:0;bottom:0;top:calc(48px + env(safe-area-inset-top,0px));z-index:15;' +
