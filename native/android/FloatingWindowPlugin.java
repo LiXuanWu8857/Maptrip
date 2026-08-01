@@ -2,6 +2,7 @@ package com.maptrip.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -63,6 +64,18 @@ public class FloatingWindowPlugin extends Plugin {
     private String fareStr = "";
     private static final int DISPATCH_FEE = 10;   // 叫車費固定 10 元
     private boolean dispatchOn = true;            // 預設「有」叫車費（每次開鍵盤重設）
+
+    // ---- App 風格配色（比照 css/style.css 車資對話框；系統深色自適應）----
+    // night 於 buildView 建立浮層時擷取當下系統主題（沿用整個浮層生命週期）。
+    private boolean night = false;
+    private boolean isNight() {
+        try {
+            int m = getContext().getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+            return m == Configuration.UI_MODE_NIGHT_YES;
+        } catch (Exception e) { return false; }
+    }
+    // 依主題選色：淺色 / 深色
+    private int col(String light, String dark) { return Color.parseColor(night ? dark : light); }
 
     // ---- 權限 ----
 
@@ -159,16 +172,18 @@ public class FloatingWindowPlugin extends Plugin {
 
     private void buildView() {
         Context ctx = getContext();
+        night = isNight();   // 擷取當下系統主題
         wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
 
         root = new DragLayout(ctx);
 
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#F2202124"));
-        bg.setCornerRadius(dp(16));
+        bg.setColor(col("#FFFFFF", "#1E1E1E"));     // App 風格：白卡／深色卡
+        bg.setCornerRadius(dp(20));
+        bg.setStroke(dp(1), col("#E0E2E6", "#333333"));
         card.setBackground(bg);
 
         // 主列：文字 + 動作鈕
@@ -189,11 +204,11 @@ public class FloatingWindowPlugin extends Plugin {
         textCol.setOrientation(LinearLayout.VERTICAL);
 
         titleText = new TextView(ctx);
-        titleText.setTextColor(Color.WHITE);
+        titleText.setTextColor(col("#202124", "#E8EAED"));
         titleText.setTextSize(16);
 
         subText = new TextView(ctx);
-        subText.setTextColor(Color.parseColor("#9AA0A6"));
+        subText.setTextColor(col("#5F6368", "#9AA0A6"));
         subText.setTextSize(12);
 
         textCol.addView(titleText);
@@ -257,10 +272,10 @@ public class FloatingWindowPlugin extends Plugin {
         pad.setLayoutParams(padLp);
 
         fareDisplay = new TextView(ctx);
-        fareDisplay.setTextColor(Color.WHITE);
-        fareDisplay.setTextSize(22);
+        fareDisplay.setTextColor(col("#202124", "#E8EAED"));
+        fareDisplay.setTextSize(24);
         fareDisplay.setGravity(Gravity.CENTER);
-        fareDisplay.setPadding(0, dp(4), 0, dp(8));
+        fareDisplay.setPadding(0, dp(2), 0, dp(10));
         pad.addView(fareDisplay);
 
         String[][] rows = {
@@ -283,10 +298,10 @@ public class FloatingWindowPlugin extends Plugin {
         // 叫車費切換（整排一顆，跟 iPhone 一樣：預設「有 $10」，點一下切「無」）
         dispatchToggle = new TextView(ctx);
         dispatchToggle.setGravity(Gravity.CENTER);
-        dispatchToggle.setTextSize(14);
+        dispatchToggle.setTextSize(15);
         LinearLayout.LayoutParams dispLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
-        dispLp.topMargin = dp(6);
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(46));
+        dispLp.topMargin = dp(10);
         dispatchToggle.setLayoutParams(dispLp);
         dispatchToggle.setClickable(true);
         dispatchToggle.setOnClickListener(v -> { dispatchOn = !dispatchOn; updateDispatchToggle(); });
@@ -296,8 +311,8 @@ public class FloatingWindowPlugin extends Plugin {
         LinearLayout payRow = new LinearLayout(ctx);
         payRow.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams payRowLp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
-        payRowLp.topMargin = dp(6);
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(50));
+        payRowLp.topMargin = dp(10);
         payRow.setLayoutParams(payRowLp);
 
         TextView cashBtn = payButton(ctx, "現金", "#34A853");
@@ -322,18 +337,19 @@ public class FloatingWindowPlugin extends Plugin {
     // 用 TextView 取代 Button：沒有預設的 minWidth / 內距 / 陰影，
     // 等寬權重的格子才能像素級對齊（Button 預設樣式會把按鍵撐歪）。
     private TextView keyButton(Context ctx, String key) {
+        boolean muted = "略過".equals(key) || "⌫".equals(key);   // 功能鍵：淡色小字
         TextView b = new TextView(ctx);
         b.setText(key);
-        b.setTextColor(Color.WHITE);
-        b.setTextSize(16);
+        b.setTextColor(muted ? col("#5F6368", "#9AA0A6") : col("#202124", "#E8EAED"));
+        b.setTextSize(muted ? 16 : 19);
         b.setGravity(Gravity.CENTER);
         b.setPadding(0, 0, 0, 0);
         GradientDrawable kb = new GradientDrawable();
-        kb.setColor(Color.parseColor("#3C4043"));
-        kb.setCornerRadius(dp(8));
+        kb.setColor(col("#F1F3F4", "#2A2A2A"));      // App 風格：淺灰鍵
+        kb.setCornerRadius(dp(12));
         b.setBackground(kb);
-        LinearLayout.LayoutParams lpb = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        lpb.setMargins(dp(3), dp(3), dp(3), dp(3));
+        LinearLayout.LayoutParams lpb = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        lpb.setMargins(dp(4), dp(4), dp(4), dp(4));
         b.setLayoutParams(lpb);
         b.setClickable(true);
         b.setOnClickListener(v -> onKey(key));
@@ -350,7 +366,7 @@ public class FloatingWindowPlugin extends Plugin {
         b.setPadding(0, 0, 0, 0);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.parseColor(hex));
-        bg.setCornerRadius(dp(10));
+        bg.setCornerRadius(dp(12));
         b.setBackground(bg);
         b.setClickable(true);
         return b;
@@ -372,14 +388,21 @@ public class FloatingWindowPlugin extends Plugin {
         updateFareDisplay();
     }
 
-    // 叫車費切換的外觀：開＝藍底「叫車費 $10」、關＝灰底「叫車費 無」
+    // 叫車費切換（比照 App .fare-toggle）：開＝淺藍底＋藍字藍框、關＝淺灰底＋灰字
     private void updateDispatchToggle() {
         if (dispatchToggle == null) return;
         dispatchToggle.setText(dispatchOn ? ("叫車費 $" + DISPATCH_FEE) : "叫車費 無");
-        dispatchToggle.setTextColor(dispatchOn ? Color.WHITE : Color.parseColor("#9AA0A6"));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor(dispatchOn ? "#1A73E8" : "#3C4043"));
-        bg.setCornerRadius(dp(10));
+        bg.setCornerRadius(dp(12));
+        if (dispatchOn) {
+            dispatchToggle.setTextColor(col("#1A73E8", "#8AB4F8"));
+            bg.setColor(col("#E8F0FE", "#1E3A5F"));
+            bg.setStroke(dp(1), col("#1A73E8", "#8AB4F8"));
+        } else {
+            dispatchToggle.setTextColor(col("#9AA0A6", "#7A7F87"));
+            bg.setColor(col("#F1F3F4", "#2A2A2A"));
+            bg.setStroke(dp(1), col("#E0E2E6", "#333333"));
+        }
         dispatchToggle.setBackground(bg);
     }
 
@@ -466,7 +489,7 @@ public class FloatingWindowPlugin extends Plugin {
     private void setBtnColor(Button b, String hex) {
         GradientDrawable d = new GradientDrawable();
         d.setColor(Color.parseColor(hex));
-        d.setCornerRadius(dp(10));
+        d.setCornerRadius(dp(12));
         b.setBackground(d);
     }
 

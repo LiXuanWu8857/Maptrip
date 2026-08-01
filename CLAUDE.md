@@ -189,6 +189,13 @@
   `confirmFare` payload 加 `dispatch`；JS 端 `app.js floatFare` 收 `dispatch`、`recorder.saveFloatFare(fare,pay,dispatch)`
   → `finalizeSavedTrip(...,0,dispatch)`。**Java 需重編 Android app 才生效**（web 端 JS 隨部署生效、舊版不帶 dispatch＝0 相容）。
   `bktaxi.js` 48 項全過（含全螢幕/無水平溢出）零 pageerror。
+  **Android 浮動視窗改 App 風格＋深色自適應（純原生，無 web 版號變動）**：`FloatingWindowPlugin.java`
+  原本是深灰卡＋深鍵，重繪成比照 `css/style.css` 車資對話框的 App 淺色風格（白卡＋淺灰鍵 #F1F3F4＋
+  藍色強調），叫車費切換比照 `.fare-toggle`（開＝#E8F0FE 底藍字藍框、關＝灰底灰字），現金綠 #34A853／
+  刷卡藍 #1A73E8。加 `night = isNight()`（讀 `Configuration.UI_MODE_NIGHT_MASK`，buildView 時擷取）＋
+  `col(light,dark)` 選色，系統深色時卡片/鍵/切換鈕自動變深（卡 #1E1E1E、鍵 #2A2A2A、on #1E3A5F/#8AB4F8）。
+  **只改原生 Java、web 完全沒動 → 不升 web 版號**（升了只會讓 web 使用者白換 SW 快取）；**需重編 Android app 才生效**。
+  預覽圖 scratchpad `float-preview-theme.png`（淺/深各一）。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取
