@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.277**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.278**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -200,6 +200,14 @@
   （安全區在 sheet padding-top 上、標題列自己又有 padding → 標題被推很低）。修法：安全區改成**只放在
   標題列 `padding-top:calc(env(safe-area-inset-top)+6px)`（單一來源）**、`#bk-sheet` 拿掉 padding-top，
   標題就貼到動態島下方＝跟 `#top-bar` 日期同高、上方不留白。
+- **底部 sheet 可拖曳展開＋總計恆置頂（v278）** `js/sheet-drag.js`（MaptripSheetDrag）：今日行程/歷史 sheet
+  維持「底部彈出」，但拖把手/標題列**往上拉→展開接近全螢幕**（class `.sheet-expanded`，max-height
+  `calc(100dvh−env(safe-area-inset-top)−6px)`、圓角收掉）、**往下拉→收回預設 70vh、再往下就關閉**。
+  只綁 `.sheet-handle`＋`.sheet-header`（標題列按鈕不觸發），拖曳中用 inline max-height 即時跟手。
+  **關鍵坑**：`onEnd` 別用 `getBoundingClientRect` 決策（會撞上 `max-height 0.2s` transition 的時間差、量到
+  舊高度）→ 改用「拖到的目標高 `lastH`」決策（`moved` 判定只是點一下）。`.day-summary` 加 `position:sticky;top:0`
+  ＝下方清單捲動時總計固定最上。app.js `wire(trip-sheet,closeSheet)`＋`wire(history-sheet,closeHistory)`，
+  開 sheet 時 `reset()` 回預設高度。測試 `sheetdrag.js` 9 項（sticky/展開/收回/關閉/reset/按鈕不誤觸）全過。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

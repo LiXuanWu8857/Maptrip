@@ -386,6 +386,12 @@ html, body {
   animation: slideUp 0.25s ease;
   padding-bottom: env(safe-area-inset-bottom, 0);
   box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
+  transition: max-height 0.2s ease;
+}
+/* 拖曳把手往上拉到底＝展開接近全螢幕（尊重動態島安全區）；圓角在全螢幕時收掉 */
+#trip-sheet.sheet-expanded, #history-sheet.sheet-expanded {
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 6px);
+  border-radius: 0;
 }
 
 .sheet-handle {
@@ -696,6 +702,8 @@ html, body {
   padding: 10px 18px; background: #f8f9fa;
   font-size: 0.82rem; color: #5f6368; font-weight: 500;
   border-bottom: 1px solid rgba(0,0,0,0.06);
+  /* 總計恆置頂：捲動下方清單時，這塊固定在最上面 */
+  position: sticky; top: 0; z-index: 3;
 }
 .ds-top { display: flex; gap: 12px; align-items: center; }
 .ds-top .screenshot-btn { margin-left: auto; }

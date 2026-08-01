@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.277';
+const APP_VERSION  = '1.1.278';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -375,6 +375,13 @@ function initMap() {
   loadTodayFromStorage();
   // 電腦版「檢視台模式」：藏/停用 GPS 記錄相關 UI、選單補滑鼠點擊、加切換鈕（原生 App 不受影響）
   try { if (window.MaptripDesktop) MaptripDesktop.apply(); } catch (_) {}
+  // 底部 sheet 可拖曳把手/標題列往上展開全螢幕、往下收回或關閉
+  try {
+    if (window.MaptripSheetDrag) {
+      MaptripSheetDrag.wire(document.getElementById('trip-sheet'), closeSheet);
+      MaptripSheetDrag.wire(document.getElementById('history-sheet'), closeHistory);
+    }
+  } catch (_) {}
   const _review = !!(window.MaptripDesktop && MaptripDesktop.isReview());
   if (!_review) {
     restoreActiveTripIfAny();   // 若上次重載/當掉時正在記錄，自動接回
@@ -941,6 +948,7 @@ function toggleTripList() {
   const sheet = document.getElementById('trip-sheet');
   const overlay = document.getElementById('sheet-overlay');
   if (sheet.style.display === 'none') {
+    if (window.MaptripSheetDrag) MaptripSheetDrag.reset(sheet);   // 回預設高度（清上次拖曳/展開）
     renderTripSheet(); sheet.style.display = 'flex'; overlay.style.display = 'block';
   } else { closeSheet(); }
 }
@@ -1470,8 +1478,10 @@ function confirmClearDay() {
 }
 
 function showHistory() {
+  var hs = document.getElementById('history-sheet');
+  if (window.MaptripSheetDrag) MaptripSheetDrag.reset(hs);   // 回預設高度（清上次拖曳/展開）
   renderHistorySheet();
-  document.getElementById('history-sheet').style.display = 'flex';
+  hs.style.display = 'flex';
   document.getElementById('sheet-overlay').style.display = 'block';
 }
 function closeHistory() {
