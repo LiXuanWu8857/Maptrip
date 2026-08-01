@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.274**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.275**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -173,6 +173,14 @@
   不再重複欄名（車資欄去掉「車資」字樣只留數字）；抽成/叫車拆成兩個獨立欄（grid 5 欄），
   純函式 `_cells(cashLock,filled,comm,disp)`＝回 `{comm,disp}`（現金抽成「-」、刷卡未填「待填」、0「-」、否則數字）
   取代 `_cCell`。`bktaxi.js` 46 項全過零 pageerror。
+  **v275 記帳者三項（依手機截圖）**：①**手機版全螢幕**——`#bk-sheet` 由半截彈出（bottom+max-height:84vh+圓角）
+  改 `inset:0` 全螢幕（無圓角、藏 sheet-handle、安全區 padding），開起來直接鋪滿；②**100% 不可左右移動**——
+  `#bk-body/#bk-home-body` 加 `overflow-x:hidden`、`.bk-cards` grid 改 `minmax(0,1fr)`（防 nowrap 內容撐爆 track）、
+  `.bk-netrow` 加 `flex-wrap` 且 `.val` `min-width:0`，390px 視窗 `scrollWidth<=clientWidth`；③**Android 浮動視窗加叫車費**——
+  `native/android/FloatingWindowPlugin.java` 車資鍵盤加「叫車費 $10／無」切換鈕（預設有、每次開鍵盤重設，跟 iPhone 一樣），
+  `confirmFare` payload 加 `dispatch`；JS 端 `app.js floatFare` 收 `dispatch`、`recorder.saveFloatFare(fare,pay,dispatch)`
+  → `finalizeSavedTrip(...,0,dispatch)`。**Java 需重編 Android app 才生效**（web 端 JS 隨部署生效、舊版不帶 dispatch＝0 相容）。
+  `bktaxi.js` 48 項全過（含全螢幕/無水平溢出）零 pageerror。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

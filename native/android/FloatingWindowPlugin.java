@@ -57,9 +57,12 @@ public class FloatingWindowPlugin extends Plugin {
     private Button actionBtn;
     private LinearLayout keypad;
     private TextView fareDisplay;
+    private TextView dispatchToggle;   // 叫車費切換（跟 iPhone 車資對話框一樣）
 
     private String mode = "idle";     // "idle" | "recording"
     private String fareStr = "";
+    private static final int DISPATCH_FEE = 10;   // 叫車費固定 10 元
+    private boolean dispatchOn = true;            // 預設「有」叫車費（每次開鍵盤重設）
 
     // ---- 權限 ----
 
@@ -277,6 +280,19 @@ public class FloatingWindowPlugin extends Plugin {
             pad.addView(r);
         }
 
+        // 叫車費切換（整排一顆，跟 iPhone 一樣：預設「有 $10」，點一下切「無」）
+        dispatchToggle = new TextView(ctx);
+        dispatchToggle.setGravity(Gravity.CENTER);
+        dispatchToggle.setTextSize(14);
+        LinearLayout.LayoutParams dispLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
+        dispLp.topMargin = dp(6);
+        dispatchToggle.setLayoutParams(dispLp);
+        dispatchToggle.setClickable(true);
+        dispatchToggle.setOnClickListener(v -> { dispatchOn = !dispatchOn; updateDispatchToggle(); });
+        pad.addView(dispatchToggle);
+        updateDispatchToggle();
+
         LinearLayout payRow = new LinearLayout(ctx);
         payRow.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams payRowLp = new LinearLayout.LayoutParams(
@@ -356,11 +372,23 @@ public class FloatingWindowPlugin extends Plugin {
         updateFareDisplay();
     }
 
+    // 叫車費切換的外觀：開＝藍底「叫車費 $10」、關＝灰底「叫車費 無」
+    private void updateDispatchToggle() {
+        if (dispatchToggle == null) return;
+        dispatchToggle.setText(dispatchOn ? ("叫車費 $" + DISPATCH_FEE) : "叫車費 無");
+        dispatchToggle.setTextColor(dispatchOn ? Color.WHITE : Color.parseColor("#9AA0A6"));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor(dispatchOn ? "#1A73E8" : "#3C4043"));
+        bg.setCornerRadius(dp(10));
+        dispatchToggle.setBackground(bg);
+    }
+
     private void confirmFare(String paymentMethod) {
         int value = fareStr.isEmpty() ? 0 : Integer.parseInt(fareStr);
         JSObject o = new JSObject();
         o.put("value", value);
         o.put("paymentMethod", paymentMethod);
+        o.put("dispatch", dispatchOn ? DISPATCH_FEE : 0);
         notifyListeners("floatFare", o);
         setIdle();
     }
@@ -421,6 +449,8 @@ public class FloatingWindowPlugin extends Plugin {
 
     private void showKeypad() {
         fareStr = "";
+        dispatchOn = true;          // 每次開鍵盤預設「有」叫車費（跟 iPhone 一樣）
+        updateDispatchToggle();
         updateFareDisplay();
         mainRow.setVisibility(View.GONE);
         keypad.setVisibility(View.VISIBLE);

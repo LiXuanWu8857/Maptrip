@@ -36,12 +36,11 @@
       '--bk-acc-t:#a8c7fa;--bk-warn-t:#fdd663;--bk-danger:#f28b82;--bk-s1:#242424;--bk-s2:#1a1a1a;' +
       '--bk-bd:rgba(255,255,255,.1);--bk-bd2:rgba(255,255,255,.22);--bk-acc-bg:#1e3a5f;--bk-acc-bd:#2f5a9c;' +
       '--bk-acc-fill:#4285f4;--bk-warn-bg:#3a3000;--bk-warn-fill:#fdd663}}' +
-      // ---- sheet 外殼 ----
-      '#bk-sheet{position:fixed;bottom:0;left:0;right:0;max-height:84vh;background:var(--bk-s2,#fff);border-radius:20px 20px 0 0;' +
-      'border-top:1px solid rgba(0,0,0,.08);z-index:31;display:none;flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,.1);' +
-      'padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .25s ease}' +
-      '#bk-sheet.show{display:flex}' +
-      '#bk-body{overflow-y:auto;flex:1;padding:6px 16px 18px;font-variant-numeric:tabular-nums}' +
+      // ---- sheet 外殼（手機版：直接全螢幕，不再是半截彈出視窗）----
+      '#bk-sheet{position:fixed;inset:0;background:var(--bk-s2,#fff);border-radius:0;z-index:31;display:none;' +
+      'flex-direction:column;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .2s ease}' +
+      '#bk-sheet.show{display:flex}#bk-sheet .sheet-handle{display:none}' +
+      '#bk-body{overflow-y:auto;overflow-x:hidden;flex:1;padding:6px 16px 18px;font-variant-numeric:tabular-nums}' +
       // ---- 電腦滿版容器（純覆蓋層，鋪在地圖上、頂列之下；z 低於 sheet 的 31，地圖不被碰、不重 init）----
       '#bk-home{position:fixed;left:0;right:0;bottom:0;top:calc(48px + env(safe-area-inset-top,0px));z-index:15;' +
       'background:var(--bk-s2);display:none;flex-direction:column}#bk-home.show{display:flex}' +
@@ -49,7 +48,7 @@
       '#bk-home-hdr .ti{font-size:1rem;font-weight:600;color:var(--bk-text)}' +
       '#bk-home-hdr .sw{margin-left:auto;display:flex;align-items:center;gap:5px;border:.5px solid var(--bk-bd);' +
       'background:var(--bk-s1);border-radius:16px;padding:5px 12px;font-size:.82rem;color:var(--bk-text);font-family:inherit;cursor:pointer}' +
-      '#bk-home-body{flex:1;overflow-y:auto;padding:8px 16px 24px;font-variant-numeric:tabular-nums}' +
+      '#bk-home-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px 16px 24px;font-variant-numeric:tabular-nums}' +
       // ---- 首頁 ----
       '.bk-h2{font-size:.86rem;font-weight:600;color:var(--bk-t2);margin:14px 2px 8px;display:flex;align-items:center;gap:6px}' +
       '.bk-dcard{display:flex;align-items:center;gap:10px;padding:14px;background:var(--bk-s2);border:.5px solid var(--bk-bd);' +
@@ -82,15 +81,15 @@
       'border:.5px solid var(--bk-bd);background:transparent;color:var(--bk-t2)}' +
       '.bk-chip.on{border-color:var(--bk-acc-bd);background:var(--bk-acc-bg);color:var(--bk-acc-t);font-weight:600}' +
       // ---- 小計卡 ----
-      '.bk-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}' +
+      '.bk-cards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:12px}' +
       '.bk-card{background:var(--bk-s1);border-radius:12px;padding:12px 14px}' +
       '.bk-card.acc{background:var(--bk-acc-bg)}' +
       '.bk-card .lbl{font-size:.72rem;color:var(--bk-t2);margin-bottom:4px}.bk-card.acc .lbl{color:var(--bk-acc-t)}' +
       '.bk-card .val{font-size:1.5rem;font-weight:600;color:var(--bk-text);font-variant-numeric:tabular-nums}.bk-card.acc .val{color:var(--bk-acc-t)}' +
       '.bk-card .sub{font-size:.72rem;color:var(--bk-t2);margin-top:2px}.bk-card.acc .sub{color:var(--bk-acc-t);opacity:.85}' +
       // 淨利卡：大數字（左）＋趟數/工時小字（右側疊放）
-      '.bk-netrow{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;margin-top:2px}' +
-      '.bk-netrow .val{margin:0;font-size:1.35rem}' +
+      '.bk-netrow{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:2px 6px;margin-top:2px}' +
+      '.bk-netrow .val{margin:0;font-size:1.35rem;min-width:0;overflow:hidden;text-overflow:ellipsis}' +
       '.bk-ministat{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:.7rem;line-height:1.35;' +
       'color:var(--bk-t2);white-space:nowrap;font-variant-numeric:tabular-nums}' +
       '.bk-card.acc .bk-ministat{color:var(--bk-acc-t);opacity:.85}' +

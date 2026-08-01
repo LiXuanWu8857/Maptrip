@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.274';
+const APP_VERSION  = '1.1.275';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -324,10 +324,10 @@ function initMap() {
         if (action === 'start' && !activeTrip) startTrip();
         if (action === 'end' && activeTrip) endTrip(true);
       });
-      // 浮窗數字鍵盤輸入的車資 → 存到剛結束的那趟
-      fw.addListener?.('floatFare', ({ value, paymentMethod }) => {
-        dbg('floatFare ' + value);
-        saveFloatFare(value || 0, paymentMethod || '');
+      // 浮窗數字鍵盤輸入的車資（＋叫車費切換）→ 存到剛結束的那趟
+      fw.addListener?.('floatFare', ({ value, paymentMethod, dispatch }) => {
+        dbg('floatFare ' + value + ' d=' + dispatch);
+        saveFloatFare(value || 0, paymentMethod || '', dispatch);
       });
       // 常駐顯示：有授權就先顯示閒置卡片（沒授權靜默略過）
       ensureFloatPermission().then(() => { if (!activeTrip) fw.showIdle().catch(() => {}); });
@@ -596,7 +596,7 @@ function clearActiveTrip() { return MaptripRecorder.clearActiveTrip(); }
 function restoreActiveTripIfAny() { return MaptripRecorder.restoreActiveTripIfAny(); }
 
 // 浮窗數字鍵盤按「確定/略過」後：把車資補進「已落盤」的那趟並貼路
-async function saveFloatFare(fare, paymentMethod) { return MaptripRecorder.saveFloatFare(fare, paymentMethod); }
+async function saveFloatFare(fare, paymentMethod, dispatch) { return MaptripRecorder.saveFloatFare(fare, paymentMethod, dispatch); }
 
 // 背景結束：直接貼合道路並存檔（金額 0），不需 UI
 async function saveTripBackground(trip) { return MaptripRecorder.saveTripBackground(trip); }

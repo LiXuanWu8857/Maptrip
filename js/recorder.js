@@ -402,11 +402,12 @@
   }
 
   // 浮窗數字鍵盤按「確定/略過」後：把車資補進「已落盤」的那趟並貼路
-  async function saveFloatFare(fare, paymentMethod) {
+  async function saveFloatFare(fare, paymentMethod, dispatch) {
     const trip = pendingFareTrip;
     pendingFareTrip = null;
     if (!trip) return;
-    await finalizeSavedTrip(trip, fare, paymentMethod || '');
+    // 叫車費：浮窗（Android）帶 dispatch 進來就沿用；沒帶（舊版）預設 0。commission 一律 0（事後補）。
+    await finalizeSavedTrip(trip, fare, paymentMethod || '', '', 0, dispatch != null ? dispatch : 0);
   }
 
   // 背景結束：直接貼合道路並存檔（金額 0），不需 UI
