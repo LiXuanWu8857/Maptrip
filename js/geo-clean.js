@@ -52,22 +52,53 @@
     return out;
   }
 
+  // 收「停等紅燈原地飄移成一叢/一圈」的群（v275）。dropSpikes 只往前看 4 點，
+  // 但紅燈久等會堆出「幾十個點的一小圈」，遠超過 4 點窗、收不掉（使用者實例：路口一個小方框）。
+  // 判準：從上一個保留點 a 出發，一段路徑在「小範圍內（離 a <CAP）繞了不少路（via>=MINVIA）、
+  // 點數夠多（>=MINPTS）後又繞回 a 附近（<RETURN）」＝原地飄移 → 整叢收掉、只留 a 當代表。
+  //   CAP=100m 是關鍵護欄：真的繞街廓（半徑通常 >100m）會先超過 CAP 而不被收，只收侷限的小圈。
+  function collapseStalls(coords) {
+    if (!coords || coords.length < 5) return coords;
+    var RETURN = 35, CAP = 100, MAXN = 40, MINPTS = 5, MINVIA = 100;
+    var out = [coords[0]];
+    var i = 1;
+    while (i < coords.length) {
+      var a = out[out.length - 1];
+      var best = -1, curMaxR = 0, via = haversine(a, coords[i]);
+      for (var j = i; j <= Math.min(i + MAXN, coords.length - 1); j++) {
+        if (j > i) via += haversine(coords[j - 1], coords[j]);
+        var r = haversine(a, coords[j]);
+        if (r > curMaxR) curMaxR = r;
+        if (curMaxR > CAP) break;                     // 跑太遠＝真的在移動，不是原地飄移
+        if (j - i + 1 >= MINPTS && r < RETURN && curMaxR >= 20 && via >= MINVIA) best = j;
+      }
+      if (best > i) { i = best + 1; continue; }        // 丟掉 i..best（原地飄移叢），a 當代表點
+      out.push(coords[i]); i++;
+    }
+    return out;
+  }
+
   // 迭代清理鋸齒/飄點群。安全閥：清掉 >40% 的點（且原 >=25 點）＝門檻誤傷，還原。
   function cleanTrace(coords) {
     if (!coords || coords.length < 4) return coords;
-    var cur = coords;
+    // 先收原地飄移叢（紅燈停等，v275）。這步收的是「繞回原地的小範圍叢」，本來就該收一大票點，
+    // 故不納入下方 40% 安全閥（否則長紅燈的合理收斂會被誤判成誤傷而還原）。
+    var stalled = collapseStalls(coords);
+    var cur = stalled;
     for (var pass = 0; pass < 4; pass++) {
       var next = dropSpikes(cur);
       if (next.length === cur.length) break;   // 穩定：沒有飄點可剝了
       cur = next;
     }
-    if (coords.length >= 25 && cur.length < coords.length * 0.6) return coords;
+    // 安全閥只防 dropSpikes 誤傷（相對已收斂的 stalled 比例）；collapseStalls 的收斂不算誤傷。
+    if (stalled.length >= 25 && cur.length < stalled.length * 0.6) return stalled;
     return cur;
   }
 
   global.MaptripGeoClean = {
     perpM: perpM,
     dropSpikes: dropSpikes,
+    collapseStalls: collapseStalls,
     cleanTrace: cleanTrace,
     haversine: haversine
   };

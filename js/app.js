@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.275';
+const APP_VERSION  = '1.1.276';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -2116,7 +2116,7 @@ function healBogusRoads(notify) {
 // （今天貼路一直失敗、_snapN 已滿的鋸齒趟也要清）。以版本旗標保證每版只跑一次。
 function healZigzagTraces() {
   try {
-    if (localStorage.getItem('maptrip_zigfix') === 'v246') return;
+    if (localStorage.getItem('maptrip_zigfix') === 'v275') return;   // v275 加收紅燈原地飄移圈 → 重跑一次
     const all = loadTrips();
     const fixedDays = new Set();
     Object.keys(all).forEach(day => (all[day] || []).forEach(t => {
@@ -2127,7 +2127,7 @@ function healZigzagTraces() {
         fixedDays.add(day);
       }
     }));
-    localStorage.setItem('maptrip_zigfix', 'v246');
+    localStorage.setItem('maptrip_zigfix', 'v275');
     if (!fixedDays.size) return;
     saveTrips(all);
     if (window.MaptripSync) { try { MaptripSync.syncDays([...fixedDays]); } catch (_) {} }
