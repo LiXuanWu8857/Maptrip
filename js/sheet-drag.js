@@ -59,6 +59,9 @@
     }
 
     grabs.forEach(function (g) {
+      // 關鍵（iOS）：把手/標題列設 touch-action:none，瀏覽器才不會把「垂直拖曳」
+      // 當成捲動先接走，JS 才拿得到 touchmove 來即時調整高度（否則往上拖沒反應）。
+      g.style.touchAction = 'none';
       g.addEventListener('touchstart', onStart, { passive: true });
       g.addEventListener('touchmove', onMove, { passive: false });
       g.addEventListener('touchend', onEnd);

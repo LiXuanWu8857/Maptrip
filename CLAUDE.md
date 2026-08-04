@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.279**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.280**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -212,6 +212,10 @@
   收支報表（`finance.js` open 時 `wire(finance-sheet,close)`）、批次抽成（`app.js openCommissionBatch` 時
   `wire(commission-sheet,closeCommissionBatch)`）都接上同一支拖曳邏輯；兩者 CSS 補 `transition:max-height .2s`。
   拖曳本來就即時跟手（onMove 逐幀寫 inline max-height）。測試 `sheetdrag.js` 擴到 11 項（通用 class/收支可 wire）全過。
+  **v280 iOS 拖不動修復（血淚）**：使用者回報「今日/歷史往上拖沒反應」。根因＝把手/標題列**沒設
+  `touch-action:none`**，iOS WKWebView 把垂直拖曳當「捲動」先接走，JS 的 touchmove 拿不到 → 拖不動。
+  修法：`sheet-drag.js wire` 對每個 grab（把手＋標題列）設 `g.style.touchAction='none'`。測試加 2 項（13 項全過）。
+  ※ 之前桌面 Playwright 用 mouse 測（不受 touch-action 影響）所以沒抓到——iOS 專屬坑。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取
