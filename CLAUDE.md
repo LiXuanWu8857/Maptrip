@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.282**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.283**（2026-08-04）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -226,6 +226,16 @@
   `setPointerCapture`**（pointerdown/move/up/cancel，拖曳中把 pointermove 全導回 grab，子元素也不影響），
   CSS 對 `.sheet-handle/.sheet-header/其子元素/.cb-header` 都設 `touch-action:none`，把手加大點擊區
   （padding 8px、content-box）。展開門檻放寬 0.78→0.72。測試改 dispatch PointerEvent，13 項全過。
+  **v283 上拉仍失敗→回到 touch 事件但 `{passive:false}`（血淚三，真正根因）**：v280/v281 都沒解決。
+  **真正根因**：iOS 上 `touchmove` 監聽若是**被動（passive，addEventListener 預設）**，`preventDefault()`
+  會被忽略 → WKWebView 把垂直拖曳改判成「捲頁」、之後 touchmove 就不再送達 JS＝完全拖不動；v281 改
+  Pointer Events 又踩到 WKWebView「pointerdown 內 setPointerCapture 會壓掉 pointermove」的 bug（桌面
+  Playwright 測不出來）。**正解**：`sheet-drag.js` 依 `IS_TOUCH`（`'ontouchstart' in window` 或
+  `maxTouchPoints>0`）分流——**觸控裝置一律用 touch 事件，且 `touchmove` 明確 `{passive:false}` + 首次移動就
+  `preventDefault()`**；iOS 一次手勢的 touchmove/touchend 全回到 touchstart 的元素，故綁把手即攔整段、
+  不需 pointer capture。桌面（滑鼠）才走 Pointer Events。另接黑盒子 `__mtLog`（sheetdrag:start/firstmove/end），
+  真機再失敗可用數據判讀。`.cb-header`（批次抽成）也納入拖曳把手。測試 `sheetdrag.js` 拆兩 context（桌面
+  pointer + 觸控 touch，觸控段驗 `touchmove.defaultPrevented===true`＝passive:false 真的生效）共 21 項全過零 pageerror。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取
