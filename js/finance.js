@@ -306,7 +306,7 @@
     s.textContent =
       '#finance-sheet{position:fixed;bottom:0;left:0;right:0;max-height:82vh;background:#fff;' +
       'border-radius:20px 20px 0 0;border-top:1px solid rgba(0,0,0,0.08);z-index:31;display:none;' +
-      'flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,0.1);padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .25s ease}' +
+      'flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,0.1);padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .25s ease;transition:max-height .2s ease}' +
       '#finance-sheet.show{display:flex}' +
       '.fin-mbar{display:flex;align-items:center;justify-content:center;gap:18px;padding:4px 0 8px}' +
       '.fin-mbar button{background:none;border:none;font-size:1.4rem;color:#1a73e8;cursor:pointer;padding:0 6px;line-height:1}' +
@@ -574,7 +574,10 @@
     bindExpenseSync();   // 確保雲端支出同步已啟動（首次會遷移舊資料＋訂閱）
     _month = _month || curMonth();
     _view = 'io'; _addOpen = false;
-    document.getElementById('finance-sheet').classList.add('show');
+    var fs = document.getElementById('finance-sheet');
+    // 可拖曳展開（把手/標題列往上拉到全螢幕）；開啟時 reset 回預設高度
+    try { if (window.MaptripSheetDrag) { MaptripSheetDrag.wire(fs, close); MaptripSheetDrag.reset(fs); } } catch (_) {}
+    fs.classList.add('show');
     var ov = document.getElementById('sheet-overlay');
     if (ov) { ov.style.display = 'block'; ov.onclick = close; }
     render();

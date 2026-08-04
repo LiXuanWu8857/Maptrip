@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.278';
+const APP_VERSION  = '1.1.279';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1176,7 +1176,10 @@ function openCommissionBatch(day) {
       </div>`;
   }).join('');
   document.getElementById('commission-overlay').style.display = 'block';
-  document.getElementById('commission-sheet').classList.add('show');
+  const cbSheet = document.getElementById('commission-sheet');
+  // 可拖曳展開（把手往上拉到全螢幕）；開啟時 reset 回預設高度
+  try { if (window.MaptripSheetDrag) { MaptripSheetDrag.wire(cbSheet, closeCommissionBatch); MaptripSheetDrag.reset(cbSheet); } } catch (_) {}
+  cbSheet.classList.add('show');
 }
 function closeCommissionBatch() {
   const s = document.getElementById('commission-sheet');
