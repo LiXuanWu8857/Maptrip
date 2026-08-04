@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.281**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.282**（2026-07-31）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -200,6 +200,11 @@
   （安全區在 sheet padding-top 上、標題列自己又有 padding → 標題被推很低）。修法：安全區改成**只放在
   標題列 `padding-top:calc(env(safe-area-inset-top)+6px)`（單一來源）**、`#bk-sheet` 拿掉 padding-top，
   標題就貼到動態島下方＝跟 `#top-bar` 日期同高、上方不留白。
+  **v282 記帳者每日日期加當日總結**：日標題（`renderDriver` 日群組）在原本「N 趟」下方加第二行
+  `.dg-sum`：現金／刷卡／抽成／叫車 + 靠右 `總計 NT$ X`（**總計＝現金＋刷卡−抽成−叫車**）。純函式
+  `_daySummary(trips,commissions)` 回 `{cash,card,comm,disp,total}`（commissions 覆蓋行程自帶、現金/刷卡
+  依 paymentMethod 分流）供測試。CSS `.dg-sum`（flex-basis:100% 換行、hairline 上邊界、tabular-nums）。
+  `bktaxi.js` 加 3 項（現金250/刷卡275/總計485、純函式）共 51 項全過零 pageerror。
 - **底部 sheet 可拖曳展開＋總計恆置頂（v278）** `js/sheet-drag.js`（MaptripSheetDrag）：今日行程/歷史 sheet
   維持「底部彈出」，但拖把手/標題列**往上拉→展開接近全螢幕**（class `.sheet-expanded`，max-height
   `calc(100dvh−env(safe-area-inset-top)−6px)`、圓角收掉）、**往下拉→收回預設 70vh、再往下就關閉**。

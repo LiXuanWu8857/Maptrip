@@ -116,6 +116,11 @@
       'border-radius:12px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:inherit}' +
       '.bk-daygrp .dg-done.on{color:var(--bk-muted)}' +
       '.bk-daygrp .dg-n{color:var(--bk-t2)}.bk-daygrp .dg-t{color:var(--bk-text);font-variant-numeric:tabular-nums}' +
+      // 當日總結第二列（整寬）：現金/刷卡/抽成/叫車/總計
+      '.bk-daygrp .dg-sum{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:5px;padding-top:6px;' +
+      'border-top:.5px solid var(--bk-bd);font-weight:400;color:var(--bk-t2);font-variant-numeric:tabular-nums}' +
+      '.bk-daygrp .dg-sum b{color:var(--bk-text);font-weight:600}' +
+      '.bk-daygrp .dg-sum .dg-total{margin-left:auto}.bk-daygrp .dg-sum .dg-total b{color:var(--bk-acc-t)}' +
       // 手動新增紀錄的表單
       '.bk-tripform{background:var(--bk-s1);border-radius:10px;padding:10px;margin:2px 0 8px}' +
       '.bk-tripform .tf-row{display:flex;gap:8px;margin-top:8px}.bk-tripform .tf-row:first-child{margin-top:0}' +
@@ -353,9 +358,10 @@
       var trips = (days[day] || []).slice().sort(function (a, b) { return (a.startTime || 0) - (b.startTime || 0); });
       if (!trips.length) return;
       any = true;
-      var tot = _dayTotals(trips, data.commissions);
+      var sm2 = _daySummary(trips, data.commissions);
       var done = _isDone(day);
-      // 日標題列：收折鈕／日期／＋新增紀錄／已完成，右側趟數＋當日抽成/叫車總計
+      // 日標題列：收折鈕／日期／＋新增紀錄／已完成 + 趟數；第二列＝當日總結
+      // （現金／刷卡／抽成／叫車／總計；總計＝現金＋刷卡−抽成−叫車）
       h += '<div class="bk-daygrp">' +
         '<div class="dg-l">' +
           '<button class="dg-x" onclick="MaptripBookkeeper.toggleDay(\'' + day + '\')">' + (done ? '▸' : '▾') + '</button>' +
@@ -364,8 +370,14 @@
           '<button class="dg-done' + (done ? ' on' : '') + '" onclick="event.stopPropagation();MaptripBookkeeper.toggleDay(\'' + day + '\')">' +
             (done ? '↺ 展開' : '✓ 已完成紀錄') + '</button>' +
         '</div>' +
-        '<div class="dg-r"><span class="dg-n">' + trips.length + ' 趟</span>' +
-          '<span class="dg-t">抽成 ' + nf(tot.comm) + '　叫車 ' + nf(tot.disp) + '</span></div>' +
+        '<div class="dg-r"><span class="dg-n">' + trips.length + ' 趟</span></div>' +
+        '<div class="dg-sum">' +
+          '<span>現金 <b>' + nf(sm2.cash) + '</b></span>' +
+          '<span>刷卡 <b>' + nf(sm2.card) + '</b></span>' +
+          '<span>抽成 <b>' + nf(sm2.comm) + '</b></span>' +
+          '<span>叫車 <b>' + nf(sm2.disp) + '</b></span>' +
+          '<span class="dg-total">總計 <b>NT$ ' + nf(sm2.total) + '</b></span>' +
+        '</div>' +
         '</div>';
       // 新增紀錄表單（不受收折影響，方便補登）
       if (_addDay === day) h += _tripForm(day);
@@ -519,6 +531,20 @@
       disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
     });
     return { comm: comm, disp: disp };
+  }
+  // 當日總結（供每日標題）：現金/刷卡各自加總、抽成/叫車、總計＝現金＋刷卡−抽成−叫車。
+  // 現金/刷卡只算各自付款方式的車資（「其他/自用」不計）；抽成/叫車與逐趟顯示同口徑（commissions 優先）。
+  function _daySummary(trips, commissions) {
+    var cash = 0, card = 0, comm = 0, disp = 0;
+    (trips || []).forEach(function (t) {
+      var c = (commissions && commissions[String(t.id)]) || {};
+      var f = t.fare || 0;
+      if (t.paymentMethod === 'cash') cash += f;
+      else if (t.paymentMethod === 'card') card += f;
+      comm += c.commission != null ? c.commission : (t.commission || 0);
+      disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
+    });
+    return { cash: cash, card: card, comm: comm, disp: disp, total: cash + card - comm - disp };
   }
   // 「已完成紀錄」收折狀態：記在本機（依司機分開）。回傳/切換某日是否已完成（＝收折）。
   function _doneKey() { return 'bk_done_' + ((_view && _view.driverUid) || ''); }
@@ -781,7 +807,7 @@
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
-    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _localDay: _localDay, _cells: _cells
+    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;
