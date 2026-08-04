@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.285**（2026-08-04）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.286**（2026-08-04）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -252,6 +252,13 @@
   `padding/height:20px/background-clip`（v284 起整張 sheet 都能起手，把手不必再放大），回原本 4px。CSS 對
   `#trip/#history/#commission/#finance-sheet` 的 transition 補 `border-radius .2s`（snap 時圓角也平滑）。
   測試 `sheetdrag.js` 27 項（新增把手 4px、下拉半螢幕才關）全過零 pageerror。
+  **v286 同步跟手＋徹底不閃（血淚，真正的閃源）**：v285 仍「內容拖不同步 + 放手閃一下」。**真正的閃源**＝
+  `sheet` 有 CSS `animation:slideUp .25s`（開啟進場），拖曳結束 `onEnd` 把 `sheet.style.animation` 還原成 `''`
+  →animation-name 從 `none` 變回 `slideUp`＝**瀏覽器重播進場動畫**（整片從螢幕外滑上來）＝那個「閃一下」，
+  也讓整段拖曳感覺被「甩」一下＝不同步。修法：①**拖曳全程完全不碰 `animation`**（進場動畫只在開啟播一次、
+  永不重播）；②**決定要動 sheet 當下 rebase**（`startY=y; startH=現高`）→ max-height 與手指 **1:1、起步不跳＝同步滑動**，
+  且 max-height 不列進 transition（只留 border-radius .15s，圓角平滑）。決策門檻 6→4。測試 `sheetdrag.js` 28 項
+  （新增「拖曳全程 inline animation 維持空＝不重播 slideUp」）全過零 pageerror。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取

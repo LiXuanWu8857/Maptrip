@@ -67,7 +67,7 @@
       if (!dragging) return;
       var y = yOf(e), dy = y - startY;                    // dy<0 往上、dy>0 往下
       if (!mode) {
-        if (Math.abs(dy) < 6) return;                     // 等有明顯方向再決定（避免誤判 / 微抖）
+        if (Math.abs(dy) < 4) return;                     // 等有明顯方向再決定（避免誤判 / 微抖）
         var up = dy < 0;
         var atTop = !scrollEl || scrollEl.scrollTop <= 0;
         // 已展開（在最頂端）往上滑：一律交給內容原生捲動，絕不再動 sheet（使用者：頂端別再偵測上滑）
@@ -75,14 +75,16 @@
         else    mode = atTop ? 'sheet' : 'scroll';              // 內容在頂端往下→收折；否則先原生捲回頂端
         log('mode=' + mode + ' up=' + up + ' atTop=' + atTop + ' exp=' + isExpanded());
         if (mode === 'scroll') { dragging = false; return; }    // 交給原生捲動，這段手勢完全不碰 sheet
-        // 這時才確定要「動 sheet」：關掉 max-height 動畫（跟手），但**保留圓角過渡**——
-        // 展開(直角)↔預設(圓角)切換若無過渡會「閃一下」，故只讓 border-radius 平滑 0.15s。
+        // 確定要「動 sheet」：以此刻為新基準（rebase），之後 max-height 與手指 1:1、起步不跳＝同步滑動。
+        startY = y; startH = sheet.getBoundingClientRect().height; dy = 0;
+        // 只讓 border-radius 平滑（0.15s），max-height 不列進 transition＝即時跟手不延遲。
+        // **絕不碰 animation**：sheet 的 CSS `animation:slideUp` 只在開啟時播一次，
+        // 這裡若動它（設 none 再還原）會在放手時重播進場動畫＝「閃一下」＋整個被往上甩。
         sheet.style.transition = 'border-radius .15s ease';
-        sheet.style.animation = 'none';
       }
       if (mode !== 'sheet') return;
       if (e.cancelable) e.preventDefault();               // 【iOS 關鍵】非被動 + preventDefault 才動得了 sheet
-      var newH = startH - dy;                             // 從觸控起點連續計算，跟手不跳動
+      var newH = startH - dy;                             // 從 rebase 基準連續計算，1:1 跟手
       if (newH > maxFull) newH = maxFull;
       if (newH < 120) newH = 120;
       lastH = newH; moved = true;
@@ -94,8 +96,7 @@
       var wasSheet = dragging && mode === 'sheet' && moved;
       dragging = false; mode = '';
       if (!wasSheet) return;                              // 純捲動 / 點按 → 完全沒動過 sheet，不用還原
-      sheet.style.transition = '';                       // 回到 CSS（max-height 0.2s 做 snap）
-      sheet.style.animation = '';
+      sheet.style.transition = '';                       // 回到 CSS（max-height 0.2s 做 snap；不碰 animation＝不重播進場、不閃）
       var vh = window.innerHeight || 600;
       log('end lastH=' + Math.round(lastH) + ' vh=' + Math.round(vh));
       // 下拉到「低於半螢幕」→ 直接關閉（使用者：下拉超過螢幕一半就關）
