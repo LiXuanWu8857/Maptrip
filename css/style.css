@@ -399,6 +399,10 @@ html, body {
   width: 36px; height: 4px; background: rgba(0,0,0,0.12);
   border-radius: 2px; margin: 10px auto 0; flex-shrink: 0;
 }
+/* 拖曳抓取區（把手/標題列/其子元素）都 touch-action:none：iOS 才不會把垂直拖曳當捲動接走。
+   把手加大點擊/拖曳範圍（上下 padding），細細一條也好抓。 */
+.sheet-handle, .sheet-header, .sheet-header *, .cb-header, .cb-header * { touch-action: none; }
+.sheet-handle { padding: 8px 0; height: 20px; box-sizing: content-box; background-clip: content-box; }
 .sheet-header {
   display: flex; align-items: center; gap: 8px;
   padding: 12px 18px 10px; border-bottom: 1px solid rgba(0,0,0,0.06);
