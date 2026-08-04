@@ -386,7 +386,7 @@ html, body {
   animation: slideUp 0.25s ease;
   padding-bottom: env(safe-area-inset-bottom, 0);
   box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
-  transition: max-height 0.2s ease;
+  transition: max-height 0.2s ease, border-radius 0.2s ease;
 }
 /* 拖曳把手往上拉到底＝展開接近全螢幕（尊重動態島安全區）；圓角在全螢幕時收掉。
    通用 class：任何被 MaptripSheetDrag.wire 的底部 sheet 都適用（今日/歷史/收支/批次抽成…） */
@@ -400,9 +400,8 @@ html, body {
   border-radius: 2px; margin: 10px auto 0; flex-shrink: 0;
 }
 /* 拖曳抓取區（把手/標題列/其子元素）都 touch-action:none：iOS 才不會把垂直拖曳當捲動接走。
-   把手加大點擊/拖曳範圍（上下 padding），細細一條也好抓。 */
+   v284 起整張 sheet 都能起手拖曳，把手不必再放大點擊區 → 維持原本細細一條（v285 改回）。 */
 .sheet-handle, .sheet-header, .sheet-header *, .cb-header, .cb-header * { touch-action: none; }
-.sheet-handle { padding: 8px 0; height: 20px; box-sizing: content-box; background-clip: content-box; }
 .sheet-header {
   display: flex; align-items: center; gap: 8px;
   padding: 12px 18px 10px; border-bottom: 1px solid rgba(0,0,0,0.06);
@@ -426,7 +425,7 @@ html, body {
 #commission-sheet {
   position: fixed; bottom: 0; left: 0; right: 0; max-height: 82vh; background: #fff;
   border-radius: 20px 20px 0 0; border-top: 1px solid rgba(0,0,0,0.08); z-index: 41;
-  display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.25s ease, max-height 0.2s ease;
+  display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.25s ease, max-height 0.2s ease, border-radius 0.2s ease;
   padding-bottom: env(safe-area-inset-bottom, 0); box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
 }
 #commission-sheet.show { transform: translateY(0); }

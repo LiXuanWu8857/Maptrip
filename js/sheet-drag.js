@@ -60,21 +60,25 @@
       lastH = startH; moved = false; dragging = true; mode = '';
       maxFull = fullMax();
       scrollEl = scrollableFrom(e.target);
-      sheet.style.transition = 'none';
-      sheet.style.animation = 'none';
+      // 注意：這裡**不**碰 transition/animation/class——純捲動手勢要完全不動 sheet（否則會閃/抖）。
     }
 
     function onMove(e) {
       if (!dragging) return;
       var y = yOf(e), dy = y - startY;                    // dy<0 往上、dy>0 往下
       if (!mode) {
-        if (Math.abs(dy) < 4) return;                     // 等有明顯方向再決定（避免誤判）
+        if (Math.abs(dy) < 6) return;                     // 等有明顯方向再決定（避免誤判 / 微抖）
         var up = dy < 0;
         var atTop = !scrollEl || scrollEl.scrollTop <= 0;
-        if (up) mode = isExpanded() ? 'scroll' : 'sheet';       // 未展開往上→展開；已展開往上→內容捲動
+        // 已展開（在最頂端）往上滑：一律交給內容原生捲動，絕不再動 sheet（使用者：頂端別再偵測上滑）
+        if (up) mode = isExpanded() ? 'scroll' : 'sheet';
         else    mode = atTop ? 'sheet' : 'scroll';              // 內容在頂端往下→收折；否則先原生捲回頂端
         log('mode=' + mode + ' up=' + up + ' atTop=' + atTop + ' exp=' + isExpanded());
-        if (mode === 'scroll') { dragging = false; return; }    // 交給原生捲動，這段手勢不再攔
+        if (mode === 'scroll') { dragging = false; return; }    // 交給原生捲動，這段手勢完全不碰 sheet
+        // 這時才確定要「動 sheet」：關掉 max-height 動畫（跟手），但**保留圓角過渡**——
+        // 展開(直角)↔預設(圓角)切換若無過渡會「閃一下」，故只讓 border-radius 平滑 0.15s。
+        sheet.style.transition = 'border-radius .15s ease';
+        sheet.style.animation = 'none';
       }
       if (mode !== 'sheet') return;
       if (e.cancelable) e.preventDefault();               // 【iOS 關鍵】非被動 + preventDefault 才動得了 sheet
@@ -89,12 +93,13 @@
     function onEnd() {
       var wasSheet = dragging && mode === 'sheet' && moved;
       dragging = false; mode = '';
-      sheet.style.transition = '';
+      if (!wasSheet) return;                              // 純捲動 / 點按 → 完全沒動過 sheet，不用還原
+      sheet.style.transition = '';                       // 回到 CSS（max-height 0.2s 做 snap）
       sheet.style.animation = '';
-      if (!wasSheet) return;                              // 交給原生捲動 / 純點按 → 不動 sheet（不誤收展開態）
-      log('end lastH=' + Math.round(lastH) + ' max=' + Math.round(maxFull));
-      // 太矮 → 關；夠高（>72% 全高）→ 展開全螢幕；其餘 → 回預設
-      if (lastH < 160) { reset(); if (closeFn) closeFn(); return; }
+      var vh = window.innerHeight || 600;
+      log('end lastH=' + Math.round(lastH) + ' vh=' + Math.round(vh));
+      // 下拉到「低於半螢幕」→ 直接關閉（使用者：下拉超過螢幕一半就關）
+      if (lastH < 0.5 * vh) { reset(); if (closeFn) closeFn(); return; }
       if (lastH > 0.72 * maxFull) { sheet.style.maxHeight = ''; sheet.classList.add('sheet-expanded'); }
       else { reset(); }
     }

@@ -306,7 +306,7 @@
     s.textContent =
       '#finance-sheet{position:fixed;bottom:0;left:0;right:0;max-height:82vh;background:#fff;' +
       'border-radius:20px 20px 0 0;border-top:1px solid rgba(0,0,0,0.08);z-index:31;display:none;' +
-      'flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,0.1);padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .25s ease;transition:max-height .2s ease}' +
+      'flex-direction:column;box-shadow:0 -4px 24px rgba(0,0,0,0.1);padding-bottom:env(safe-area-inset-bottom,0);animation:slideUp .25s ease;transition:max-height .2s ease,border-radius .2s ease}' +
       '#finance-sheet.show{display:flex}' +
       '.fin-mbar{display:flex;align-items:center;justify-content:center;gap:18px;padding:4px 0 8px}' +
       '.fin-mbar button{background:none;border:none;font-size:1.4rem;color:#1a73e8;cursor:pointer;padding:0 6px;line-height:1}' +
