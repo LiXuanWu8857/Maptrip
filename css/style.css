@@ -1118,3 +1118,50 @@ html, body {
   .sync-close { background: #2d2d2d; color: #9aa0a6; }
   .sync-input { background: #2a2a2a; color: #e8eaed; border-color: rgba(255,255,255,0.15); }
 }
+
+/* 🚆 火車到站提醒彈出視窗（頂部置中，醒目） */
+#train-alert {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  left: 12px; right: 12px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 6px 28px rgba(0,0,0,0.25);
+  border: 1.5px solid #e8710a;
+  z-index: 60;
+  padding: 12px 14px;
+  animation: ta-drop 0.28s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes ta-drop { from { transform: translateY(-16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.ta-head { display: flex; align-items: center; justify-content: space-between; }
+.ta-title { font-size: 1rem; font-weight: 800; color: #c5221f; }
+.ta-close { border: none; background: transparent; font-size: 1.05rem; color: #5f6368; cursor: pointer; padding: 2px 6px; line-height: 1; }
+.ta-sta { font-size: 0.76rem; color: #5f6368; margin: 2px 0 8px; }
+.ta-list { display: flex; flex-direction: column; gap: 4px; }
+.ta-row { display: flex; align-items: baseline; gap: 8px; font-size: 0.82rem; }
+.ta-when { flex: 0 0 auto; font-weight: 700; color: #e8710a; min-width: 72px; }
+.ta-train { flex: 0 0 auto; color: #202124; font-weight: 600; }
+.ta-dest { flex: 1 1 auto; color: #5f6368; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ta-time { flex: 0 0 auto; color: #1a73e8; font-weight: 700; }
+
+/* 火車提醒設定面板 */
+#train-set { position: fixed; inset: 0; z-index: 61; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); }
+.ts-card { width: min(340px, 88vw); background: #fff; border-radius: 16px; padding: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+.ts-head { display: flex; align-items: center; justify-content: space-between; font-size: 1rem; font-weight: 800; color: #202124; margin-bottom: 12px; }
+.ts-mode { display: flex; gap: 6px; margin-bottom: 10px; }
+.ts-mbtn { flex: 1; padding: 9px 0; border: 1px solid rgba(0,0,0,0.15); background: #f1f3f4; color: #5f6368; border-radius: 9px; font-family: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; }
+.ts-mbtn.on { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+.ts-hint { font-size: 0.74rem; color: #5f6368; line-height: 1.6; margin-bottom: 10px; }
+.ts-in { width: 100%; padding: 10px 12px; margin-bottom: 8px; border: 1px solid rgba(0,0,0,0.15); border-radius: 9px; font-size: 0.86rem; font-family: inherit; }
+.ts-save { width: 100%; padding: 11px; background: #e8710a; color: #fff; border: none; border-radius: 10px; font-size: 0.9rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+
+@media (prefers-color-scheme: dark) {
+  #train-alert { background: #1f1f1f; border-color: #e8710a; box-shadow: 0 6px 28px rgba(0,0,0,0.55); }
+  .ta-title { color: #ff8a80; }
+  .ta-train { color: #e8eaed; }
+  .ta-close { color: #9aa0a6; }
+  .ts-card { background: #1f1f1f; }
+  .ts-head { color: #e8eaed; }
+  .ts-mbtn { background: #2a2a2a; color: #9aa0a6; border-color: rgba(255,255,255,0.15); }
+  .ts-in { background: #2a2a2a; color: #e8eaed; border-color: rgba(255,255,255,0.15); }
+}
