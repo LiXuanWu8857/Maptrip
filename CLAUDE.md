@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.283**（2026-08-04）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.284**（2026-08-04）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -236,6 +236,13 @@
   不需 pointer capture。桌面（滑鼠）才走 Pointer Events。另接黑盒子 `__mtLog`（sheetdrag:start/firstmove/end），
   真機再失敗可用數據判讀。`.cb-header`（批次抽成）也納入拖曳把手。測試 `sheetdrag.js` 拆兩 context（桌面
   pointer + 觸控 touch，觸控段驗 `touchmove.defaultPrevented===true`＝passive:false 真的生效）共 21 項全過零 pageerror。
+  **v284 內容連動展開/收折（巢狀捲動，iOS 地圖式）**：v283 拖得動後，使用者要「滑動內容時 sheet 也一起
+  往上滑（展開）、捲到內容頂端再往下滑才收折」。`sheet-drag.js` 觸控事件改綁**整張 sheet**（把手/標題/內容都能起手），
+  每次觸控由**第一個明顯方向 + 內容 scrollTop** 決定這段是「動 sheet」還是「原生捲動」：往上滑未展開→展開、
+  已展開→內容捲動；往下滑內容在頂端→收折/關閉、不在頂端→先原生捲回頂端（＝「回到頂端才收折」）。`scrollableFrom`
+  往上找可捲容器、`isExpanded` 判態；**移除 onEnd 的「點一下就 reset」**（否則捲動手勢 moved=false 會誤收展開態，血淚）。
+  桌面（滑鼠）仍只綁把手/標題列走 Pointer Events。收支/批次抽成 sheet 同步受惠。測試 `sheetdrag.js` 觸控段擴為 6 情境
+  （內容上滑展開/已展開上滑交給捲動/未到頂下滑不收/到頂下滑收回/預設到頂大力下滑關閉/把手回歸）共 26 項全過零 pageerror。
   **v266：記帳者讀不到司機資料**——renderDriver 改顯示真正的 Firestore 錯誤碼（permission-denied 等）＋
   指出兩大主因（①司機沒開一次 App 完成授權；②規則沒部署）。**幾乎確定是 Firestore 規則未部署/未允許
   記帳者讀取**（程式鏈已驗證正確）。連 processInviteClaims 的 invites 查詢、readDriverData 的 days 讀取
