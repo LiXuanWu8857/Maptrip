@@ -1022,6 +1022,12 @@ html, body {
   width: 100%; border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6);
 }
+#shot-other-wrap {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  color: #e8eaed; font-size: 0.9rem; cursor: pointer; user-select: none;
+  margin-top: -4px;
+}
+#shot-other-wrap input { width: 18px; height: 18px; accent-color: #1a73e8; cursor: pointer; }
 #screenshot-actions {
   display: flex; gap: 10px; width: 100%;
   padding-bottom: env(safe-area-inset-bottom, 0px);

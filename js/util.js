@@ -92,7 +92,14 @@
   }
   function workMs(trips, restMin) {
     if (!trips || !trips.length) return 0;
-    const span = trips[trips.length - 1].endTime - trips[0].startTime;
+    // 排除「其他」付款（自用/非載客）與沒有完整起訖時間的趟（如手動補登）：不列入工作時間。
+    const t = [];
+    for (let i = 0; i < trips.length; i++) {
+      const x = trips[i];
+      if (x && x.paymentMethod !== 'other' && x.startTime && x.endTime) t.push(x);
+    }
+    if (!t.length) return 0;
+    const span = t[t.length - 1].endTime - t[0].startTime;
     return Math.max(0, span - (restMin || 0) * 60000);
   }
 

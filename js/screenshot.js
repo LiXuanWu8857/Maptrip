@@ -10,6 +10,7 @@
 
   // todayTrips 是 app.js 模組私有 let，跨檔看不到 → 由 init 注入存取器
   var ctx = { todayTrips: function () { return []; } };
+  var _shotDayKey = null;   // 目前預覽的日截圖是哪一天（勾選「其他」重畫用；今日＝undefined）
   function init(o) { if (o && typeof o.todayTrips === 'function') ctx.todayTrips = o.todayTrips; }
 
 function _latlngToWorldPx(lat, lng, z) {
@@ -36,13 +37,15 @@ async function captureTripsScreenshot(dayKey, includeOther) {
     dateLabel = dayKeyToLabel(todayKey());
   }
   if (!trips.length) { toast('無行程可截圖'); return; }
-  // 若當天有「其他」行程，第一次先問要不要包含（不影響已存的資料，只影響這張截圖）
+  // 「其他」行程（自用/非載客）預設不放進截圖；預覽上有勾選框可加回（v290）。
   const hasOther = trips.some(t => t.paymentMethod === 'other');
-  if (hasOther && includeOther === undefined) {
-    includeOther = confirm('截圖要包含「其他」行程嗎？\n（確定＝包含、取消＝排除）');
+  if (includeOther === undefined) includeOther = false;      // 預設：不含「其他」
+  _shotDayKey = dayKey;                                      // 記住這張是哪天（勾選框重畫用；今日＝undefined）
+  if (includeOther === false) {
+    const only = trips.filter(t => t.paymentMethod !== 'other');
+    if (only.length) trips = only; else includeOther = true; // 整天都是「其他」→ 無法排除，只好包含
   }
-  if (includeOther === false) trips = trips.filter(t => t.paymentMethod !== 'other');
-  if (!trips.length) { toast('排除「其他」後無行程可截圖'); return; }
+  if (!trips.length) { toast('無行程可截圖'); return; }
 
   const W = 390, H = 485;
   const canvas = document.createElement('canvas');
@@ -169,9 +172,24 @@ async function captureTripsScreenshot(dayKey, includeOther) {
       const url = URL.createObjectURL(blob);
       document.getElementById('screenshot-img').src = url;
       document.getElementById('screenshot-preview').style.display = 'flex';
+      _showOtherToggle(hasOther, includeOther);    // 有「其他」才顯示勾選框
       resolve();
     }, 'image/png');
   });
+}
+
+// 預覽上的「包含『其他』紀錄」勾選框：僅日截圖且當天有「其他」時顯示；勾選/取消即重畫該張截圖。
+function _showOtherToggle(hasOther, includeOther) {
+  var wrap = document.getElementById('shot-other-wrap');
+  var cb = document.getElementById('shot-other-cb');
+  if (!wrap || !cb) return;
+  if (!hasOther) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  cb.checked = !!includeOther;
+  if (!cb._bound) {
+    cb._bound = true;
+    cb.addEventListener('change', function () { captureTripsScreenshot(_shotDayKey, cb.checked); });
+  }
 }
 
 // 單趟截圖
@@ -297,6 +315,7 @@ async function captureSingleTripScreenshot(trip) {
       const url = URL.createObjectURL(blob);
       document.getElementById('screenshot-img').src = url;
       document.getElementById('screenshot-preview').style.display = 'flex';
+      _showOtherToggle(false);    // 單趟截圖不適用「其他」勾選框
       resolve();
     }, 'image/png');
   });

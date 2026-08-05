@@ -328,6 +328,9 @@
       '.fin-catcell .ic{font-size:1.1rem}.fin-catcell .nm{flex:1;font-size:.82rem;color:#3c4043}.fin-catcell .am{font-weight:700;font-size:.9rem;color:#202124}' +
       '.fin-add-btn{width:100%;margin-top:10px;background:rgba(26,115,232,.08);color:#1a73e8;border:1px solid rgba(26,115,232,.25);' +
       'border-radius:12px;padding:12px;font-size:.9rem;font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.fin-pull-btn{width:100%;margin-top:10px;background:rgba(245,124,0,.08);color:#e8710a;border:1px solid rgba(245,124,0,.28);' +
+      'border-radius:12px;padding:11px;font-size:.86rem;font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.fin-pull-btn:active{opacity:.8}' +
       '.fin-explist{margin-top:6px}' +
       '.fin-exprow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid rgba(0,0,0,.05)}' +
       '.fin-exprow .ic{font-size:1.15rem}.fin-exprow .mid{flex:1;min-width:0}' +
@@ -495,6 +498,9 @@
       '<div class="fin-card"><div class="lbl">抽成/叫車</div><div class="val exp">' + nf(deduct) + '</div></div>' +
       '<div class="fin-card"><div class="lbl">支出</div><div class="val exp">' + nf(exp.total) + '</div></div></div>';
 
+    // 更新記帳者抽成：主動抓一次雲端抽成套進本機（記帳者填的抽成 → 這裡才看得到）
+    h += '<button class="fin-pull-btn" onclick="MaptripFinance.pullComm()">↻ 更新記帳者填的抽成</button>';
+
     h += '<div class="fin-sec">支出分類</div><div class="fin-catgrid">';
     CATS.forEach(function (c) {
       var amt = exp.byCat[c.k] || 0;
@@ -657,6 +663,18 @@
     _addOpen = false; render();
   }
   function tab(v) { _view = v; _addOpen = false; render(); }
+  // 主動抓一次記帳者填的抽成（雲端 commissions），套進本機各趟後重畫報表。
+  function pullComm() {
+    if (!(window.MaptripSync && MaptripSync.pullCommissions)) { if (window.toast) toast('雲端未啟用'); return; }
+    if (!MaptripSync.myUid || !MaptripSync.myUid()) { if (window.toast) toast('請先登入雲端同步'); return; }
+    if (window.toast) toast('更新中…');
+    MaptripSync.pullCommissions().then(function (n) {
+      render();
+      if (window.toast) toast(n > 0 ? ('已更新 ' + n + ' 筆抽成') : '沒有新的抽成');
+    }).catch(function (e) {
+      if (window.toast) toast('更新失敗：' + ((e && e.code) || (e && e.message) || '未知'));
+    });
+  }
   function toggleAdd(on) { _addOpen = on; render(); if (on) setTimeout(function () { var el = document.getElementById('fin-amt'); if (el) el.focus(); }, 60); }
   function pickCat(k) { _formCat = k; render(); }
   function saveAdd() {
@@ -693,6 +711,7 @@
     CATS: CATS, CAT_MAP: CAT_MAP,   // 供 bookkeeper.js 沿用同一套支出分類（單一來源）
     monthReport: monthReport,       // 單一算錢來源：記帳者月報表與 finance 共用
     _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName,
+    pullComm: pullComm,                // 收支頁「更新記帳者抽成」鈕
     _bindChartTips: bindChartTips };   // 供測試：長條圖長按看金額
   window.openFinance = open;
   window.closeFinance = close;

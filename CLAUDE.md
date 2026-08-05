@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.290**（2026-08-05）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.291**（2026-08-05）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -96,6 +96,17 @@
     加 `data-tip="時段/星期　NT$ 金額　N 趟"`，**長按 220ms** 顯示深色金額氣泡（`#fin-tip` 掛 document.body、
     position:fixed 不被 overflow 裁切）、放開隱藏；長按前明顯移動>10px＝在捲動→取消（不誤觸）。標題加「長按看金額」提示。
     純 UI，`_bindChartTips` 供測試（`fintip.js` 10 項全過零 pageerror）
+  - **v291 司機主動更新記帳者抽成**：司機看不到記帳者填的抽成（平常靠 onSnapshot 即時同步，但要開著 App 才收到）。
+    收支頁加「↻ 更新記帳者填的抽成」鈕 `MaptripFinance.pullComm` → `sync.js` `pullCommissions`（一次性 get 自己的
+    `commissions` 集合、逐筆 `applyCommission` 套進本機各趟 `t.commission/t.dispatch`、回傳套用筆數）→ render + toast。
+    保護路徑：無雲端/未登入各自 toast 不丟例外。測試 `misc290.js`
+- **工作時間排除「其他」（v291）** `util.js workMs`：工時＝首趟起→末趟訖，之前「其他」（自用/非載客）若是當天
+  第一或最後一趟會**灌水工時**。改成先濾掉 `paymentMethod==='other'` 與無 `startTime/endTime` 的趟（手動補登）再算
+  span。影響 finance 每小時淨收入、bookkeeper 工時。測試 `worktime.js` 9 項全過
+- **截圖「其他」勾選框（v291）** `screenshot.js`：日截圖原本用 `confirm()` 問要不要含「其他」。改成**預設不含**、
+  預覽上加勾選框 `#shot-other-cb`「包含『其他』紀錄」（`_showOtherToggle` 依當天有無「其他」顯示/隱藏；勾選即
+  `captureTripsScreenshot(_shotDayKey, checked)` 重畫）。整天都是「其他」→ 無法排除則自動包含。單趟截圖不顯示此框。
+  測試 `misc290.js`（勾選框存在/預設隱藏/文案）
 - **上車熱點 × 時段（v248，在「分析」分頁）** `js/finance.js`：把每趟 `coords[0]`
   上車點聚成 300m 網格，跨全部歷史（不受月份篩選，因熱點需要量）＋一天切 8 段
   （清晨/早尖峰/上午/中午/下午/晚尖峰/晚間/深夜，深夜跨午夜）。呈現「各時段最熱上車點」

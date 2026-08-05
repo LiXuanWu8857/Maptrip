@@ -254,6 +254,18 @@
     await db.collection('users').doc(driverUid).collection('commissions').doc(String(tripId))
       .set({ commission: commission || 0, dispatch: dispatch || 0, updatedAt: Date.now(), by: user.uid }, { merge: true });
   }
+  // 司機本人：主動抓一次自己的抽成集合（記帳者填的），套進本機各趟 t.commission/t.dispatch。
+  // 平常有 onSnapshot 即時同步，這支供「收支」手動更新鈕：登入即抓、不必等監聽。回傳套用筆數。
+  async function pullCommissions() {
+    if (!ready || !user) throw new Error('尚未登入');
+    var snap = await db.collection('users').doc(user.uid).collection('commissions').get();
+    var applied = 0;
+    snap.forEach(function (doc) {
+      var c = doc.data() || {};
+      if (window.applyCommission && window.applyCommission(doc.id, c.commission || 0, c.dispatch || 0)) applied++;
+    });
+    return applied;
+  }
 
   // ── 支出（expenses）：司機本人或記帳者皆可讀寫某司機的支出集合 ──
   // 文件 id 用 <寫入者uid>_<ts>，避免司機/記帳者同毫秒雙寫撞號。
@@ -564,7 +576,7 @@
     createInvite: createInvite, redeemInvite: redeemInvite, processInviteClaims: processInviteClaims,
     listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,
     listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
-    readDriverData: readDriverData, writeCommission: writeCommission,
+    readDriverData: readDriverData, writeCommission: writeCommission, pullCommissions: pullCommissions,
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
     resetLocal: resetLocal,
