@@ -18,7 +18,10 @@
   var RADIUS = 2000;        // 靠近門檻（公尺）
   var WINDOW_MIN = 10;      // 顯示前後幾分鐘
   var TOK_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
-  var API = 'https://tdx.transportdata.tw/api/basic';   // 版本＋路徑由呼叫端帶（v3 為主、v2 後備）
+  var API = 'https://tdx.transportdata.tw/api/basic';   // 直連 TDX（進階：使用者自填金鑰時）
+  // 共用代理（Cloudflare Worker）：金鑰藏在伺服器＋邊快取，全體使用者免設定、免自己申請金鑰。
+  // 路徑結構與 TDX 相同（/v3/Rail/TRA/...），Worker 內帶 token 轉發。
+  var PROXY = 'https://maptrip-tdx.tumblestudio.workers.dev';
   var TAIPEI = '1000';        // 台北車站 StationID（測試查詢用）
   function diag(m) { if (window.__mtLog) try { window.__mtLog('train:' + m); } catch (_) {} }
   var STA_TTL = 30 * 86400000;   // 站點清單快取 30 天
@@ -32,8 +35,14 @@
 
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
   function say(m) { if (window.toast) window.toast(m); }
-  function mode() { return localStorage.getItem('maptrip_train_mode') || 'off'; }
+  function mode() {
+    var m = localStorage.getItem('maptrip_train_mode');
+    if (m) return m;
+    return PROXY ? 'live' : 'off';   // 有內建共用代理→預設開啟給所有人（使用者仍可到設定關閉）
+  }
   function creds() { try { return JSON.parse(localStorage.getItem('maptrip_tdx') || 'null'); } catch (_) { return null; } }
+  // 沒填自己金鑰就走共用代理（Worker 帶 token）；填了自己的金鑰則直連 TDX。
+  function useProxy() { var c = creds(); return !!PROXY && !(c && c.id && c.secret); }
   function H(a, b) {
     if (window.haversine) return window.haversine(a, b);
     var R = 6371000, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180;
@@ -67,7 +76,7 @@
     var w = windowMin || WINDOW_MIN;
     return (arrivals || []).map(function (a) {
       var arrMs = parseHM(a.arr, now), mins = minsUntil(arrMs, now);
-      return { arr: a.arr, trainNo: a.trainNo, type: a.type, dest: a.dest, mins: mins, phase: phaseOf(mins) };
+      return { arr: a.arr, trainNo: a.trainNo, type: a.type, dest: a.dest, delay: a.delay || 0, mins: mins, phase: phaseOf(mins) };
     }).filter(function (a) { return !isNaN(a.mins) && a.mins <= w && a.mins >= -w; })
       .sort(function (a, b) { return a.mins - b.mins; });
   }
@@ -95,14 +104,17 @@
         return tok;
       });
   }
+  function handleResp(r) {
+    if (r.status === 429) { cooldownUntil = Date.now() + 120000; throw new Error('api 429'); }  // 限流→退避 2 分鐘
+    if (!r.ok) throw new Error('api ' + r.status);
+    return r.json();
+  }
   function apiGet(path) {
-    return getToken().then(function (tok) {
-      return fetch(API + path, { headers: { authorization: 'Bearer ' + tok, accept: 'application/json' } })
-        .then(function (r) {
-          if (r.status === 429) { cooldownUntil = Date.now() + 120000; throw new Error('api 429'); }  // 限流→退避 2 分鐘
-          if (!r.ok) throw new Error('api ' + r.status);
-          return r.json();
-        });
+    if (useProxy()) {   // 走共用代理：Worker 已帶金鑰，前端不需 token
+      return fetch(PROXY + path, { headers: { accept: 'application/json' } }).then(handleResp);
+    }
+    return getToken().then(function (tok) {   // 進階：使用者自填金鑰，直連 TDX
+      return fetch(API + path, { headers: { authorization: 'Bearer ' + tok, accept: 'application/json' } }).then(handleResp);
     });
   }
 
@@ -178,8 +190,10 @@
         var arr = rows.map(function (r) {
           var dn = r.EndingStationName && (r.EndingStationName.Zh_tw || r.EndingStationName);
           var ty = r.TrainTypeName && (r.TrainTypeName.Zh_tw || r.TrainTypeName);
+          // 台鐵即時看板欄位為 ScheduleArrivalTime（無 d）；相容有 d 的寫法
           return { trainNo: r.TrainNo, type: (ty || '') + '', dest: (dn || '') + '',
-            arr: r.ScheduledArrivalTime || r.ScheduledDepartureTime };
+            arr: r.ScheduleArrivalTime || r.ScheduledArrivalTime || r.ScheduleDepartureTime || r.ScheduledDepartureTime,
+            delay: +r.DelayTime || 0 };
         });
         diag('liveboard ' + sid + ' n=' + arr.length);
         return arr;
@@ -197,7 +211,7 @@
         var dn = tt.EndingStationName && (tt.EndingStationName.Zh_tw || tt.EndingStationName);
         var ty = tt.TrainTypeName && (tt.TrainTypeName.Zh_tw || tt.TrainTypeName);
         arrivals.push({ trainNo: tt.TrainNo, type: (ty || '') + '', dest: (dn || gDest || '') + '',
-          arr: tt.ArrivalTime || tt.ScheduledArrivalTime || tt.DepartureTime });
+          arr: tt.ArrivalTime || tt.ScheduleArrivalTime || tt.ScheduledArrivalTime || tt.DepartureTime });
       });
     });
     return arrivals;
@@ -219,10 +233,11 @@
     var el = ensurePopup();
     var rows = trains.slice(0, 4).map(function (t) {
       var when = t.mins > 0 ? ('約 ' + t.mins + ' 分後') : (t.mins === 0 ? '進站中' : (-t.mins) + ' 分前抵達');
+      var late = t.delay > 0 ? '<span class="ta-late">誤點 ' + t.delay + ' 分</span>' : '';
       return '<div class="ta-row"><span class="ta-when">' + when + '</span>' +
         '<span class="ta-train">' + (t.type || '') + ' ' + (t.trainNo || '') + '</span>' +
         '<span class="ta-dest">往 ' + (t.dest || '—') + '</span>' +
-        '<span class="ta-time">' + (t.arr || '') + '</span></div>';
+        '<span class="ta-time">' + (t.arr || '') + late + '</span></div>';
     }).join('');
     el.innerHTML = '<div class="ta-head"><span class="ta-title">' + title + '</span>' +
       '<button class="ta-close" onclick="MaptripTrain.dismiss()">✕</button></div>' +
@@ -290,33 +305,36 @@
         '<button class="ts-mbtn ' + (md === 'demo' ? 'on' : '') + '" onclick="MaptripTrain.setMode(\'demo\')">示範</button>' +
         '<button class="ts-mbtn ' + (md === 'live' ? 'on' : '') + '" onclick="MaptripTrain.setMode(\'live\')">真實資料</button>' +
       '</div>' +
-      '<div class="ts-hint">靠近火車站 2km 時，跳出前後 10 分鐘的預定到站列車。<br>' +
-      '「真實資料」需 <b>TDX 免費金鑰</b>（tdx.transportdata.tw 註冊 → 會員中心取得 Client Id / Secret）。</div>' +
+      '<div class="ts-hint">靠近火車站 2km 時，跳出前後 10 分鐘的到站列車（含誤點）。<br>' +
+      '已內建共用資料，<b>直接就能用、免自己申請金鑰</b>。進階者可填自己的 TDX 金鑰（選填）。</div>' +
+      '<details class="ts-adv"><summary>進階：使用自己的 TDX 金鑰</summary>' +
       '<input id="ts-id" class="ts-in" placeholder="TDX Client Id" value="' + (c.id || '') + '">' +
       '<input id="ts-secret" class="ts-in" placeholder="TDX Client Secret" value="' + (c.secret || '') + '">' +
-      '<button class="ts-save" onclick="MaptripTrain.saveCreds()">儲存金鑰並啟用</button>' +
+      '<button class="ts-save" onclick="MaptripTrain.saveCreds()">儲存金鑰並啟用</button></details>' +
       '<button class="ts-test" onclick="MaptripTrain.test()">🔎 測試查詢（台北車站）</button></div>';
     el.style.display = 'flex';
   }
   // 一鍵驗證：直接查台北車站，確認金鑰有效＋串接正確（不必真的開到車站旁）
   function test() {
-    var c = creds();
-    if (!c || !c.id || !c.secret) { say('請先輸入並儲存 TDX 金鑰'); return; }
+    if (!useProxy()) {   // 沒代理才要求自填金鑰
+      var c = creds();
+      if (!c || !c.id || !c.secret) { say('請先輸入並儲存 TDX 金鑰'); return; }
+    }
     if (testing) return;                                                    // 防重複點擊狂打
     if (Date.now() < cooldownUntil) { say('剛剛查太多次被限流，請等 1-2 分鐘再試'); return; }
     testing = true;
     say('測試查詢台北車站中…');
     delete timetables[TAIPEI];   // 不吃快取
     fetchArrivals(TAIPEI).then(function (arrivals) {
-      if (!arrivals || !arrivals.length) { say('金鑰可用，但目前沒有班次（可能末班車後，已記黑盒子）'); return; }
+      if (!arrivals || !arrivals.length) { say('連線正常，但目前沒有班次（可能末班車後，已記黑盒子）'); return; }
       var now = Date.now();
       var next = arrivals.map(function (x) {
-        return { arr: x.arr, trainNo: x.trainNo, type: x.type, dest: x.dest, mins: minsUntil(parseHM(x.arr, now), now) };
+        return { arr: x.arr, trainNo: x.trainNo, type: x.type, dest: x.dest, delay: x.delay || 0, mins: minsUntil(parseHM(x.arr, now), now) };
       }).filter(function (x) { return !isNaN(x.mins) && x.mins >= -5; })
         .sort(function (a, b) { return a.mins - b.mins; });
-      if (!next.length) next = arrivals.slice(0, 4).map(function (x) { return { arr: x.arr, trainNo: x.trainNo, type: x.type, dest: x.dest, mins: 999 }; });
-      showPopup('✅ 金鑰有效（台北車站）', next, '台北車站（測試）');
-      say('成功！共 ' + arrivals.length + ' 班，金鑰與串接正常');
+      if (!next.length) next = arrivals.slice(0, 4).map(function (x) { return { arr: x.arr, trainNo: x.trainNo, type: x.type, dest: x.dest, delay: x.delay || 0, mins: 999 }; });
+      showPopup('✅ 連線成功（台北車站）', next, '台北車站（測試）');
+      say('成功！共 ' + arrivals.length + ' 班，串接正常');
     }).catch(function (e) {
       diag('test err ' + (e && e.message));
       var msg = /429/.test(e && e.message) ? '被限流，請等 1-2 分鐘再試' : (e && e.message || '未知');

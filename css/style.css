@@ -1149,6 +1149,9 @@ html, body {
 .ta-train { flex: 0 0 auto; color: #202124; font-weight: 600; }
 .ta-dest { flex: 1 1 auto; color: #5f6368; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ta-time { flex: 0 0 auto; color: #1a73e8; font-weight: 700; }
+.ta-late { color: #c5221f; font-weight: 700; margin-left: 6px; font-size: 0.78rem; }
+.ts-adv { margin: 2px 0 8px; }
+.ts-adv summary { font-size: 0.78rem; color: #1a73e8; cursor: pointer; padding: 4px 0; }
 
 /* 火車提醒設定面板 */
 #train-set { position: fixed; inset: 0; z-index: 61; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); }
