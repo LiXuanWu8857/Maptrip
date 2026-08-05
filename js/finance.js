@@ -354,6 +354,12 @@
       '.fin-bar .b.dim{background:#c6dafc}' +
       '.fin-bar .cap{font-size:.58rem;color:#9aa0a6;margin-top:3px;white-space:nowrap}' +
       '.fin-bars.wd .fin-bar .cap{font-size:.72rem}' +
+      '.fin-bar{cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+      '.fin-bar.press .b{background:#0b57c7}' +
+      '.fin-hint{font-weight:400;color:#9aa0a6;font-size:.68rem;margin-left:4px}' +
+      '#fin-tip{position:fixed;z-index:60;display:none;pointer-events:none;background:#202124;color:#fff;' +
+      'font-size:.8rem;font-weight:600;padding:6px 10px;border-radius:8px;white-space:nowrap;' +
+      'box-shadow:0 2px 10px rgba(0,0,0,.28);font-variant-numeric:tabular-nums}' +
       '.pk-note{font-weight:400;color:#9aa0a6;font-size:.72rem;margin-left:4px}' +
       '.pk-buckets{display:flex;flex-direction:column;gap:1px;background:#f1f3f4;border-radius:12px;overflow:hidden}' +
       '.pk-brow{display:flex;align-items:center;gap:10px;background:#fff;padding:9px 12px}' +
@@ -416,7 +422,62 @@
     document.getElementById('fin-tab-an').classList.toggle('active', _view === 'an');
     var body = document.getElementById('finance-body');
     body.innerHTML = _view === 'io' ? renderIO() : renderAnalytics();
-    if (_view === 'an') hydratePickupNames();
+    if (_view === 'an') { hydratePickupNames(); bindChartTips(); }
+  }
+
+  // 長按長條圖看金額（手機沒有 hover，title 看不到）：長按 220ms 顯示氣泡，放開隱藏。
+  // 事件委派綁在 #finance-body（跨 render 不變），氣泡掛 document.body（不被 overflow 裁切）。
+  function bindChartTips() {
+    var body = document.getElementById('finance-body');
+    if (!body || body._tipBound) return;
+    body._tipBound = true;
+
+    var tip = document.getElementById('fin-tip');
+    if (!tip) { tip = document.createElement('div'); tip.id = 'fin-tip'; tip.style.display = 'none'; document.body.appendChild(tip); }
+    var active = null, holdTimer = null, sx = 0, sy = 0, pressBar = null;
+
+    function show(bar) {
+      var txt = bar.getAttribute('data-tip'); if (!txt) return;
+      if (active) active.classList.remove('press');
+      active = bar; bar.classList.add('press');
+      tip.textContent = txt; tip.style.display = 'block';
+      var r = bar.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+      var left = r.left + r.width / 2 - tr.width / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+      var top = r.top - tr.height - 8;
+      if (top < 8) top = r.bottom + 8;           // 太靠頂就顯示在長條下方
+      tip.style.left = Math.round(left) + 'px';
+      tip.style.top = Math.round(top) + 'px';
+    }
+    function hide() {
+      clearTimeout(holdTimer); holdTimer = null; pressBar = null;
+      tip.style.display = 'none';
+      if (active) { active.classList.remove('press'); active = null; }
+    }
+
+    body.addEventListener('touchstart', function (e) {
+      var bar = e.target.closest && e.target.closest('.fin-bar');
+      if (!bar) return;
+      var t = e.touches[0]; sx = t.clientX; sy = t.clientY; pressBar = bar;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(function () { show(bar); }, 220);   // 220ms＝長按門檻（快速捲動不誤觸）
+    }, { passive: true });
+    body.addEventListener('touchmove', function (e) {
+      if (!pressBar || active) return;                           // 已顯示就維持；還沒顯示才判斷取消
+      var t = e.touches[0]; if (!t) return;
+      if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) {
+        clearTimeout(holdTimer); holdTimer = null; pressBar = null;   // 明顯移動＝在捲動/拖曳 → 取消長按
+      }
+    }, { passive: true });
+    body.addEventListener('touchend', hide);
+    body.addEventListener('touchcancel', hide);
+    body.addEventListener('scroll', hide, { passive: true });
+
+    // 桌面滑鼠：按住看、放開隱藏
+    body.addEventListener('mousedown', function (e) {
+      var bar = e.target.closest && e.target.closest('.fin-bar'); if (bar) show(bar);
+    });
+    window.addEventListener('mouseup', hide);
   }
 
   function renderIO() {
@@ -504,24 +565,26 @@
 
     if (!rev.trips) return h + '<div class="fin-empty">本月尚無載客紀錄可分析</div>';
 
-    // 每小時營收（24 條）
-    h += '<div class="fin-sec">各時段營收</div><div class="fin-chart"><div class="fin-bars">';
+    // 每小時營收（24 條）；長按看金額（data-tip）
+    h += '<div class="fin-sec">各時段營收 <span class="fin-hint">長按看金額</span></div><div class="fin-chart"><div class="fin-bars">';
     var maxH = Math.max.apply(null, a.byHour.map(function (x) { return x.fare; })) || 1;
     a.byHour.forEach(function (x, i) {
       var pct = Math.round(x.fare / maxH * 100);
       var cap = (i % 3 === 0) ? i : '';
-      h += '<div class="fin-bar" title="' + i + ':00　' + nf(x.fare) + '（' + x.n + '趟）">' +
+      var tip = i + ':00–' + (i + 1) + ':00　NT$ ' + nf(x.fare) + '　' + x.n + ' 趟';
+      h += '<div class="fin-bar" title="' + tip + '" data-tip="' + tip + '">' +
         '<div class="b' + (i === bestH ? '' : ' dim') + '" style="height:' + pct + '%"></div>' +
         '<div class="cap">' + cap + '</div></div>';
     });
     h += '</div></div>';
 
-    // 星期幾營收（7 條）
-    h += '<div class="fin-sec">各星期營收</div><div class="fin-chart"><div class="fin-bars wd">';
+    // 星期幾營收（7 條）；長按看金額
+    h += '<div class="fin-sec">各星期營收 <span class="fin-hint">長按看金額</span></div><div class="fin-chart"><div class="fin-bars wd">';
     var maxW = Math.max.apply(null, a.byDow.map(function (x) { return x.fare; })) || 1;
     a.byDow.forEach(function (x, i) {
       var pct = Math.round(x.fare / maxW * 100);
-      h += '<div class="fin-bar" title="' + WD[i] + '　' + nf(x.fare) + '（' + x.n + '趟）">' +
+      var tip = WD[i] + '　NT$ ' + nf(x.fare) + '　' + x.n + ' 趟';
+      h += '<div class="fin-bar" title="' + tip + '" data-tip="' + tip + '">' +
         '<div class="b" style="height:' + pct + '%"></div>' +
         '<div class="cap">' + WD[i].slice(1) + '</div></div>';
     });
@@ -629,7 +692,8 @@
     bindExpenseSync: bindExpenseSync, resetExpenseSync: resetExpenseSync,
     CATS: CATS, CAT_MAP: CAT_MAP,   // 供 bookkeeper.js 沿用同一套支出分類（單一來源）
     monthReport: monthReport,       // 單一算錢來源：記帳者月報表與 finance 共用
-    _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName };
+    _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName,
+    _bindChartTips: bindChartTips };   // 供測試：長條圖長按看金額
   window.openFinance = open;
   window.closeFinance = close;
 })();
