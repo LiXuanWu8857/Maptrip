@@ -25,8 +25,10 @@
   var TT_TTL  = 6 * 3600000;     // 時刻表快取 6 小時（當日靜態）
 
   var alerted = {};         // 已提醒過的 key（避免重複跳）
-  var timetables = {};      // stationId -> { at, arrivals }
+  var timetables = {};      // stationId -> { at, arrivals, neg? }
   var poller = null;
+  var cooldownUntil = 0;    // 被 TDX 限流（429）後的退避截止時間
+  var testing = false;      // 測試查詢進行中（防重複點擊狂打）
 
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
   function say(m) { if (window.toast) window.toast(m); }
@@ -96,7 +98,11 @@
   function apiGet(path) {
     return getToken().then(function (tok) {
       return fetch(API + path, { headers: { authorization: 'Bearer ' + tok, accept: 'application/json' } })
-        .then(function (r) { if (!r.ok) throw new Error('api ' + r.status); return r.json(); });
+        .then(function (r) {
+          if (r.status === 429) { cooldownUntil = Date.now() + 120000; throw new Error('api 429'); }  // 限流→退避 2 分鐘
+          if (!r.ok) throw new Error('api ' + r.status);
+          return r.json();
+        });
     });
   }
 
@@ -125,53 +131,76 @@
 
   // 某站當日時刻（正規化 + 快取）；demo 產生 now 附近假班次
   function loadTimetable(station) {
-    var sid = station.id;
-    var c = timetables[sid];
-    if (c && c.at > Date.now() - TT_TTL) return Promise.resolve(c.arrivals);
+    var sid = station.id, now = Date.now();
     if (mode() === 'demo') {
-      var now = Date.now();
       function hm(off) { var d = new Date(now + off * 60000); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
-      var arrivals = [
+      var demo = [
         { trainNo: '1234', type: '自強', dest: '高雄', arr: hm(2) },
         { trainNo: '2156', type: '區間', dest: '基隆', arr: hm(9) },
         { trainNo: '3088', type: '莒光', dest: '花蓮', arr: hm(-1) }
       ];
-      timetables[sid] = { at: now, arrivals: arrivals };
-      return Promise.resolve(arrivals);
+      timetables[sid] = { at: now, arrivals: demo };
+      return Promise.resolve(demo);
     }
-    // 先試 v3，抓不到（版本差異）再退 v2；都失敗記黑盒子方便除錯
-    return fetchTimetable('v3', sid).then(function (a) {
-      if (a && a.length) return a;
-      diag('tt v3 empty, try v2 ' + sid);
-      return fetchTimetable('v2', sid).catch(function () { return a || []; });
+    var c = timetables[sid];
+    // 正常快取 6 小時；失敗的負快取只擋 5 分鐘（避免輪詢狂打又不會卡太久）
+    if (c && ((c.neg && c.at > now - 300000) || (!c.neg && c.at > now - TT_TTL))) return Promise.resolve(c.arrivals);
+    if (now < cooldownUntil) return Promise.resolve((c && c.arrivals) || []);   // 限流退避中
+    return fetchArrivals(sid).then(function (a) {
+      timetables[sid] = { at: Date.now(), arrivals: a };
+      return a;
     }).catch(function (e) {
-      diag('tt v3 err ' + (e && e.message) + ', try v2');
-      return fetchTimetable('v2', sid);
-    }).then(function (arrivals) {
-      timetables[sid] = { at: Date.now(), arrivals: arrivals };
-      return arrivals;
+      diag('tt err ' + (e && e.message) + ' ' + sid);
+      timetables[sid] = { at: Date.now(), arrivals: [], neg: true };   // 負快取
+      return [];
     });
   }
-  // 抓某版本的每站當日時刻表並正規化；容錯多種 v3/v2 包裝與欄位名
-  function fetchTimetable(ver, sid) {
-    return apiGet('/' + ver + '/Rail/TRA/DailyStationTimetable/TodayStation/' + encodeURIComponent(sid) + '?%24format=JSON')
+  // 正確 v3 端點：每站當日時刻表；失敗（非 429）退即時到離站看板 StationLiveBoard。
+  function fetchArrivals(sid) {
+    return apiGet('/v3/Rail/TRA/DailyStationTimetable/Today/' + encodeURIComponent(sid) + '?%24format=JSON')
       .then(function (data) {
-        var groups = data.StationTimetables || data.TimeTables || data.TrainTimetables || data || [];
-        if (!Array.isArray(groups)) groups = [groups];
-        var arrivals = [];
-        groups.forEach(function (g) {
-          var tts = g.TimeTables || g.Timetables || (g.TrainNo ? [g] : []);
-          var gDest = g.EndingStationName && (g.EndingStationName.Zh_tw || g.EndingStationName);
-          tts.forEach(function (tt) {
-            var dn = tt.EndingStationName && (tt.EndingStationName.Zh_tw || tt.EndingStationName);
-            var ty = tt.TrainTypeName && (tt.TrainTypeName.Zh_tw || tt.TrainTypeName);
-            arrivals.push({ trainNo: tt.TrainNo, type: (ty || '') + '', dest: (dn || gDest || '') + '',
-              arr: tt.ArrivalTime || tt.ScheduledArrivalTime || tt.DepartureTime });
-          });
-        });
-        diag('tt ' + ver + ' ' + sid + ' keys=' + Object.keys(data || {}).join(',') + ' n=' + arrivals.length);
-        return arrivals;
+        var a = parseTimetable(data);
+        diag('tt today ' + sid + ' n=' + a.length);
+        if (a.length) return a;
+        return fetchLiveBoard(sid);   // 當日時刻空（末班後）→ 試即時看板
+      })
+      .catch(function (e) {
+        if (/429/.test(e && e.message)) throw e;   // 限流不再追打
+        diag('tt today err ' + (e && e.message) + ', try liveboard');
+        return fetchLiveBoard(sid);
       });
+  }
+  function fetchLiveBoard(sid) {
+    return apiGet('/v3/Rail/TRA/StationLiveBoard/Station/' + encodeURIComponent(sid) + '?%24format=JSON')
+      .then(function (data) {
+        var rows = data.StationLiveBoards || data.TrainLiveBoards || data || [];
+        if (!Array.isArray(rows)) rows = [rows];
+        var arr = rows.map(function (r) {
+          var dn = r.EndingStationName && (r.EndingStationName.Zh_tw || r.EndingStationName);
+          var ty = r.TrainTypeName && (r.TrainTypeName.Zh_tw || r.TrainTypeName);
+          return { trainNo: r.TrainNo, type: (ty || '') + '', dest: (dn || '') + '',
+            arr: r.ScheduledArrivalTime || r.ScheduledDepartureTime };
+        });
+        diag('liveboard ' + sid + ' n=' + arr.length);
+        return arr;
+      });
+  }
+  // 每站當日時刻表正規化；容錯多種 v3 包裝與欄位名
+  function parseTimetable(data) {
+    var groups = data.StationTimetables || data.TimeTables || data.TrainTimetables || data || [];
+    if (!Array.isArray(groups)) groups = [groups];
+    var arrivals = [];
+    groups.forEach(function (g) {
+      var tts = g.TimeTables || g.Timetables || (g.TrainNo ? [g] : []);
+      var gDest = g.EndingStationName && (g.EndingStationName.Zh_tw || g.EndingStationName);
+      tts.forEach(function (tt) {
+        var dn = tt.EndingStationName && (tt.EndingStationName.Zh_tw || tt.EndingStationName);
+        var ty = tt.TrainTypeName && (tt.TrainTypeName.Zh_tw || tt.TrainTypeName);
+        arrivals.push({ trainNo: tt.TrainNo, type: (ty || '') + '', dest: (dn || gDest || '') + '',
+          arr: tt.ArrivalTime || tt.ScheduledArrivalTime || tt.DepartureTime });
+      });
+    });
+    return arrivals;
   }
 
   // ---------- UI ----------
@@ -273,13 +302,13 @@
   function test() {
     var c = creds();
     if (!c || !c.id || !c.secret) { say('請先輸入並儲存 TDX 金鑰'); return; }
+    if (testing) return;                                                    // 防重複點擊狂打
+    if (Date.now() < cooldownUntil) { say('剛剛查太多次被限流，請等 1-2 分鐘再試'); return; }
+    testing = true;
     say('測試查詢台北車站中…');
-    timetables[TAIPEI] = null;   // 不吃快取
-    fetchTimetable('v3', TAIPEI).then(function (a) {
-      if (a && a.length) return a;
-      return fetchTimetable('v2', TAIPEI);
-    }).then(function (arrivals) {
-      if (!arrivals || !arrivals.length) { say('金鑰可用，但沒解析到班次（已記黑盒子，請截圖給我）'); return; }
+    delete timetables[TAIPEI];   // 不吃快取
+    fetchArrivals(TAIPEI).then(function (arrivals) {
+      if (!arrivals || !arrivals.length) { say('金鑰可用，但目前沒有班次（可能末班車後，已記黑盒子）'); return; }
       var now = Date.now();
       var next = arrivals.map(function (x) {
         return { arr: x.arr, trainNo: x.trainNo, type: x.type, dest: x.dest, mins: minsUntil(parseHM(x.arr, now), now) };
@@ -290,8 +319,9 @@
       say('成功！共 ' + arrivals.length + ' 班，金鑰與串接正常');
     }).catch(function (e) {
       diag('test err ' + (e && e.message));
-      say('失敗：' + (e && e.message || '未知') + '（可能金鑰錯或網路，已記黑盒子）');
-    });
+      var msg = /429/.test(e && e.message) ? '被限流，請等 1-2 分鐘再試' : (e && e.message || '未知');
+      say('失敗：' + msg + '（已記黑盒子）');
+    }).then(function () { testing = false; });
   }
   function closeSettings() { var el = document.getElementById('train-set'); if (el) el.style.display = 'none'; }
   function setMode(m) {
