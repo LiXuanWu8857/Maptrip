@@ -18,7 +18,9 @@
   var RADIUS = 2000;        // 靠近門檻（公尺）
   var WINDOW_MIN = 10;      // 顯示前後幾分鐘
   var TOK_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
-  var API = 'https://tdx.transportdata.tw/api/basic/v3/Rail/TRA';
+  var API = 'https://tdx.transportdata.tw/api/basic';   // 版本＋路徑由呼叫端帶（v3 為主、v2 後備）
+  var TAIPEI = '1000';        // 台北車站 StationID（測試查詢用）
+  function diag(m) { if (window.__mtLog) try { window.__mtLog('train:' + m); } catch (_) {} }
   var STA_TTL = 30 * 86400000;   // 站點清單快取 30 天
   var TT_TTL  = 6 * 3600000;     // 時刻表快取 6 小時（當日靜態）
 
@@ -107,8 +109,9 @@
     var cached = null;
     try { cached = JSON.parse(localStorage.getItem('maptrip_tra_stations') || 'null'); } catch (_) {}
     if (cached && cached.at > Date.now() - STA_TTL && cached.list) return Promise.resolve(cached.list);
-    return apiGet('/Station?%24format=JSON').then(function (data) {
+    return apiGet('/v3/Rail/TRA/Station?%24format=JSON').then(function (data) {
       var arr = data.Stations || data.stations || data || [];
+      diag('stations n=' + (arr && arr.length));
       var list = arr.map(function (s) {
         var p = s.StationPosition || {};
         var nm = s.StationName || {};
@@ -136,10 +139,25 @@
       timetables[sid] = { at: now, arrivals: arrivals };
       return Promise.resolve(arrivals);
     }
-    var date = new Date().toISOString().slice(0, 10);
-    return apiGet('/DailyStationTimetable/TodayStation/' + encodeURIComponent(sid) + '?%24format=JSON')
+    // 先試 v3，抓不到（版本差異）再退 v2；都失敗記黑盒子方便除錯
+    return fetchTimetable('v3', sid).then(function (a) {
+      if (a && a.length) return a;
+      diag('tt v3 empty, try v2 ' + sid);
+      return fetchTimetable('v2', sid).catch(function () { return a || []; });
+    }).catch(function (e) {
+      diag('tt v3 err ' + (e && e.message) + ', try v2');
+      return fetchTimetable('v2', sid);
+    }).then(function (arrivals) {
+      timetables[sid] = { at: Date.now(), arrivals: arrivals };
+      return arrivals;
+    });
+  }
+  // 抓某版本的每站當日時刻表並正規化；容錯多種 v3/v2 包裝與欄位名
+  function fetchTimetable(ver, sid) {
+    return apiGet('/' + ver + '/Rail/TRA/DailyStationTimetable/TodayStation/' + encodeURIComponent(sid) + '?%24format=JSON')
       .then(function (data) {
-        var groups = data.StationTimetables || data.TimeTables || data || [];
+        var groups = data.StationTimetables || data.TimeTables || data.TrainTimetables || data || [];
+        if (!Array.isArray(groups)) groups = [groups];
         var arrivals = [];
         groups.forEach(function (g) {
           var tts = g.TimeTables || g.Timetables || (g.TrainNo ? [g] : []);
@@ -151,7 +169,7 @@
               arr: tt.ArrivalTime || tt.ScheduledArrivalTime || tt.DepartureTime });
           });
         });
-        timetables[sid] = { at: Date.now(), arrivals: arrivals };
+        diag('tt ' + ver + ' ' + sid + ' keys=' + Object.keys(data || {}).join(',') + ' n=' + arrivals.length);
         return arrivals;
       });
   }
@@ -247,8 +265,33 @@
       '「真實資料」需 <b>TDX 免費金鑰</b>（tdx.transportdata.tw 註冊 → 會員中心取得 Client Id / Secret）。</div>' +
       '<input id="ts-id" class="ts-in" placeholder="TDX Client Id" value="' + (c.id || '') + '">' +
       '<input id="ts-secret" class="ts-in" placeholder="TDX Client Secret" value="' + (c.secret || '') + '">' +
-      '<button class="ts-save" onclick="MaptripTrain.saveCreds()">儲存金鑰並啟用</button></div>';
+      '<button class="ts-save" onclick="MaptripTrain.saveCreds()">儲存金鑰並啟用</button>' +
+      '<button class="ts-test" onclick="MaptripTrain.test()">🔎 測試查詢（台北車站）</button></div>';
     el.style.display = 'flex';
+  }
+  // 一鍵驗證：直接查台北車站，確認金鑰有效＋串接正確（不必真的開到車站旁）
+  function test() {
+    var c = creds();
+    if (!c || !c.id || !c.secret) { say('請先輸入並儲存 TDX 金鑰'); return; }
+    say('測試查詢台北車站中…');
+    timetables[TAIPEI] = null;   // 不吃快取
+    fetchTimetable('v3', TAIPEI).then(function (a) {
+      if (a && a.length) return a;
+      return fetchTimetable('v2', TAIPEI);
+    }).then(function (arrivals) {
+      if (!arrivals || !arrivals.length) { say('金鑰可用，但沒解析到班次（已記黑盒子，請截圖給我）'); return; }
+      var now = Date.now();
+      var next = arrivals.map(function (x) {
+        return { arr: x.arr, trainNo: x.trainNo, type: x.type, dest: x.dest, mins: minsUntil(parseHM(x.arr, now), now) };
+      }).filter(function (x) { return !isNaN(x.mins) && x.mins >= -5; })
+        .sort(function (a, b) { return a.mins - b.mins; });
+      if (!next.length) next = arrivals.slice(0, 4).map(function (x) { return { arr: x.arr, trainNo: x.trainNo, type: x.type, dest: x.dest, mins: 999 }; });
+      showPopup('✅ 金鑰有效（台北車站）', next, '台北車站（測試）');
+      say('成功！共 ' + arrivals.length + ' 班，金鑰與串接正常');
+    }).catch(function (e) {
+      diag('test err ' + (e && e.message));
+      say('失敗：' + (e && e.message || '未知') + '（可能金鑰錯或網路，已記黑盒子）');
+    });
   }
   function closeSettings() { var el = document.getElementById('train-set'); if (el) el.style.display = 'none'; }
   function setMode(m) {
@@ -272,7 +315,7 @@
 
   window.MaptripTrain = {
     start: start, check: check, dismiss: dismiss,
-    openSettings: openSettings, closeSettings: closeSettings, setMode: setMode, saveCreds: saveCreds,
+    openSettings: openSettings, closeSettings: closeSettings, setMode: setMode, saveCreds: saveCreds, test: test,
     // 測試用純函式
     _parseHM: parseHM, _minsUntil: minsUntil, _nearbyStations: nearbyStations,
     _windowTrains: windowTrains, _phaseOf: phaseOf

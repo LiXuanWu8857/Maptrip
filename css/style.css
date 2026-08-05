@@ -1154,6 +1154,7 @@ html, body {
 .ts-hint { font-size: 0.74rem; color: #5f6368; line-height: 1.6; margin-bottom: 10px; }
 .ts-in { width: 100%; padding: 10px 12px; margin-bottom: 8px; border: 1px solid rgba(0,0,0,0.15); border-radius: 9px; font-size: 0.86rem; font-family: inherit; }
 .ts-save { width: 100%; padding: 11px; background: #e8710a; color: #fff; border: none; border-radius: 10px; font-size: 0.9rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+.ts-test { width: 100%; margin-top: 8px; padding: 10px; background: transparent; color: #1a73e8; border: 1px solid #1a73e8; border-radius: 10px; font-size: 0.86rem; font-weight: 600; font-family: inherit; cursor: pointer; }
 
 @media (prefers-color-scheme: dark) {
   #train-alert { background: #1f1f1f; border-color: #e8710a; box-shadow: 0 6px 28px rgba(0,0,0,0.55); }
