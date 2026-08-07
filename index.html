@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.297';</script>
+<script>window.INDEX_VERSION = '1.1.298';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -236,6 +236,7 @@ try {
   <button data-menu="sync">☁️ 雲端同步</button>
   <button data-menu="hotspot">🔥 找客熱區</button>
   <button data-menu="fuel">⛽ 最近加油站</button>
+  <button data-menu="parking">🅿️ 最近停車場</button>
   <button data-menu="train">🚆 火車到站提醒</button>
   <button data-menu="metro">🚇 捷運到站提醒</button>
   <button data-menu="glmap" id="glmap-menu-btn">🧪 新地圖引擎（Beta）</button>
@@ -287,9 +288,9 @@ try {
   </div>
 </div>
 
-<!-- 找客熱區 FAB：搜尋 2km 內人潮／叫車機會較高的區域 -->
-<button id="hotspot-btn" onclick="openHotspots()" title="找客熱區">
-  <span class="hs-flame">🔥</span>
+<!-- 搜尋 FAB：展開「找客熱區／加油站／停車場」；id 沿用 hotspot-btn（保留載入轉圈與檢視台版隱藏） -->
+<button id="hotspot-btn" onclick="MaptripSearchMenu&&MaptripSearchMenu.toggle()" title="搜尋">
+  <span class="hs-flame">🔍</span>
   <span class="hs-spin"></span>
 </button>
 
@@ -458,8 +459,10 @@ try {
 <!-- 一鍵導航選單（純 UI）＋ 向量地圖車站/機場/加油站/停車場圖層（gl-compat 樣式載入後安裝） -->
 <script>document.write('<scr' + 'ipt src="js/nav.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/transit.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
-<!-- 最近加油站：Overpass 找 amenity=fuel、依直線距離排序、點一下用 MaptripNav 開車導航 -->
-<script>document.write('<scr' + 'ipt src="js/fuel.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 找附近（加油站／停車場）：Overpass 依直線距離排序、點一下用 MaptripNav 開車導航 -->
+<script>document.write('<scr' + 'ipt src="js/nearby.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 搜尋 FAB 彈出選單（找客熱區／加油站／停車場） -->
+<script>document.write('<scr' + 'ipt src="js/search-menu.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 
 <!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，
      全部失敗才自動重載一次（避免「第一次開地圖掛掉、要按重置」）。 -->
