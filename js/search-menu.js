@@ -20,13 +20,16 @@
     '#mt-sm-bd.on{display:block;}' +
     '#mt-sm{position:fixed;right:14px;bottom:232px;z-index:17;display:flex;flex-direction:column-reverse;gap:10px;' +
       'align-items:flex-end;pointer-events:none;}' +
-    // 收起狀態＝縮回 FAB（右下）：變形原點在右下角、往下位移＋縮小、透明。展開時歸零。
+    // 收起狀態＝縮回底部（我的位置那）：變形原點在更下方、往下位移多一點＋縮很小、透明。展開時歸零。
     '#mt-sm .pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 14px;' +
       'border:none;border-radius:21px;background:#fff;color:#1a1a1a;font:inherit;font-size:14px;font-weight:600;' +
       'box-shadow:0 2px 10px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;' +
-      'transform-origin:calc(100% - 12px) 140%;opacity:0;transform:translateY(30px) scale(.4);' +
-      'transition:opacity .18s ease,transform .26s cubic-bezier(.2,.9,.25,1.08);}' +
+      'transform-origin:calc(100% - 12px) 380%;opacity:0;transform:translateY(48px) scale(.3);' +
+      'transition:opacity .18s ease,transform .28s cubic-bezier(.2,.9,.25,1.06);}' +
     '#mt-sm.on .pill{opacity:1;transform:translateY(0) scale(1);}' +
+    // 搜尋選單開啟時淡出「我的位置」📍與「指北針」🧭兩顆 FAB（選單像從那個位置長出、畫面乾淨）
+    '#locate-btn,#compass-btn{transition:opacity .18s ease,transform .18s ease;}' +
+    'body.mt-search-open #locate-btn,body.mt-search-open #compass-btn{opacity:0;transform:scale(.5);pointer-events:none;}' +
     // 展開時由下（最靠近 FAB）往上依序長出；收起時無延遲一起縮回 FAB。
     '#mt-sm.on .pill:nth-child(1){transition-delay:0s;}' +
     '#mt-sm.on .pill:nth-child(2){transition-delay:.045s;}' +
@@ -58,11 +61,16 @@
 
   function open() {
     build();
+    document.body.classList.add('mt-search-open');   // 淡出 我的位置/指北針 FAB
     // 強制 reflow：確保 pill 先以「收合態」上版，再加 on 才會播放展開動畫（首次開也會動）
     void _menu.offsetWidth;
     _bd.classList.add('on'); _menu.classList.add('on'); _open = true;
   }
-  function close() { if (!_built) return; _bd.classList.remove('on'); _menu.classList.remove('on'); _open = false; }
+  function close() {
+    if (!_built) return;
+    _bd.classList.remove('on'); _menu.classList.remove('on'); _open = false;
+    document.body.classList.remove('mt-search-open');   // 我的位置/指北針 FAB 淡回
+  }
   function toggle() { _open ? close() : open(); }
 
   function pick(kind) {
