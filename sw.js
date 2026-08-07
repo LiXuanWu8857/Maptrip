@@ -1,4 +1,4 @@
-// Service Worker v1.1.298
+// Service Worker v1.1.299
 // 職責：
 // 1. 導覽（index.html）：網路優先（no-store，永遠拿最新版），但「4 秒沒回應或離線」
 //    → 改用上次成功的快取副本。修正：過隧道/地下室時 WKWebView 行程被砍後重載，
@@ -7,7 +7,7 @@
 //    快取優先。重載/離線時不必重抓，恢復速度大幅加快。
 // 3. 其他請求（Google 圖磚、向量圖磚、Firebase…）一律不攔截，照常走網路。
 // 快取名稱帶版本號：升版啟用新 SW 時自動刪除舊版快取。
-var VER = 'v1.1.298';
+var VER = 'v1.1.299';
 var CORE = 'mt-core-' + VER;      // index.html 離線後備
 var ASSETS = 'mt-assets-' + VER;  // 版本化資源 + 函式庫
 var INDEX_KEY = self.registration.scope + '__index__';

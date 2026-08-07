@@ -20,8 +20,46 @@
   };
 
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
+  function gmap() { return window.__mtLive && window.__mtLive.map; }
   function say(m) { if (window.toast) window.toast(m); }
   function setBusy(b) { var el = document.getElementById('hotspot-btn'); if (el) el.classList.toggle('loading', !!b); }
+
+  // ---- 地圖上的編號標記（①②③…依距離），點一下開導航 ----
+  var _markers = [];
+  function clearMap() {
+    var m = gmap(); if (!m) { _markers = []; return; }
+    _markers.forEach(function (mk) { try { m.removeLayer(mk); } catch (_) {} });
+    _markers = [];
+  }
+  function drawMap(list, me, cat, bottomPad) {
+    var m = gmap(); if (!m || !window.L) return;
+    clearMap();
+    var pts = [];
+    list.forEach(function (f, i) {
+      try {
+        var html = '<div class="mt-nb-pin" style="background:' + cat.accent + '">' + (i + 1) + '</div>';
+        var icon = L.divIcon({ className: 'mt-nb-pinwrap', html: html, iconSize: [30, 30], iconAnchor: [15, 15] });
+        var mk = L.marker([f.lat, f.lng], { icon: icon });
+        mk.addTo(m);
+        // 綁點擊：標準 Leaflet 用 marker.on；向量相容層（gl-compat）Marker 無 .on → 用 DOM 監聽
+        (function (ff) {
+          function go() { if (window.MaptripNav) MaptripNav.open(ff.name, ff.lat, ff.lng); }
+          if (typeof mk.on === 'function') { mk.on('click', go); }
+          else if (mk.getElement) { var el = mk.getElement(); if (el) el.addEventListener('click', go); }
+        })(f);
+        _markers.push(mk); pts.push([f.lat, f.lng]);
+      } catch (_) {}
+    });
+    if (me) pts.push([me.lat, me.lng]);
+    if (pts.length) {
+      try {
+        m.fitBounds(L.latLngBounds(pts), {
+          paddingTopLeft: [40, 90], paddingBottomRight: [40, (bottomPad || 280) + 20],
+          maxZoom: 16, animate: true
+        });
+      } catch (_) {}
+    }
+  }
 
   // ---- 純函式（供測試）----
   function _haversine(a, b) {
@@ -92,13 +130,16 @@
     '#mt-nb{position:fixed;left:0;right:0;bottom:0;z-index:19997;transform:translateY(110%);transition:transform .22s ease;--acc:#188038;}' +
     '#mt-nb.on{transform:translateY(0);}' +
     '#mt-nb .in{max-width:520px;margin:0 auto;background:#fff;border-radius:16px 16px 0 0;' +
-      'padding:14px 16px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.18);max-height:70vh;overflow:auto;}' +
+      'padding:12px 16px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.18);max-height:42vh;overflow:auto;}' +
     '#mt-nb h3{font-size:15px;margin:0 0 2px;color:#1a1a1a;}' +
     '#mt-nb .sub{font-size:12px;color:#666;margin:0 0 12px;}' +
     '#mt-nb .row{display:flex;align-items:center;gap:12px;width:100%;font:inherit;text-align:left;' +
       'padding:12px 12px;border:1px solid #e2e6ea;background:#fff;color:#1a1a1a;border-radius:12px;cursor:pointer;margin-bottom:8px;}' +
     '#mt-nb .row.near{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 8%,transparent);}' +
-    '#mt-nb .row .ico{font-size:20px;}' +
+    '#mt-nb .row .rk{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;flex:none;' +
+      'border-radius:50%;background:var(--acc);color:#fff;font-size:13px;font-weight:700;}' +
+    '.mt-nb-pin{width:26px;height:26px;border-radius:50%;background:#188038;color:#fff;font-weight:700;font-size:14px;' +
+      'display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.45);border:2px solid #fff;}' +
     '#mt-nb .row .nm{flex:1;min-width:0;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
     '#mt-nb .row .d{font-size:13px;color:var(--acc);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;}' +
     '#mt-nb .row .d .dir{color:#666;margin-right:4px;}' +
@@ -134,7 +175,7 @@
       var dir = _bearingLabel(me, f);
       var b = document.createElement('button');
       b.className = 'row' + (i === 0 ? ' near' : '');
-      b.innerHTML = '<span class="ico">' + cat.icon + '</span><span class="nm">' + esc(f.name) + '</span>' +
+      b.innerHTML = '<span class="rk">' + (i + 1) + '</span><span class="nm">' + esc(f.name) + '</span>' +
                     '<span class="d"><span class="dir">' + dir.a + ' ' + dir.l + '</span>' + _fmtDist(f.dist) + '</span>';
       b.addEventListener('click', function () {
         if (window.MaptripNav) MaptripNav.open(f.name, f.lat, f.lng);
@@ -143,8 +184,11 @@
       d.list.appendChild(b);
     });
     d.bd.classList.add('on'); d.sheet.classList.add('on');
+    // 縮小地圖 fit 顯示所有結果＋畫編號標記（量測面板高度當底部留白，避免標記被面板蓋住）
+    var sh = 280; try { sh = d.sheet.querySelector('.in').offsetHeight || 280; } catch (_) {}
+    drawMap(list, me, cat, sh);
   }
-  function close() { if (_dom) { _dom.bd.classList.remove('on'); _dom.sheet.classList.remove('on'); } }
+  function close() { if (_dom) { _dom.bd.classList.remove('on'); _dom.sheet.classList.remove('on'); } clearMap(); }
 
   var busy = false;
   function run(kind) {
@@ -164,8 +208,8 @@
   }
 
   window.MaptripNearby = {
-    run: run, close: close, CATS: CATS,
+    run: run, close: close, CATS: CATS, clearMap: clearMap,
     _haversine: _haversine, _bearingLabel: _bearingLabel, _fmtDist: _fmtDist,
-    _name: _name, _parse: _parse, _overpassBody: _overpassBody
+    _name: _name, _parse: _parse, _overpassBody: _overpassBody, _drawMap: drawMap
   };
 })();
