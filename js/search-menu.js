@@ -14,11 +14,11 @@
     { k: 'address', icon: '📍', label: '搜尋地址' }
   ];
 
-  // FAB 在 bottom:176、高 48 → 選單從 FAB 上方往上疊。
+  // 選單從「我的位置」FAB（bottom:64）那格起，最下面那顆（找客熱區）從該處長出、往上疊。
   var CSS =
     '#mt-sm-bd{position:fixed;inset:0;z-index:16;background:transparent;display:none;}' +
     '#mt-sm-bd.on{display:block;}' +
-    '#mt-sm{position:fixed;right:14px;bottom:232px;z-index:17;display:flex;flex-direction:column-reverse;gap:10px;' +
+    '#mt-sm{position:fixed;right:14px;bottom:64px;z-index:17;display:flex;flex-direction:column-reverse;gap:10px;' +
       'align-items:flex-end;pointer-events:none;}' +
     // 收起狀態＝縮回底部（我的位置那）：變形原點在更下方、往下位移多一點＋縮很小、透明。展開時歸零。
     '#mt-sm .pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 14px;' +
@@ -27,9 +27,10 @@
       'transform-origin:calc(100% - 12px) 380%;opacity:0;transform:translateY(48px) scale(.3);' +
       'transition:opacity .18s ease,transform .28s cubic-bezier(.2,.9,.25,1.06);}' +
     '#mt-sm.on .pill{opacity:1;transform:translateY(0) scale(1);}' +
-    // 搜尋選單開啟時淡出「我的位置」📍與「指北針」🧭兩顆 FAB（選單像從那個位置長出、畫面乾淨）
-    '#locate-btn,#compass-btn{transition:opacity .18s ease,transform .18s ease;}' +
-    'body.mt-search-open #locate-btn,body.mt-search-open #compass-btn{opacity:0;transform:scale(.5);pointer-events:none;}' +
+    // 搜尋選單開啟時淡出右側三顆 FAB：我的位置📍／指北針🧭／搜尋🔍本身（選單像從我的位置長出、畫面乾淨）
+    '#locate-btn,#compass-btn,#hotspot-btn{transition:opacity .18s ease,transform .18s ease;}' +
+    'body.mt-search-open #locate-btn,body.mt-search-open #compass-btn,body.mt-search-open #hotspot-btn' +
+      '{opacity:0;transform:scale(.5);pointer-events:none;}' +
     // 展開時由下（最靠近 FAB）往上依序長出；收起時無延遲一起縮回 FAB。
     '#mt-sm.on .pill:nth-child(1){transition-delay:0s;}' +
     '#mt-sm.on .pill:nth-child(2){transition-delay:.045s;}' +

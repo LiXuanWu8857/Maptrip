@@ -10,16 +10,22 @@
   'use strict';
 
   var RADIUS = 5000;          // 搜尋半徑（公尺）
-  var TOP_N  = 8;             // 最多標幾家
+  var TOP_N  = 12;            // 最多標幾家（放寬，避免密集區把附近的擠掉）
   var MIRRORS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter'
   ];
-  // 類別設定：Overpass 標籤、標題、圖示、釘子色、空結果文案、預設名稱、是否備註廁所
+  // 便利商店品牌後備：OSM 常有把 7-11/全家…只給 name 沒給 shop=convenience 的情況，
+  // 用「有 shop 標籤＋名稱吻合連鎖」補抓（避免只靠 shop=convenience 漏掉）。
+  var STORE_BRAND = '7-ELEVEN|7-11|統一超商|small mart|全家|FamilyMart|Family Mart|萊爾富|Hi-Life|OK超商|OK mart|OK・mart|來來';
+  // 類別設定：Overpass 選擇器（可多個做 union）、標題、圖示、釘子色、空結果文案、預設名稱、是否備註廁所
   var CATS = {
-    fuel:    { tag: 'amenity=fuel',      title: '附近加油站',   icon: '⛽', accent: '#188038', empty: '附近 5 公里內找不到加油站',   dft: '加油站',   short: '加油站' },
-    parking: { tag: 'amenity=parking',   title: '附近停車場',   icon: '🅿️', accent: '#1a56b0', empty: '附近 5 公里內找不到停車場',   dft: '停車場',   short: '停車場' },
-    store:   { tag: 'shop=convenience',  title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 5 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true }
+    fuel:    { sels: ['amenity=fuel'],
+               title: '附近加油站',   icon: '⛽', accent: '#188038', empty: '附近 5 公里內找不到加油站',   dft: '加油站',   short: '加油站' },
+    parking: { sels: ['amenity=parking'],
+               title: '附近停車場',   icon: '🅿️', accent: '#1a56b0', empty: '附近 5 公里內找不到停車場',   dft: '停車場',   short: '停車場' },
+    store:   { sels: ['shop=convenience', 'shop][name~"' + STORE_BRAND + '",i'],
+               title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 5 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true }
   };
 
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
@@ -52,16 +58,31 @@
     if (t === 'no' || t === 'none') return 'no';
     return '';
   }
-  function _overpassBody(la, ln, tag) {
-    var q = '[out:json][timeout:25];nwr(around:' + RADIUS + ',' + la + ',' + ln + ')[' + tag + '];out center 80;';
+  // centers＝一或多個搜尋中心（地圖中心＋GPS），sels＝一或多個 Overpass 選擇器；
+  // 全部做 union，一次抓齊（涵蓋「地圖看的點」與「我人在的點」兩處附近）。
+  function _overpassBody(centers, sels) {
+    if (!Array.isArray(centers)) centers = [centers];
+    if (!Array.isArray(sels)) sels = [sels];
+    var parts = [];
+    centers.forEach(function (c) {
+      if (!c || c.lat == null || c.lng == null) return;
+      sels.forEach(function (sel) {
+        parts.push('nwr(around:' + RADIUS + ',' + c.lat + ',' + c.lng + ')[' + sel + '];');
+      });
+    });
+    var q = '[out:json][timeout:25];(' + parts.join('') + ');out center 200;';
     return 'data=' + encodeURIComponent(q);
   }
   function _parse(elements, me, dft, wantWc) {
-    var out = [];
+    var out = [], seen = {};
     (elements || []).forEach(function (e) {
       var lat = (e.lat != null) ? e.lat : (e.center && e.center.lat);
       var lng = (e.lon != null) ? e.lon : (e.center && e.center.lon);
       if (typeof lat !== 'number' || typeof lng !== 'number') return;
+      // union 會重覆命中同一點（多中心／多選擇器）→ 依 type+id 去重
+      var key = (e.type || '') + '/' + (e.id != null ? e.id : (lat + ',' + lng));
+      if (seen[key]) return;
+      seen[key] = 1;
       out.push({ lat: lat, lng: lng, name: _name(e.tags, dft),
                  dist: _haversine(me, { lat: lat, lng: lng }),
                  wc: wantWc ? _toilet(e.tags) : '' });
@@ -76,8 +97,8 @@
     return s;
   }
 
-  function fetchOverpass(la, ln, tag) {
-    var body = _overpassBody(la, ln, tag);
+  function fetchOverpass(centers, sels) {
+    var body = _overpassBody(centers, sels);
     function tryAt(i) {
       if (i >= MIRRORS.length) return Promise.resolve(null);
       var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
@@ -173,9 +194,14 @@
     var searchAt = center || me;
     if (!searchAt) { say('地圖尚未就緒，稍後再試'); return; }
     var distFrom = me || searchAt;             // 距離基準：有 GPS 用 GPS（＝離你多遠），否則用搜尋中心
+    // 搜尋中心：地圖中心 ＋ GPS 一起抓（union）；兩者很近（<300m）就只用一個，省流量。
+    var centers = [center];
+    if (me && (!center || _haversine(center, me) > 300)) centers.push(me);
+    centers = centers.filter(Boolean);
+    if (!centers.length) centers = [searchAt];
     busy = true; setBusy(true);
     say('搜尋附近' + cat.short + '中…');
-    fetchOverpass(searchAt.lat, searchAt.lng, cat.tag).then(function (data) {
+    fetchOverpass(centers, cat.sels).then(function (data) {
       busy = false; setBusy(false);
       if (!data) { say('地圖服務暫時無法連線，稍後再試'); return; }
       var list = _parse(data.elements, distFrom, cat.dft, !!cat.wc);
