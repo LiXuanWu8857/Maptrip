@@ -114,7 +114,7 @@
       var R = S / 2 * 0.94, b = R * 0.12;
       _blossom(ctx, S / 2, S / 2, R, col.plum, 0);   // 綠外框（等距內縮 → 均勻）
       _blossom(ctx, S / 2, S / 2, R, col.fill, b);   // 白內填
-      _num(ctx, num, S / 2, S / 2 + R * 0.08, R * 0.82, col.text);
+      _num(ctx, num, S / 2, S / 2 - R * 0.04, R * 0.82, col.text);
       return ctx.getImageData(0, 0, S, S);
     }
     if (type === 'county') {                          // 縣道：白底黑框圓角方
@@ -139,7 +139,7 @@
     ctx.save(); ctx.translate(cx, cy); ctx.scale(0.85, 0.85); ctx.translate(-cx, -cy);
     _shieldPath(ctx, cx, top, W, H); ctx.lineWidth = Math.max(1.6, W * 0.03) / 0.85; ctx.strokeStyle = '#ffffff'; ctx.stroke();
     ctx.restore();
-    _num(ctx, num, cx, top + H * 0.50, H * 0.44, col.text);
+    _num(ctx, num, cx, top + H * 0.45, H * 0.44, col.text);
     return ctx.getImageData(0, 0, cw, chh);
   }
   var _blankPx = { width: 1, height: 1, data: new Uint8Array(4) };
