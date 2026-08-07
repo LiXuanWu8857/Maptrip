@@ -36,6 +36,7 @@
     'body.dm-review #gps-badge,' +
     'body.dm-review #bottom-bar,' +
     'body.dm-review #top-menu button[data-menu="today"],' +
+    'body.dm-review #top-menu button[data-menu="fuel"],' +
     'body.dm-review #top-menu button[data-menu="hotspot"]{display:none!important}';
 
   function injectCss() {
