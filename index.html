@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.293';</script>
+<script>window.INDEX_VERSION = '1.1.294';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -454,6 +454,9 @@ try {
 <script>document.write('<scr' + 'ipt src="js/desktop-mode.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 底部 sheet 可拖曳展開（把手/標題列往上拉到全螢幕）：無依賴，app.js init 時 wire -->
 <script>document.write('<scr' + 'ipt src="js/sheet-drag.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 一鍵導航選單（純 UI）＋ 向量地圖車站/機場/加油站/停車場圖層（gl-compat 樣式載入後安裝） -->
+<script>document.write('<scr' + 'ipt src="js/nav.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/transit.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 
 <!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，
      全部失敗才自動重載一次（避免「第一次開地圖掛掉、要按重置」）。 -->

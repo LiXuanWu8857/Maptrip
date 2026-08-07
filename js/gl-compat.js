@@ -22,7 +22,10 @@
     if (_lose) _lose.loseContext();
   } catch (e) { return; }
 
-  var VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+  // 底圖：Positron 極簡（乾淨、藍色行程線最跳）。站點/加油站/停車場等 POI 由
+  // MaptripTransit 依需求疊回（Positron 預設不畫 POI）。台灣公路盾牌照常（自建疊加層，
+  // 讀同一份 transportation_name 向量資料，不依賴底圖樣式）。
+  var VECTOR_STYLE = 'https://tiles.openfreemap.org/styles/positron';
   var uid = 0;
 
   // 關鍵 CSS 內建保險：maplibre-gl.css 若從 CDN 載入失敗，
@@ -545,6 +548,7 @@
       // 成功載入 → 清掉「最近失敗」與「重載計數」，回到健康狀態
       try { localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (e) {}
       try { installTwShields(self.gl); } catch (e) {}   // 台灣公路盾牌
+      try { if (window.MaptripTransit) MaptripTransit.install(self.gl, window.MaptripNav && MaptripNav.open); } catch (e) {}  // 車站/機場/加油站/停車場 + 點擊導航
       trimStyleMemory(self.gl);                          // 隱藏 3D 建築省記憶體
       var q = self._queue; self._queue = [];
       q.forEach(function (fn) { try { fn(); } catch (e) {} });
@@ -564,6 +568,7 @@
       self._ready = true;
       try { localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (e) {}
       try { installTwShields(self.gl); } catch (e) {}
+      try { if (window.MaptripTransit) MaptripTransit.install(self.gl, window.MaptripNav && MaptripNav.open); } catch (e) {}
       trimStyleMemory(self.gl);
       var q = self._queue; self._queue = [];
       q.forEach(function (fn) { try { fn(); } catch (e) {} });
