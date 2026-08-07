@@ -28,6 +28,7 @@
     '#mt-nav .in{max-width:520px;margin:0 auto;background:#fff;border-radius:16px 16px 0 0;' +
       'padding:14px 16px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.18);}' +
     '#mt-nav h3{font-size:15px;margin:0 0 3px;color:#1a1a1a;}' +
+    '#mt-nav .note{font-size:12.5px;margin:0 0 8px;color:#188038;font-weight:600;}' +
     '#mt-nav .sub{font-size:12.5px;color:#666;margin:0 0 12px;}' +
     '#mt-nav button.nb{display:flex;align-items:center;gap:10px;width:100%;font:inherit;font-size:15px;' +
       'padding:13px 14px;border:1px solid #e2e6ea;background:#fff;color:#1a1a1a;border-radius:12px;' +
@@ -52,6 +53,7 @@
     sheet.innerHTML =
       '<div class="in">' +
         '<h3 id="mt-nav-name">導航</h3>' +
+        '<p class="note" id="mt-nav-note" style="display:none"></p>' +
         '<p class="sub">要用哪個 App 導航到這裡？</p>' +
         '<button class="nb" id="mt-nav-g"><span class="ico">🟢</span><b>Google 地圖</b></button>' +
         '<button class="nb" id="mt-nav-a"><span class="ico">🍎</span><b>Apple 地圖</b></button>' +
@@ -63,6 +65,7 @@
     var d = {
       bd: bd, sheet: sheet,
       name: sheet.querySelector('#mt-nav-name'),
+      note: sheet.querySelector('#mt-nav-note'),
       gBtn: sheet.querySelector('#mt-nav-g'),
       aBtn: sheet.querySelector('#mt-nav-a'),
       xBtn: sheet.querySelector('#mt-nav-x')
@@ -81,12 +84,14 @@
     close();
   }
 
-  // 開啟導航選單：name 目的地名稱、lat/lng 座標
-  function open(name, lat, lng) {
+  // 開啟導航選單：name 目的地名稱、lat/lng 座標、note 選填備註（距離／廁所…）
+  function open(name, lat, lng, note) {
     if (lat == null || lng == null) return;
     var d = _ensureDom();
     _cur = { lat: lat, lng: lng };
     d.name.textContent = '導航到：' + (name || '這個地點');
+    if (note) { d.note.textContent = note; d.note.style.display = 'block'; }
+    else { d.note.textContent = ''; d.note.style.display = 'none'; }
     d.bd.classList.add('on'); d.sheet.classList.add('on');
   }
   function close() {

@@ -9,7 +9,8 @@
   var ITEMS = [
     { k: 'hotspot', icon: '🔥', label: '找客熱區' },
     { k: 'fuel',    icon: '⛽', label: '加油站' },
-    { k: 'parking', icon: '🅿️', label: '停車場' }
+    { k: 'parking', icon: '🅿️', label: '停車場' },
+    { k: 'store',   icon: '🏪', label: '便利商店' }
   ];
 
   // FAB 在 bottom:176、高 48 → 選單從 FAB 上方往上疊。

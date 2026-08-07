@@ -1,65 +1,31 @@
-// nearby.js — 「找附近的 X」：搜尋當前位置附近的加油站／停車場，依直線距離排序，
-// 點一下用 Google／Apple 地圖「開車導航」過去（走 MaptripNav 的導航選單）。
+// nearby.js — 「找附近的 X」：搜尋當前位置附近的加油站／停車場／便利商店。
+// 地圖優先：結果直接以「①②③…（依直線距離近→遠）」編號釘標在地圖上，
+// 點釘子即跳導航選單（MaptripNav，Google／Apple 開車導航）。不再用底部清單。
+// 便利商店會備註有無廁所（OSM toilets 標籤）：有廁所的釘子加 🚻，導航選單也註明。
 //
 // 資料來源：OpenStreetMap Overpass API，免費免金鑰，與地圖 POI 同源。
 // 「最近」用直線距離快速判定；實際開車路徑由 Google／Apple 導航計算（driving 模式）。
-// 依賴：window.__mtLive.pos（即時定位）、window.toast、window.MaptripNav.open。
+// 依賴：window.__mtLive.pos / .map（即時定位/地圖）、window.toast、window.MaptripNav.open、window.L。
 (function () {
   'use strict';
 
   var RADIUS = 5000;          // 搜尋半徑（公尺）
-  var TOP_N  = 6;             // 最多列幾家
+  var TOP_N  = 8;             // 最多標幾家
   var MIRRORS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter'
   ];
-  // 類別設定：Overpass 標籤、標題、圖示、強調色、空結果文案、預設名稱
+  // 類別設定：Overpass 標籤、標題、圖示、釘子色、空結果文案、預設名稱、是否備註廁所
   var CATS = {
-    fuel:    { tag: 'amenity=fuel',    title: '附近加油站', icon: '⛽', accent: '#188038', empty: '附近 5 公里內找不到加油站', dft: '加油站' },
-    parking: { tag: 'amenity=parking', title: '附近停車場', icon: '🅿️', accent: '#1a56b0', empty: '附近 5 公里內找不到停車場', dft: '停車場' }
+    fuel:    { tag: 'amenity=fuel',      title: '附近加油站',   icon: '⛽', accent: '#188038', empty: '附近 5 公里內找不到加油站',   dft: '加油站',   short: '加油站' },
+    parking: { tag: 'amenity=parking',   title: '附近停車場',   icon: '🅿️', accent: '#1a56b0', empty: '附近 5 公里內找不到停車場',   dft: '停車場',   short: '停車場' },
+    store:   { tag: 'shop=convenience',  title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 5 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true }
   };
 
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
   function gmap() { return window.__mtLive && window.__mtLive.map; }
   function say(m) { if (window.toast) window.toast(m); }
   function setBusy(b) { var el = document.getElementById('hotspot-btn'); if (el) el.classList.toggle('loading', !!b); }
-
-  // ---- 地圖上的編號標記（①②③…依距離），點一下開導航 ----
-  var _markers = [];
-  function clearMap() {
-    var m = gmap(); if (!m) { _markers = []; return; }
-    _markers.forEach(function (mk) { try { m.removeLayer(mk); } catch (_) {} });
-    _markers = [];
-  }
-  function drawMap(list, me, cat, bottomPad) {
-    var m = gmap(); if (!m || !window.L) return;
-    clearMap();
-    var pts = [];
-    list.forEach(function (f, i) {
-      try {
-        var html = '<div class="mt-nb-pin" style="background:' + cat.accent + '">' + (i + 1) + '</div>';
-        var icon = L.divIcon({ className: 'mt-nb-pinwrap', html: html, iconSize: [30, 30], iconAnchor: [15, 15] });
-        var mk = L.marker([f.lat, f.lng], { icon: icon });
-        mk.addTo(m);
-        // 綁點擊：標準 Leaflet 用 marker.on；向量相容層（gl-compat）Marker 無 .on → 用 DOM 監聽
-        (function (ff) {
-          function go() { if (window.MaptripNav) MaptripNav.open(ff.name, ff.lat, ff.lng); }
-          if (typeof mk.on === 'function') { mk.on('click', go); }
-          else if (mk.getElement) { var el = mk.getElement(); if (el) el.addEventListener('click', go); }
-        })(f);
-        _markers.push(mk); pts.push([f.lat, f.lng]);
-      } catch (_) {}
-    });
-    if (me) pts.push([me.lat, me.lng]);
-    if (pts.length) {
-      try {
-        m.fitBounds(L.latLngBounds(pts), {
-          paddingTopLeft: [40, 90], paddingBottomRight: [40, (bottomPad || 280) + 20],
-          maxZoom: 16, animate: true
-        });
-      } catch (_) {}
-    }
-  }
 
   // ---- 純函式（供測試）----
   function _haversine(a, b) {
@@ -70,18 +36,6 @@
             Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
     return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
   }
-  var DIRS = [
-    { l: '北', a: '↑' }, { l: '東北', a: '↗' }, { l: '東', a: '→' }, { l: '東南', a: '↘' },
-    { l: '南', a: '↓' }, { l: '西南', a: '↙' }, { l: '西', a: '←' }, { l: '西北', a: '↖' }
-  ];
-  function _bearingLabel(from, to) {
-    var toR = Math.PI / 180, toD = 180 / Math.PI;
-    var y = Math.sin((to.lng - from.lng) * toR) * Math.cos(to.lat * toR);
-    var x = Math.cos(from.lat * toR) * Math.sin(to.lat * toR) -
-            Math.sin(from.lat * toR) * Math.cos(to.lat * toR) * Math.cos((to.lng - from.lng) * toR);
-    var brg = (Math.atan2(y, x) * toD + 360) % 360;
-    return DIRS[Math.round(brg / 45) % 8];
-  }
   function _fmtDist(m) {
     if (m < 950) return Math.round(m / 10) * 10 + ' m';
     return (m / 1000).toFixed(m < 9500 ? 1 : 0) + ' km';
@@ -90,20 +44,36 @@
     tags = tags || {};
     return tags['name:zh'] || tags.name || tags.brand || tags.operator || dft || '地點';
   }
+  // 廁所：OSM toilets / toilets:access → 'yes' | 'no' | ''（未標示）
+  function _toilet(tags) {
+    tags = tags || {};
+    var t = tags.toilets || tags['toilets:access'];
+    if (t === 'yes' || t === 'customers' || t === 'public') return 'yes';
+    if (t === 'no' || t === 'none') return 'no';
+    return '';
+  }
   function _overpassBody(la, ln, tag) {
-    var q = '[out:json][timeout:25];nwr(around:' + RADIUS + ',' + la + ',' + ln + ')[' + tag + '];out center 60;';
+    var q = '[out:json][timeout:25];nwr(around:' + RADIUS + ',' + la + ',' + ln + ')[' + tag + '];out center 80;';
     return 'data=' + encodeURIComponent(q);
   }
-  function _parse(elements, me, dft) {
+  function _parse(elements, me, dft, wantWc) {
     var out = [];
     (elements || []).forEach(function (e) {
       var lat = (e.lat != null) ? e.lat : (e.center && e.center.lat);
       var lng = (e.lon != null) ? e.lon : (e.center && e.center.lon);
       if (typeof lat !== 'number' || typeof lng !== 'number') return;
-      out.push({ lat: lat, lng: lng, name: _name(e.tags, dft), dist: _haversine(me, { lat: lat, lng: lng }) });
+      out.push({ lat: lat, lng: lng, name: _name(e.tags, dft),
+                 dist: _haversine(me, { lat: lat, lng: lng }),
+                 wc: wantWc ? _toilet(e.tags) : '' });
     });
     out.sort(function (a, b) { return a.dist - b.dist; });
     return out.slice(0, TOP_N);
+  }
+  // 導航選單的備註：距離（＋便利商店的廁所狀態）
+  function _note(f, cat) {
+    var s = _fmtDist(f.dist);
+    if (cat.wc) s += ' · ' + (f.wc === 'yes' ? '🚻 有廁所' : f.wc === 'no' ? '🚫 沒有廁所' : '廁所未標示');
+    return s;
   }
 
   function fetchOverpass(la, ln, tag) {
@@ -123,72 +93,74 @@
     return tryAt(0);
   }
 
-  // ---- UI：底部清單（強調色用 CSS 變數 --acc，依類別切換）----
+  // ---- UI：地圖編號釘 ＋「清除」浮鈕（無底部清單）----
   var CSS =
-    '#mt-nb-bd{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:19996;opacity:0;pointer-events:none;transition:opacity .2s;}' +
-    '#mt-nb-bd.on{opacity:1;pointer-events:auto;}' +
-    '#mt-nb{position:fixed;left:0;right:0;bottom:0;z-index:19997;transform:translateY(110%);transition:transform .22s ease;--acc:#188038;}' +
-    '#mt-nb.on{transform:translateY(0);}' +
-    '#mt-nb .in{max-width:520px;margin:0 auto;background:#fff;border-radius:16px 16px 0 0;' +
-      'padding:12px 16px calc(10px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.18);max-height:42vh;overflow:auto;}' +
-    '#mt-nb h3{font-size:15px;margin:0 0 2px;color:#1a1a1a;}' +
-    '#mt-nb .sub{font-size:12px;color:#666;margin:0 0 12px;}' +
-    '#mt-nb .row{display:flex;align-items:center;gap:12px;width:100%;font:inherit;text-align:left;' +
-      'padding:12px 12px;border:1px solid #e2e6ea;background:#fff;color:#1a1a1a;border-radius:12px;cursor:pointer;margin-bottom:8px;}' +
-    '#mt-nb .row.near{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 8%,transparent);}' +
-    '#mt-nb .row .rk{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;flex:none;' +
-      'border-radius:50%;background:var(--acc);color:#fff;font-size:13px;font-weight:700;}' +
-    '.mt-nb-pin{width:26px;height:26px;border-radius:50%;background:#188038;color:#fff;font-weight:700;font-size:14px;' +
-      'display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.45);border:2px solid #fff;}' +
-    '#mt-nb .row .nm{flex:1;min-width:0;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
-    '#mt-nb .row .d{font-size:13px;color:var(--acc);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;}' +
-    '#mt-nb .row .d .dir{color:#666;margin-right:4px;}' +
-    '#mt-nb .cx{text-align:center;color:#666;background:none;border:none;font:inherit;font-size:14px;width:100%;padding:8px;cursor:pointer;}' +
-    '@media (prefers-color-scheme: dark){#mt-nb .in{background:#1c2024;}#mt-nb h3{color:#e8eaed;}#mt-nb .sub,#mt-nb .cx{color:#9aa0a6;}' +
-      '#mt-nb .row{background:#1c2024;color:#e8eaed;border-color:#2a2f34;}#mt-nb .row .d .dir{color:#9aa0a6;}}';
+    '.mt-nb-pin{position:relative;width:26px;height:26px;border-radius:50%;background:#188038;color:#fff;' +
+      'font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;' +
+      'box-shadow:0 1px 5px rgba(0,0,0,.45);border:2px solid #fff;}' +
+    '.mt-nb-pin .wc{position:absolute;top:-8px;right:-10px;width:16px;height:16px;border-radius:50%;background:#fff;' +
+      'font-size:10px;font-style:normal;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.3);}' +
+    '#mt-nb-clear{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 56px);' +
+      'z-index:16;display:none;border:none;background:rgba(0,0,0,.72);color:#fff;font:inherit;font-size:13px;' +
+      'font-weight:600;padding:7px 15px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;}' +
+    '#mt-nb-clear.on{display:block;}';
 
-  var _dom = null;
-  function _ensureDom() {
-    if (_dom) return _dom;
-    var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    var bd = document.createElement('div'); bd.id = 'mt-nb-bd';
-    var sheet = document.createElement('div'); sheet.id = 'mt-nb';
-    sheet.innerHTML = '<div class="in"><h3 id="mt-nb-title">附近</h3><p class="sub" id="mt-nb-sub"></p>' +
-                      '<div id="mt-nb-list"></div><button class="cx" id="mt-nb-x">關閉</button></div>';
-    document.body.appendChild(bd); document.body.appendChild(sheet);
-    _dom = { bd: bd, sheet: sheet, list: sheet.querySelector('#mt-nb-list'),
-             title: sheet.querySelector('#mt-nb-title'), sub: sheet.querySelector('#mt-nb-sub') };
-    bd.addEventListener('click', close);
-    sheet.querySelector('#mt-nb-x').addEventListener('click', close);
-    return _dom;
+  var _cssAdded = false, _clearBtn = null, _markers = [];
+  function _ensureUi() {
+    if (!_cssAdded) { var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st); _cssAdded = true; }
+    if (!_clearBtn) {
+      _clearBtn = document.createElement('button');
+      _clearBtn.id = 'mt-nb-clear'; _clearBtn.textContent = '✕ 清除搜尋';
+      _clearBtn.addEventListener('click', close);
+      document.body.appendChild(_clearBtn);
+    }
+    return _clearBtn;
   }
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function clearMap() {
+    var m = gmap();
+    if (m) _markers.forEach(function (mk) { try { m.removeLayer(mk); } catch (_) {} });
+    _markers = [];
+    if (_clearBtn) _clearBtn.classList.remove('on');
+  }
+
+  function drawMap(list, me, cat) {
+    var m = gmap(); if (!m || !window.L) return;
+    clearMap();
+    var pts = [];
+    list.forEach(function (f, i) {
+      try {
+        var wcBadge = (cat.wc && f.wc === 'yes') ? '<i class="wc">🚻</i>' : '';
+        var html = '<div class="mt-nb-pin" style="background:' + cat.accent + '">' + (i + 1) + wcBadge + '</div>';
+        var icon = L.divIcon({ className: 'mt-nb-pinwrap', html: html, iconSize: [30, 30], iconAnchor: [15, 15] });
+        var mk = L.marker([f.lat, f.lng], { icon: icon });
+        mk.addTo(m);
+        (function (ff) {
+          var note = _note(ff, cat);
+          function go() { if (window.MaptripNav) MaptripNav.open(ff.name, ff.lat, ff.lng, note); }
+          if (typeof mk.on === 'function') { mk.on('click', go); }
+          else if (mk.getElement) { var el = mk.getElement(); if (el) el.addEventListener('click', go); }
+        })(f);
+        _markers.push(mk); pts.push([f.lat, f.lng]);
+      } catch (_) {}
+    });
+    if (me) pts.push([me.lat, me.lng]);
+    if (pts.length) {
+      try {
+        m.fitBounds(L.latLngBounds(pts), {
+          paddingTopLeft: [40, 100], paddingBottomRight: [40, 70], maxZoom: 16, animate: true
+        });
+      } catch (_) {}
+    }
+  }
 
   function render(list, me, cat) {
-    var d = _ensureDom();
-    d.sheet.style.setProperty('--acc', cat.accent);
-    d.title.textContent = cat.title;
-    d.sub.textContent = '依直線距離排序，點一下用 Google／Apple 開車導航';
-    d.list.innerHTML = '';
-    list.forEach(function (f, i) {
-      var dir = _bearingLabel(me, f);
-      var b = document.createElement('button');
-      b.className = 'row' + (i === 0 ? ' near' : '');
-      b.innerHTML = '<span class="rk">' + (i + 1) + '</span><span class="nm">' + esc(f.name) + '</span>' +
-                    '<span class="d"><span class="dir">' + dir.a + ' ' + dir.l + '</span>' + _fmtDist(f.dist) + '</span>';
-      b.addEventListener('click', function () {
-        if (window.MaptripNav) MaptripNav.open(f.name, f.lat, f.lng);
-        else say('導航模組未載入');
-      });
-      d.list.appendChild(b);
-    });
-    d.bd.classList.add('on'); d.sheet.classList.add('on');
-    // 縮小地圖 fit 顯示所有結果＋畫編號標記（量測面板高度當底部留白，避免標記被面板蓋住）
-    var sh = 280; try { sh = d.sheet.querySelector('.in').offsetHeight || 280; } catch (_) {}
-    drawMap(list, me, cat, sh);
+    drawMap(list, me, cat);
+    _ensureUi().classList.add('on');
+    var wcHint = cat.wc ? '（🚻＝有廁所）' : '';
+    say('找到 ' + list.length + ' 家' + cat.short + wcHint + '，點地圖上的釘子開車導航');
   }
-  function close() { if (_dom) { _dom.bd.classList.remove('on'); _dom.sheet.classList.remove('on'); } clearMap(); }
+  function close() { clearMap(); }
 
   var busy = false;
   function run(kind) {
@@ -201,15 +173,15 @@
     fetchOverpass(me.lat, me.lng, cat.tag).then(function (data) {
       busy = false; setBusy(false);
       if (!data) { say('地圖服務暫時無法連線，稍後再試'); return; }
-      var list = _parse(data.elements, me, cat.dft);
+      var list = _parse(data.elements, me, cat.dft, !!cat.wc);
       if (!list.length) { say(cat.empty); return; }
       render(list, me, cat);
     }).catch(function () { busy = false; setBusy(false); say('搜尋失敗，稍後再試'); });
   }
 
   window.MaptripNearby = {
-    run: run, close: close, CATS: CATS, clearMap: clearMap,
-    _haversine: _haversine, _bearingLabel: _bearingLabel, _fmtDist: _fmtDist,
-    _name: _name, _parse: _parse, _overpassBody: _overpassBody, _drawMap: drawMap
+    run: run, close: close, clearMap: clearMap, CATS: CATS,
+    _haversine: _haversine, _fmtDist: _fmtDist, _name: _name, _toilet: _toilet,
+    _parse: _parse, _overpassBody: _overpassBody, _note: _note, _drawMap: drawMap
   };
 })();
