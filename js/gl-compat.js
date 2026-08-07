@@ -61,13 +61,13 @@
     return null;
   }
 
-  // 依交通部實際圖示：省道=白底藍框倒三角、快速=暗紅倒三角白字、
-  //                    國道=白梅花綠框黑字、縣道=白底黑框方形
-  var TW_STYLE = {
-    provincial: { shape: 'pick',   fill: '#ffffff', line: '#12489e', text: '#12489e', dbl: true },
-    expressway: { shape: 'pick',   fill: '#8f1d20', line: '#ffffff', text: '#ffffff' },
-    national:   { shape: 'plum',   fill: '#ffffff', line: '#1a7a3c', text: '#111111' },
-    county:     { shape: 'square', fill: '#ffffff', line: '#111111', text: '#111111' }
+  // 台灣公路路標配色（依交通部圖示，顏色以官方圖逐像素量得）：
+  //   國道＝綠梅花白花黑字、省道＝深藍盾白字、快速＝暗紅盾白字、縣道＝白底黑框
+  var TW_COLOR = {
+    national:   { plum: '#02b34d', fill: '#ffffff', text: '#111111' },
+    provincial: { fill: '#022977', text: '#ffffff' },
+    expressway: { fill: '#8f1d20', text: '#ffffff' },
+    county:     { fill: '#ffffff', line: '#111111', text: '#111111' }
   };
   function _cv(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   function _num(ctx, t, x, y, fs, color) {
@@ -76,66 +76,71 @@
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(t, x, y);
   }
-  // 盾形（上寬圓、中段仍寬、底部收成圓尖）—— 省道/快速用
-  function _pick(ctx, x, y, w, h) {
+  // 平滑盾框（省道/快速）：頂中／左右腰／底中 四錨點連續曲線，各處切線同向 → 無折點、無鋸齒。
+  function _shieldPath(ctx, cx, top, W, H) {
+    var nx = function (v) { return cx + v * W; }, ny = function (v) { return top + v * H; };
+    var xw = 0.48, yw = 0.32;                        // 最寬點：半寬 0.48W、位在高 0.32（偏上＝盾形）
     ctx.beginPath();
-    ctx.moveTo(x + w * 0.5, y);
-    ctx.bezierCurveTo(x + w * 0.98, y,        x + w,        y + h * 0.30, x + w * 0.85, y + h * 0.56);
-    ctx.bezierCurveTo(x + w * 0.73, y + h * 0.80, x + w * 0.57, y + h * 0.95, x + w * 0.5,  y + h);
-    ctx.bezierCurveTo(x + w * 0.43, y + h * 0.95, x + w * 0.27, y + h * 0.80, x + w * 0.15, y + h * 0.56);
-    ctx.bezierCurveTo(x,            y + h * 0.30, x + w * 0.02, y,            x + w * 0.5,  y);
+    ctx.moveTo(nx(0), ny(0.0));
+    ctx.bezierCurveTo(nx(0.28), ny(0.0),   nx(xw), ny(yw - 0.22), nx(xw), ny(yw));   // 頂中→右腰
+    ctx.bezierCurveTo(nx(xw),  ny(yw + 0.34), nx(0.16), ny(1.0),  nx(0),  ny(1.0));  // 右腰→底中（圓底）
+    ctx.bezierCurveTo(nx(-0.16), ny(1.0), nx(-xw), ny(yw + 0.34), nx(-xw), ny(yw));  // 底中→左腰
+    ctx.bezierCurveTo(nx(-xw), ny(yw - 0.22), nx(-0.28), ny(0.0), nx(0), ny(0.0));   // 左腰→頂中
     ctx.closePath();
   }
-  // 梅花（5 瓣）— 用單一 fill 顏色畫；白花綠框靠先綠後白內縮兩層達成
-  function _blossom(ctx, cx, cy, R, fill) {
-    ctx.fillStyle = fill;
-    var pr = R * 0.46;
-    for (var i = 0; i < 5; i++) {
-      var a = -Math.PI / 2 + i * 2 * Math.PI / 5;
-      ctx.beginPath();
-      ctx.arc(cx + Math.cos(a) * (R - pr), cy + Math.sin(a) * (R - pr), pr, 0, 2 * Math.PI);
-      ctx.fill();
+  // 梅花（5 瓣、花瓣朝上）：均勻邊框＝綠花與白花「花瓣圓心固定、半徑各減同一 erode」等距內縮。國道用。
+  function _blossom(ctx, cx, cy, R, color, erode) {
+    erode = erode || 0; ctx.fillStyle = color;
+    var pr = R * 0.46, pd = R - pr, i, a;
+    for (i = 0; i < 5; i++) {
+      a = -Math.PI / 2 + i * 2 * Math.PI / 5;
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * pd, cy + Math.sin(a) * pd, pr - erode, 0, 2 * Math.PI); ctx.fill();
     }
-    ctx.beginPath(); ctx.arc(cx, cy, R * 0.54, 0, 2 * Math.PI); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, R * 0.50 - erode, 0, 2 * Math.PI); ctx.fill();
   }
-  // 產生一張盾牌圖（pixelRatio 2），回傳 ImageData 供 gl.addImage 用
+  // 產生一張路標圖（pixelRatio 2），回傳 ImageData 供 gl.addImage 用
   function drawTwShield(type, ref) {
-    var s = TW_STYLE[type];
-    if (!s) return null;
+    var col = TW_COLOR[type];
+    if (!col) return null;
     var num = String(ref == null ? '' : ref).replace(/\D/g, '') || '?';
     var P = 2, fs = 16 * P, ctx, c;
     var probe = _cv(4, 4).getContext('2d');
     probe.font = 'bold ' + fs + 'px system-ui,-apple-system,Arial,sans-serif';
     var tw = Math.ceil(probe.measureText(num).width);
 
-    if (s.shape === 'plum') {                       // 國道：白梅花 + 綠框
-      var S = Math.max(28 * P, tw + 20 * P);
+    if (type === 'national') {                       // 國道：綠梅花、白花、黑字、均勻框、數字置中偏下
+      var S = Math.max(30 * P, tw + 18 * P);
       c = _cv(S, S); ctx = c.getContext('2d');
-      _blossom(ctx, S / 2, S / 2, S / 2 * 0.97, s.line);          // 綠外框
-      _blossom(ctx, S / 2, S / 2, S / 2 * 0.97 - 2.4 * P, s.fill); // 白內填
-      _num(ctx, num, S / 2, S / 2, fs, s.text);
+      var R = S / 2 * 0.94, b = R * 0.12;
+      _blossom(ctx, S / 2, S / 2, R, col.plum, 0);   // 綠外框（等距內縮 → 均勻）
+      _blossom(ctx, S / 2, S / 2, R, col.fill, b);   // 白內填
+      _num(ctx, num, S / 2, S / 2 + R * 0.08, R * 0.82, col.text);
       return ctx.getImageData(0, 0, S, S);
     }
-    if (s.shape === 'square') {                     // 縣道：白底黑框方形
-      var h = 26 * P, w = Math.max(h, tw + 12 * P), lw = 2 * P;
+    if (type === 'county') {                          // 縣道：白底黑框圓角方
+      var h = 26 * P, w = Math.max(h, tw + 12 * P), r = 6 * P, lw = 2 * P;
       c = _cv(w, h); ctx = c.getContext('2d');
-      ctx.fillStyle = s.fill; ctx.fillRect(lw / 2, lw / 2, w - lw, h - lw);
-      ctx.lineWidth = lw; ctx.strokeStyle = s.line; ctx.strokeRect(lw / 2, lw / 2, w - lw, h - lw);
-      _num(ctx, num, w / 2, h / 2, fs, s.text);
+      var x0 = lw / 2, y0 = lw / 2, rw = w - lw, rh = h - lw;
+      ctx.beginPath();
+      ctx.moveTo(x0 + r, y0); ctx.arcTo(x0 + rw, y0, x0 + rw, y0 + rh, r);
+      ctx.arcTo(x0 + rw, y0 + rh, x0, y0 + rh, r); ctx.arcTo(x0, y0 + rh, x0, y0, r);
+      ctx.arcTo(x0, y0, x0 + rw, y0, r); ctx.closePath();
+      ctx.fillStyle = col.fill; ctx.fill();
+      ctx.lineWidth = lw; ctx.strokeStyle = col.line; ctx.stroke();
+      _num(ctx, num, w / 2, h / 2, 15 * P, col.text);
       return ctx.getImageData(0, 0, w, h);
     }
-    // 省道 / 快速：盾形（數字在上半寬處）
-    var pw = Math.max(30 * P, tw + 20 * P), ph = Math.round(pw * 1.16), pad = 2 * P;
-    c = _cv(pw, ph); ctx = c.getContext('2d');
-    _pick(ctx, pad, pad, pw - 2 * pad, ph - 2 * pad);
-    ctx.fillStyle = s.fill; ctx.fill();
-    ctx.lineWidth = 2.4 * P; ctx.strokeStyle = s.line; ctx.lineJoin = 'round'; ctx.stroke();
-    if (s.dbl) {                                     // 省道：內側細藍線（雙框效果）
-      _pick(ctx, pad + 3.4 * P, pad + 3 * P, pw - 2 * pad - 6.8 * P, ph - 2 * pad - 7 * P);
-      ctx.lineWidth = 1 * P; ctx.strokeStyle = s.line; ctx.stroke();
-    }
-    _num(ctx, num, pw / 2, ph * 0.42, fs, s.text);  // 數字置上半寬處（避開下方圓尖）
-    return ctx.getImageData(0, 0, pw, ph);
+    // 省道 / 快速：平滑盾＋白內框、數字往下放大
+    var W = Math.max(30 * P, tw + 16 * P), H = Math.round(W * 1.02), pad = 2 * P;
+    var cw = W + pad * 2, chh = H + pad * 2, cx = cw / 2, top = pad;
+    c = _cv(cw, chh); ctx = c.getContext('2d');
+    _shieldPath(ctx, cx, top, W, H); ctx.fillStyle = col.fill; ctx.fill();
+    var cy = top + H * 0.45;                          // 白內框＝整體縮 0.85 疊白線（維持平滑）
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(0.85, 0.85); ctx.translate(-cx, -cy);
+    _shieldPath(ctx, cx, top, W, H); ctx.lineWidth = Math.max(1.6, W * 0.03) / 0.85; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    ctx.restore();
+    _num(ctx, num, cx, top + H * 0.50, H * 0.44, col.text);
+    return ctx.getImageData(0, 0, cw, chh);
   }
   var _blankPx = { width: 1, height: 1, data: new Uint8Array(4) };
 
