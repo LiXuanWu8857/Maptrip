@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.301';</script>
+<script>window.INDEX_VERSION = '1.1.302';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -238,6 +238,7 @@ try {
   <button data-menu="fuel">⛽ 最近加油站</button>
   <button data-menu="parking">🅿️ 最近停車場</button>
   <button data-menu="store">🏪 最近便利商店</button>
+  <button data-menu="address">📍 搜尋地址</button>
   <button data-menu="train">🚆 火車到站提醒</button>
   <button data-menu="metro">🚇 捷運到站提醒</button>
   <button data-menu="glmap" id="glmap-menu-btn">🧪 新地圖引擎（Beta）</button>
@@ -462,7 +463,9 @@ try {
 <script>document.write('<scr' + 'ipt src="js/transit.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 找附近（加油站／停車場）：Overpass 依直線距離排序、點一下用 MaptripNav 開車導航 -->
 <script>document.write('<scr' + 'ipt src="js/nearby.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
-<!-- 搜尋 FAB 彈出選單（找客熱區／加油站／停車場） -->
+<!-- 搜尋地址：Nominatim 地理編碼 → 跳轉地圖並放可導航標記 -->
+<script>document.write('<scr' + 'ipt src="js/addr-search.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 搜尋 FAB 彈出選單（找客熱區／加油站／停車場／便利商店／搜尋地址） -->
 <script>document.write('<scr' + 'ipt src="js/search-menu.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 
 <!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，

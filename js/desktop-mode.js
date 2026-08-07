@@ -39,6 +39,7 @@
     'body.dm-review #top-menu button[data-menu="fuel"],' +
     'body.dm-review #top-menu button[data-menu="parking"],' +
     'body.dm-review #top-menu button[data-menu="store"],' +
+    'body.dm-review #top-menu button[data-menu="address"],' +
     'body.dm-review #top-menu button[data-menu="hotspot"]{display:none!important}';
 
   function injectCss() {

@@ -124,7 +124,7 @@
     if (_clearBtn) _clearBtn.classList.remove('on');
   }
 
-  function drawMap(list, me, cat) {
+  function drawMap(list, anchor, cat) {
     var m = gmap(); if (!m || !window.L) return;
     clearMap();
     var pts = [];
@@ -144,7 +144,7 @@
         _markers.push(mk); pts.push([f.lat, f.lng]);
       } catch (_) {}
     });
-    if (me) pts.push([me.lat, me.lng]);
+    if (anchor) pts.push([anchor.lat, anchor.lng]);
     if (pts.length) {
       try {
         m.fitBounds(L.latLngBounds(pts), {
@@ -166,16 +166,21 @@
   function run(kind) {
     var cat = CATS[kind] || CATS.fuel;
     if (busy) return;
+    // 搜尋中心＝地圖當下中心（把地圖移到哪就搜哪；無地圖則退回 GPS）
+    var m = gmap(), center = null;
+    try { if (m && m.getCenter) { var c = m.getCenter(); if (c && c.lat != null) center = { lat: c.lat, lng: c.lng }; } } catch (_) {}
     var me = pos();
-    if (!me) { say('等待 GPS 訊號中…'); return; }
+    var searchAt = center || me;
+    if (!searchAt) { say('地圖尚未就緒，稍後再試'); return; }
+    var distFrom = me || searchAt;             // 距離基準：有 GPS 用 GPS（＝離你多遠），否則用搜尋中心
     busy = true; setBusy(true);
-    say('搜尋' + cat.title + '中…');
-    fetchOverpass(me.lat, me.lng, cat.tag).then(function (data) {
+    say('搜尋附近' + cat.short + '中…');
+    fetchOverpass(searchAt.lat, searchAt.lng, cat.tag).then(function (data) {
       busy = false; setBusy(false);
       if (!data) { say('地圖服務暫時無法連線，稍後再試'); return; }
-      var list = _parse(data.elements, me, cat.dft, !!cat.wc);
+      var list = _parse(data.elements, distFrom, cat.dft, !!cat.wc);
       if (!list.length) { say(cat.empty); return; }
-      render(list, me, cat);
+      render(list, searchAt, cat);
     }).catch(function () { busy = false; setBusy(false); say('搜尋失敗，稍後再試'); });
   }
 

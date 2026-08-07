@@ -10,7 +10,8 @@
     { k: 'hotspot', icon: '🔥', label: '找客熱區' },
     { k: 'fuel',    icon: '⛽', label: '加油站' },
     { k: 'parking', icon: '🅿️', label: '停車場' },
-    { k: 'store',   icon: '🏪', label: '便利商店' }
+    { k: 'store',   icon: '🏪', label: '便利商店' },
+    { k: 'address', icon: '📍', label: '搜尋地址' }
   ];
 
   // FAB 在 bottom:176、高 48 → 選單從 FAB 上方往上疊。
@@ -31,6 +32,7 @@
     '#mt-sm.on .pill:nth-child(2){transition-delay:.045s;}' +
     '#mt-sm.on .pill:nth-child(3){transition-delay:.09s;}' +
     '#mt-sm.on .pill:nth-child(4){transition-delay:.135s;}' +
+    '#mt-sm.on .pill:nth-child(5){transition-delay:.18s;}' +
     '#mt-sm .pill .i{font-size:18px;line-height:1;}' +
     '#mt-sm .pill:active{background:#f1f3f4;}' +
     '@media (prefers-color-scheme: dark){#mt-sm .pill{background:#2d2d2d;color:#e8eaed;box-shadow:0 2px 10px rgba(0,0,0,.5);}' +
@@ -66,6 +68,7 @@
   function pick(kind) {
     close();
     if (kind === 'hotspot') { if (window.openHotspots) window.openHotspots(); }
+    else if (kind === 'address') { if (window.MaptripAddr) window.MaptripAddr.open(); }
     else if (window.MaptripNearby) window.MaptripNearby.run(kind);
   }
 

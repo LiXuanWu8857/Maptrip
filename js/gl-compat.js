@@ -626,6 +626,12 @@
     });
     return this;
   };
+  // 對外維持 Leaflet 慣例 {lat,lng}（找附近以「地圖中心」為準時會用到）
+  GlMap.prototype.getCenter = function () {
+    var c = this.gl.getCenter();
+    return { lat: c.lat, lng: c.lng };
+  };
+  GlMap.prototype.getZoom = function () { return this.gl.getZoom() + 1; };   // GL zoom → Leaflet zoom
   GlMap.prototype.fitBounds = function (bounds, opts) {
     opts = opts || {};
     var ptl = opts.paddingTopLeft || [0, 0];
