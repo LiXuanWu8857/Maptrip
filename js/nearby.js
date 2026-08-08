@@ -128,7 +128,7 @@
     });
   }
 
-  // ---- UI：地圖編號釘 ＋「清除」浮鈕（無底部清單）----
+  // ---- UI：地圖編號釘（清除功能改由右下角搜尋 FAB 變成 ✕，見 _setClearMode）----
   var CSS =
     // 釘子＝類別 Emoji（加油站⛽／停車場🅿️／便利商店🏪）為主，白底＋類別色外框
     '.mt-nb-pin{position:relative;width:32px;height:32px;border-radius:50%;background:#fff;' +
@@ -141,12 +141,11 @@
     // 廁所徽章移到右下角，避免和右上角數字打架
     '.mt-nb-pin .wc{position:absolute;bottom:-6px;right:-8px;width:15px;height:15px;border-radius:50%;background:#fff;' +
       'font-size:9px;font-style:normal;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.3);}' +
-    '#mt-nb-clear{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 56px);' +
-      'z-index:16;display:none;border:none;background:rgba(0,0,0,.72);color:#fff;font:inherit;font-size:13px;' +
-      'font-weight:600;padding:7px 15px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;}' +
-    '#mt-nb-clear.on{display:block;}';
+    // 搜尋出結果後：右下角放大鏡 FAB 變成紅色 ✕（清除鈕就在這裡）
+    '#hotspot-btn.nb-clear .hs-flame{display:none;}' +
+    '#hotspot-btn.nb-clear::after{content:"✕";font-size:22px;line-height:1;font-weight:700;color:#e53935;}';
 
-  var _cssAdded = false, _clearBtn = null, _markers = [];
+  var _cssAdded = false, _markers = [];
   // 搜尋結果自動清除：出現結果後 2 分鐘沒動作就自動清空（避免舊釘子留在圖上誤導）。
   var AUTO_MS = 120000, _autoTimer = null;
   function _setAutoMs(v) { AUTO_MS = v; }                 // 測試用
@@ -154,23 +153,22 @@
     if (_autoTimer) clearTimeout(_autoTimer);
     _autoTimer = setTimeout(function () { _autoTimer = null; close(); say('搜尋結果已自動清除'); }, AUTO_MS);
   }
-  function _ensureUi() {
+  function _ensureCss() {
     if (!_cssAdded) { var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st); _cssAdded = true; }
-    if (!_clearBtn) {
-      _clearBtn = document.createElement('button');
-      _clearBtn.id = 'mt-nb-clear'; _clearBtn.textContent = '✕ 清除搜尋';
-      _clearBtn.addEventListener('click', close);
-      document.body.appendChild(_clearBtn);
-    }
-    return _clearBtn;
   }
+  // 右下角搜尋 FAB：有結果時變 ✕（點它＝清除，見 search-menu.js toggle 分流）
+  function _setClearMode(on) {
+    var el = document.getElementById('hotspot-btn');
+    if (el) el.classList.toggle('nb-clear', !!on);
+  }
+  function hasResults() { return _markers.length > 0; }
 
   function clearMap() {
     if (_autoTimer) { clearTimeout(_autoTimer); _autoTimer = null; }   // 清空同時取消自動清除計時
     var m = gmap();
     if (m) _markers.forEach(function (mk) { try { m.removeLayer(mk); } catch (_) {} });
     _markers = [];
-    if (_clearBtn) _clearBtn.classList.remove('on');
+    _setClearMode(false);                                             // 還原放大鏡
   }
 
   function drawMap(list, anchor, cat) {
@@ -205,10 +203,11 @@
   }
 
   function render(list, me, cat) {
-    drawMap(list, me, cat);                 // drawMap→clearMap 會先取消舊計時器
-    _ensureUi().classList.add('on');
+    _ensureCss();
+    drawMap(list, me, cat);                 // drawMap→clearMap 會先取消舊計時器＋還原 FAB
+    _setClearMode(true);                    // 放大鏡 → ✕（清除鈕就在右下角搜尋處）
     var wcHint = cat.wc ? '（🚻＝有廁所）' : '';
-    say('找到 ' + list.length + ' 家' + cat.short + wcHint + '，點地圖上的釘子開車導航');
+    say('找到 ' + list.length + ' 家' + cat.short + wcHint + '，點釘子導航；右下角 ✕ 清除');
     _armAutoClear();                        // 出現結果 → 起算 2 分鐘自動清除
   }
   function close() { clearMap(); }
@@ -241,7 +240,7 @@
   }
 
   window.MaptripNearby = {
-    run: run, close: close, clearMap: clearMap, CATS: CATS, AUTO_MS_DEFAULT: 120000,
+    run: run, close: close, clearMap: clearMap, CATS: CATS, AUTO_MS_DEFAULT: 120000, hasResults: hasResults,
     _haversine: _haversine, _fmtDist: _fmtDist, _name: _name, _toilet: _toilet,
     _parse: _parse, _overpassBody: _overpassBody, _note: _note, _drawMap: drawMap, _setAutoMs: _setAutoMs
   };

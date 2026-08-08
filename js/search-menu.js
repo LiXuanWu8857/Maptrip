@@ -99,7 +99,14 @@
       _fabTimer = null;
     }, COLLAPSE_MS);
   }
-  function toggle() { _open ? close() : open(); }
+  function toggle() {
+    // 有搜尋結果時，右下角這顆已變成 ✕（清除鈕）→ 點它＝清除結果、還原放大鏡，不開選單。
+    if (!_open && window.MaptripNearby && MaptripNearby.hasResults && MaptripNearby.hasResults()) {
+      MaptripNearby.close();
+      return;
+    }
+    _open ? close() : open();
+  }
 
   function pick(kind, btn) {
     // 標記「被按的那顆」：收合時它原地淡出（不隨其他顆往下位移），使用者一眼看到自己按的是哪個，
