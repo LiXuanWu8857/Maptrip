@@ -352,10 +352,12 @@
 
     // 每趟（依選定月份過濾）＋日期分組。欄名置頂一列（時間/付款/車資/抽成/叫車），列內只放數值。
     var dayKeys = Object.keys(days).filter(function (d) { return String(d).slice(0, 7) === _month; }).sort().reverse();
-    if (dayKeys.some(function (d) { return (days[d] || []).length; })) h += _thead();
+    if (dayKeys.some(function (d) { return (days[d] || []).some(function (t) { return t.paymentMethod !== 'other'; }); })) h += _thead();
     var any = false;
     dayKeys.forEach(function (day) {
-      var trips = (days[day] || []).slice().sort(function (a, b) { return (a.startTime || 0) - (b.startTime || 0); });
+      // 「其他/自用」完全不參與記帳：不列出、不計趟數、不進當日總結
+      var trips = (days[day] || []).filter(function (t) { return t.paymentMethod !== 'other'; })
+        .slice().sort(function (a, b) { return (a.startTime || 0) - (b.startTime || 0); });
       if (!trips.length) return;
       any = true;
       var sm2 = _daySummary(trips, data.commissions);
@@ -439,6 +441,7 @@
     var all = { n: 0, comm: 0, disp: 0 }, month = { n: 0, comm: 0, disp: 0 };
     Object.keys(days || {}).forEach(function (day) {
       (days[day] || []).forEach(function (t) {
+        if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與記帳
         var c = (commissions && commissions[String(t.id)]) || {};
         var comm = c.commission != null ? c.commission : (t.commission || 0);
         var disp = c.dispatch != null ? c.dispatch : (t.dispatch || 0);
@@ -526,6 +529,7 @@
   function _dayTotals(trips, commissions) {
     var comm = 0, disp = 0;
     (trips || []).forEach(function (t) {
+      if (t.paymentMethod === 'other') return;   // 「其他/自用」不計抽成/叫車
       var c = (commissions && commissions[String(t.id)]) || {};
       comm += c.commission != null ? c.commission : (t.commission || 0);
       disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
@@ -537,6 +541,7 @@
   function _daySummary(trips, commissions) {
     var cash = 0, card = 0, comm = 0, disp = 0;
     (trips || []).forEach(function (t) {
+      if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與（不計車資/抽成/叫車）
       var c = (commissions && commissions[String(t.id)]) || {};
       var f = t.fare || 0;
       if (t.paymentMethod === 'cash') cash += f;
@@ -807,7 +812,7 @@
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
-    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells
+    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;
