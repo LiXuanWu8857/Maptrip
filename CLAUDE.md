@@ -386,3 +386,10 @@
   sync.js 之上；refreshAfterSync 留 app.js）、`orient.js`（羅盤/朝車頭/方向光束，依賴注入 map 與
   heading 狀態；對外開 cancelBearingAnim/syncBearingFromMap 供 initMap 手勢/rotate 呼叫）。
   **app.js 3909→2225 行**。剩多為歷史清單/單趟預覽 UI（重耦合 map/圖層/DOM，逐一小抽即可）。
+  後續新模組：`nav.js`（一鍵導航選單）、`nearby.js`（找附近加油/停車/超商，Overpass）、
+  `addr-search.js`（搜尋地址）、`search-menu.js`（右下角搜尋 FAB speed-dial）、
+  `cancel-fee.js`（客人取消快速收款，一鍵記一筆 $40 刷卡＝無路線完成紀錄，走 saveTripFinal 落盤＋同步；
+  底部列「🚫 取消收款」鈕；測試 `cancelfee-test.js` 15 項）。
+- **客人取消收款（cancel-fee.js）**：底部列「🚫 取消收款」按下即記一筆 **$40 刷卡**（當下時間、coords 空、
+  label='客人取消'、cancelFee:true），沿用 `saveTripFinal`（無座標安全：drawTripLine 略過畫線、清單/金額照常、
+  saveTodayToStorage 內含雲端同步）。金額改 `js/cancel-fee.js` 的 `FEE`。
