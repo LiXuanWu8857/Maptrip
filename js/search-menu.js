@@ -21,7 +21,9 @@
     '#mt-sm{position:fixed;right:14px;bottom:64px;z-index:17;display:flex;flex-direction:column-reverse;gap:10px;' +
       'align-items:flex-end;pointer-events:none;}' +
     // 收起狀態＝縮回底部（我的位置那）：變形原點在更下方、往下位移多一點＋縮很小、透明。展開時歸零。
-    '#mt-sm .pill{pointer-events:auto;display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 14px;' +
+    // 所有 pill 等寬（白底一樣長）、內容置中
+    '#mt-sm .pill{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:8px;' +
+      'width:150px;height:42px;padding:0 14px;box-sizing:border-box;' +
       'border:none;border-radius:21px;background:#fff;color:#1a1a1a;font:inherit;font-size:14px;font-weight:600;' +
       'box-shadow:0 2px 10px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;' +
       'transform-origin:calc(100% - 12px) 380%;opacity:0;transform:translateY(48px) scale(.3);' +

@@ -44,6 +44,37 @@
     } catch (_) { return true; }
   }
 
+  // 點 p 到線段 a-b 的垂直距離（公尺，區域平面近似，短距離足夠準）
+  function perpToSeg(p, a, b) {
+    var kx = 111000 * Math.cos(a.lat * Math.PI / 180), ky = 111000;
+    var ax = a.lng * kx, ay = a.lat * ky, bx = b.lng * kx, by = b.lat * ky, px = p.lng * kx, py = p.lat * ky;
+    var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    var t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    var cx = ax + t * dx, cy = ay + t * dy;
+    return Math.hypot(px - cx, py - cy);
+  }
+
+  // 貼路結果需「貼合原始軌跡」：任一貼路點離原始軌跡折線超過 maxDev（公尺）
+  // ＝被貼到別條路／繞了街廓（例：走高架橋卻被貼到橋下平面繞一圈）→ 判為不可信、棄用。
+  // 長度檢查（snapSane）抓不到「只繞一個街廓」的小繞路（總長沒超過 1.4×），故補這道偏離檢查。
+  // 失效安全：棄用只是保留原始 GPS 軌跡（橋上 ±3m 其實很準），絕不會憑空生出假路線。
+  function snapNear(result, coords, maxDev) {
+    try {
+      maxDev = maxDev || 90;
+      if (!result || result.length < 2 || !coords || coords.length < 2) return true;
+      for (var i = 0; i < result.length; i++) {
+        var best = Infinity, p = result[i];
+        for (var k = 1; k < coords.length; k++) {
+          var d = perpToSeg(p, coords[k - 1], coords[k]);
+          if (d < best) { best = d; if (best <= maxDev) break; }   // 已夠近就不必掃完
+        }
+        if (best > maxDev) return false;
+      }
+      return true;
+    } catch (_) { return true; }
+  }
+
   async function snapToRoads(coords) {
     if (coords.length < 2) return null;
     coords = global.MaptripGeoClean.cleanTrace(coords);   // 飄移群不進貼路（否則被當必經點繞路、產生假路線）
@@ -82,8 +113,8 @@
             var out = data.matchings.reduce(function (acc, m) {
               return acc.concat(m.geometry.coordinates.map(function (p) { return { lat: p[1], lng: p[0] }; }));
             }, []);
-            if (snapSane(out, coords)) { global._snapErr = null; return out; }
-            global._snapErr = '貼路繞遠(棄用)';
+            if (snapSane(out, coords) && snapNear(out, coords)) { global._snapErr = null; return out; }
+            global._snapErr = snapSane(out, coords) ? '貼路偏離軌跡(棄用)' : '貼路繞遠(棄用)';
             continue;
           }
           global._snapErr = data.code || 'NoMatch';
@@ -105,8 +136,8 @@
         var data2 = await res2.json();
         if (data2.code === 'Ok' && data2.routes && data2.routes.length) {
           var out2 = data2.routes[0].geometry.coordinates.map(function (p) { return { lat: p[1], lng: p[0] }; });
-          if (snapSane(out2, coords, 1.2, 200)) { global._snapErr = null; return out2; }
-          global._snapErr = '貼路繞遠(棄用)';
+          if (snapSane(out2, coords, 1.2, 200) && snapNear(out2, coords)) { global._snapErr = null; return out2; }
+          global._snapErr = snapSane(out2, coords, 1.2, 200) ? '貼路偏離軌跡(棄用)' : '貼路繞遠(棄用)';
         }
       }
     } catch (_) {}
@@ -117,6 +148,7 @@
     snapToRoads: snapToRoads,
     sampleTrack: sampleTrack,
     snapSane: snapSane,
+    snapNear: snapNear,
     calcTotalDist: calcTotalDist
   };
 
