@@ -34,12 +34,19 @@
     '#locate-btn,#compass-btn,#hotspot-btn{transition:opacity .18s ease,transform .18s ease;}' +
     'body.mt-search-open #locate-btn,body.mt-search-open #compass-btn,body.mt-search-open #hotspot-btn' +
       '{opacity:0;transform:scale(.5);pointer-events:none;}' +
-    // 展開時由下（最靠近 FAB）往上依序長出；收起時無延遲一起縮回 FAB。
+    // 展開（.on）：由下（最靠近 FAB）往上依序長出 nth-child 1→5 延遲遞增。
     '#mt-sm.on .pill:nth-child(1){transition-delay:0s;}' +
     '#mt-sm.on .pill:nth-child(2){transition-delay:.045s;}' +
     '#mt-sm.on .pill:nth-child(3){transition-delay:.09s;}' +
     '#mt-sm.on .pill:nth-child(4){transition-delay:.135s;}' +
     '#mt-sm.on .pill:nth-child(5){transition-delay:.18s;}' +
+    // 收起（移除 .on → 套用這組基底延遲，被上面 .on 那組覆蓋）：反過來，
+    // 最上面那顆先縮、最下面（最靠 FAB）最後縮＝跟長出動畫完全相反、像倒帶收回 FAB。
+    '#mt-sm .pill:nth-child(1){transition-delay:.18s;}' +
+    '#mt-sm .pill:nth-child(2){transition-delay:.135s;}' +
+    '#mt-sm .pill:nth-child(3){transition-delay:.09s;}' +
+    '#mt-sm .pill:nth-child(4){transition-delay:.045s;}' +
+    '#mt-sm .pill:nth-child(5){transition-delay:0s;}' +
     '#mt-sm .pill .i{font-size:18px;line-height:1;}' +
     '#mt-sm .pill:active{background:#f1f3f4;}' +
     '@media (prefers-color-scheme: dark){#mt-sm .pill{background:#2d2d2d;color:#e8eaed;box-shadow:0 2px 10px rgba(0,0,0,.5);}' +
