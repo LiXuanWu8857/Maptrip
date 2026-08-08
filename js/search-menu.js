@@ -49,8 +49,12 @@
     '#mt-sm .pill:nth-child(5){transition-delay:0s;}' +
     '#mt-sm .pill .i{font-size:18px;line-height:1;}' +
     '#mt-sm .pill:active{background:#f1f3f4;}' +
+    // 被按的那顆：藍色高亮，且收合時「原地淡出」（不套用往下位移的收合變形、無延遲）
+    '#mt-sm .pill.picked{background:#e8f0fe;color:#1a73e8;box-shadow:0 2px 12px rgba(26,115,232,.4);}' +
+    '#mt-sm:not(.on) .pill.picked{transform:translateY(0) scale(1);opacity:0;transition-delay:0s;}' +
     '@media (prefers-color-scheme: dark){#mt-sm .pill{background:#2d2d2d;color:#e8eaed;box-shadow:0 2px 10px rgba(0,0,0,.5);}' +
-      '#mt-sm .pill:active{background:#3a3a3a;}}';
+      '#mt-sm .pill:active{background:#3a3a3a;}' +
+      '#mt-sm .pill.picked{background:#1e3a5f;color:#8ab4f8;}}';
 
   var _built = false, _open = false, _bd = null, _menu = null;
   function build() {
@@ -63,7 +67,7 @@
       var b = document.createElement('button');
       b.className = 'pill'; b.setAttribute('data-k', it.k);
       b.innerHTML = '<span>' + it.label + '</span><span class="i">' + it.icon + '</span>';
-      b.addEventListener('click', function () { pick(it.k); });
+      b.addEventListener('click', function () { pick(it.k, b); });
       _menu.appendChild(b);
     });
     _bd.addEventListener('click', close);
@@ -72,6 +76,8 @@
 
   function open() {
     build();
+    // 清掉上次「被按」標記，重新一輪乾淨的展開
+    Array.prototype.forEach.call(_menu.querySelectorAll('.pill.picked'), function (p) { p.classList.remove('picked'); });
     document.body.classList.add('mt-search-open');   // 淡出 我的位置/指北針 FAB
     // 強制 reflow：確保 pill 先以「收合態」上版，再加 on 才會播放展開動畫（首次開也會動）
     void _menu.offsetWidth;
@@ -84,7 +90,13 @@
   }
   function toggle() { _open ? close() : open(); }
 
-  function pick(kind) {
+  function pick(kind, btn) {
+    // 標記「被按的那顆」：收合時它原地淡出（不隨其他顆往下位移），使用者一眼看到自己按的是哪個，
+    // 不會被收合動畫的下移錯覺誤導成「按到下面那顆」。
+    if (btn && _menu) {
+      Array.prototype.forEach.call(_menu.querySelectorAll('.pill.picked'), function (p) { p.classList.remove('picked'); });
+      btn.classList.add('picked');
+    }
     close();
     if (kind === 'hotspot') { if (window.openHotspots) window.openHotspots(); }
     else if (kind === 'address') { if (window.MaptripAddr) window.MaptripAddr.open(); }

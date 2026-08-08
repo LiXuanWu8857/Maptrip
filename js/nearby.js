@@ -9,7 +9,7 @@
 (function () {
   'use strict';
 
-  var RADIUS = 5000;          // 搜尋半徑（公尺）
+  var RADIUS = 3000;          // 搜尋半徑（公尺）：3km 對加油/停車/超商已足夠，且查詢更快
   var TOP_N  = 12;            // 最多標幾家（放寬，避免密集區把附近的擠掉）
   var MIRRORS = [
     'https://overpass-api.de/api/interpreter',
@@ -21,11 +21,11 @@
   // 類別設定：Overpass 選擇器（可多個做 union）、標題、圖示、釘子色、空結果文案、預設名稱、是否備註廁所
   var CATS = {
     fuel:    { sels: ['amenity=fuel'],
-               title: '附近加油站',   icon: '⛽', accent: '#188038', empty: '附近 5 公里內找不到加油站',   dft: '加油站',   short: '加油站' },
+               title: '附近加油站',   icon: '⛽', accent: '#188038', empty: '附近 3 公里內找不到加油站',   dft: '加油站',   short: '加油站' },
     parking: { sels: ['amenity=parking'],
-               title: '附近停車場',   icon: '🅿️', accent: '#1a56b0', empty: '附近 5 公里內找不到停車場',   dft: '停車場',   short: '停車場' },
+               title: '附近停車場',   icon: '🅿️', accent: '#1a56b0', empty: '附近 3 公里內找不到停車場',   dft: '停車場',   short: '停車場' },
     store:   { sels: ['shop=convenience', 'shop][name~"' + STORE_BRAND + '",i'],
-               title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 5 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true }
+               title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 3 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true }
   };
 
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
@@ -70,7 +70,7 @@
         parts.push('nwr(around:' + RADIUS + ',' + c.lat + ',' + c.lng + ')[' + sel + '];');
       });
     });
-    var q = '[out:json][timeout:25];(' + parts.join('') + ');out center 200;';
+    var q = '[out:json][timeout:25];(' + parts.join('') + ');out center 120;';
     return 'data=' + encodeURIComponent(q);
   }
   function _parse(elements, me, dft, wantWc) {
@@ -97,21 +97,29 @@
     return s;
   }
 
+  // 兩個鏡像「並行競速」，誰先成功用誰（舊版是序列：第一個卡住要等 20 秒才換 → 特別慢）。
   function fetchOverpass(centers, sels) {
     var body = _overpassBody(centers, sels);
-    function tryAt(i) {
-      if (i >= MIRRORS.length) return Promise.resolve(null);
-      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
-      var opt = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body };
-      if (ctrl) opt.signal = ctrl.signal;
-      return fetch(MIRRORS[i], opt).then(function (r) {
-        clearTimeout(timer);
-        if (!r || !r.ok) throw new Error('http ' + (r && r.status));
-        return r.json();
-      }).catch(function () { clearTimeout(timer); return tryAt(i + 1); });
-    }
-    return tryAt(0);
+    return new Promise(function (resolve) {
+      var pending = MIRRORS.length, settled = false;
+      MIRRORS.forEach(function (url) {
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+        var opt = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body };
+        if (ctrl) opt.signal = ctrl.signal;
+        fetch(url, opt).then(function (r) {
+          clearTimeout(timer);
+          if (!r || !r.ok) throw new Error('http ' + (r && r.status));
+          return r.json();
+        }).then(function (data) {
+          if (!settled) { settled = true; resolve(data); }         // 先到先用
+        }).catch(function () {
+          clearTimeout(timer);
+          pending--;
+          if (pending <= 0 && !settled) { settled = true; resolve(null); }   // 兩個都掛才算失敗
+        });
+      });
+    });
   }
 
   // ---- UI：地圖編號釘 ＋「清除」浮鈕（無底部清單）----
