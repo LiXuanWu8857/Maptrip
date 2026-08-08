@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.317';</script>
+<script>window.INDEX_VERSION = '1.1.318';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -234,11 +234,7 @@ try {
   <button data-menu="history">📅 歷史行程</button>
   <button data-menu="bookkeeper">🧾 記帳者</button>
   <button data-menu="sync">☁️ 雲端同步</button>
-  <button data-menu="hotspot">🔥 找客熱區</button>
-  <button data-menu="fuel">⛽ 最近加油站</button>
-  <button data-menu="parking">🅿️ 最近停車場</button>
-  <button data-menu="store">🏪 最近便利商店</button>
-  <button data-menu="address">📍 搜尋地址</button>
+  <!-- 找客熱區／加油站／停車場／便利商店／搜尋地址 已整合到右下角 🔍 搜尋，這裡不再重複 -->
   <button data-menu="train">🚆 火車到站提醒</button>
   <button data-menu="metro">🚇 捷運到站提醒</button>
   <button data-menu="glmap" id="glmap-menu-btn">🧪 新地圖引擎（Beta）</button>
@@ -283,9 +279,9 @@ try {
       <span class="ctrl-icon">▶</span>
       <span class="ctrl-label">開始</span>
     </button>
-    <button class="ctrl-btn" id="cancelfee-btn" onclick="MaptripCancelFee&&MaptripCancelFee.record()" title="客人取消 $40 刷卡">
+    <button class="ctrl-btn" id="cancelfee-btn" onclick="MaptripCancelFee&&MaptripCancelFee.record()" title="乘客取消 $40 刷卡">
       <span class="ctrl-icon">🚫</span>
-      <span class="ctrl-label">取消收款</span>
+      <span class="ctrl-label">取消費用</span>
     </button>
     <button class="ctrl-btn" onclick="toggleTripList()">
       <span class="ctrl-icon">📋</span>
