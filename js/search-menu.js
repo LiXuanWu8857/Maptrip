@@ -27,9 +27,12 @@
       'height:42px;padding:0 18px;box-sizing:border-box;' +
       'border:none;border-radius:21px;background:#fff;color:#1a1a1a;font:inherit;font-size:14px;font-weight:600;' +
       'box-shadow:0 2px 10px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;' +
-      'transform-origin:calc(100% - 12px) 380%;opacity:0;transform:translateY(48px) scale(.3);' +
-      'transition:opacity .18s ease,transform .28s cubic-bezier(.2,.9,.25,1.06);}' +
-    '#mt-sm.on .pill{opacity:1;transform:translateY(0) scale(1);}' +
+      'transform-origin:calc(100% - 12px) 380%;opacity:0;transform:translateY(40px) scale(.35);' +
+      // 收合（基底）：平順的減速曲線、透明與位移同步（.26s），收起來順不突兀。
+      'transition:opacity .26s cubic-bezier(.4,0,.2,1),transform .26s cubic-bezier(.4,0,.2,1);}' +
+    // 展開（.on）：帶一點回彈的長出感（transform 較長＋overshoot 曲線）。
+    '#mt-sm.on .pill{opacity:1;transform:translateY(0) scale(1);' +
+      'transition:opacity .2s ease,transform .34s cubic-bezier(.2,.9,.25,1.06);}' +
     // 搜尋選單開啟時淡出右側三顆 FAB：我的位置📍／指北針🧭／搜尋🔍本身（選單像從我的位置長出、畫面乾淨）
     '#locate-btn,#compass-btn,#hotspot-btn{transition:opacity .18s ease,transform .18s ease;}' +
     'body.mt-search-open #locate-btn,body.mt-search-open #compass-btn,body.mt-search-open #hotspot-btn' +
@@ -56,7 +59,9 @@
       '#mt-sm .pill:active{background:#3a3a3a;}' +
       '#mt-sm .pill.picked{background:#1e3a5f;color:#8ab4f8;}}';
 
-  var _built = false, _open = false, _bd = null, _menu = null;
+  var _built = false, _open = false, _bd = null, _menu = null, _fabTimer = null;
+  // 收合動畫總長：transform .26s ＋ 反向 stagger 最大延遲 .18s ≈ 0.44s，抓 0.46s 保險。
+  var COLLAPSE_MS = 460;
   function build() {
     if (_built) return;
     _built = true;
@@ -76,9 +81,10 @@
 
   function open() {
     build();
+    if (_fabTimer) { clearTimeout(_fabTimer); _fabTimer = null; }   // 取消上次「收合後顯示 FAB」的排程
     // 清掉上次「被按」標記，重新一輪乾淨的展開
     Array.prototype.forEach.call(_menu.querySelectorAll('.pill.picked'), function (p) { p.classList.remove('picked'); });
-    document.body.classList.add('mt-search-open');   // 淡出 我的位置/指北針 FAB
+    document.body.classList.add('mt-search-open');   // 淡出 我的位置/指北針/搜尋 FAB
     // 強制 reflow：確保 pill 先以「收合態」上版，再加 on 才會播放展開動畫（首次開也會動）
     void _menu.offsetWidth;
     _bd.classList.add('on'); _menu.classList.add('on'); _open = true;
@@ -86,7 +92,12 @@
   function close() {
     if (!_built) return;
     _bd.classList.remove('on'); _menu.classList.remove('on'); _open = false;
-    document.body.classList.remove('mt-search-open');   // 我的位置/指北針 FAB 淡回
+    // 右下角三顆 FAB「等 pill 完全收回後」才淡回（不要收合中就冒出來搶畫面）。
+    if (_fabTimer) clearTimeout(_fabTimer);
+    _fabTimer = setTimeout(function () {
+      document.body.classList.remove('mt-search-open');
+      _fabTimer = null;
+    }, COLLAPSE_MS);
   }
   function toggle() { _open ? close() : open(); }
 

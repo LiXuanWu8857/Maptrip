@@ -124,11 +124,17 @@
 
   // ---- UI：地圖編號釘 ＋「清除」浮鈕（無底部清單）----
   var CSS =
-    '.mt-nb-pin{position:relative;width:26px;height:26px;border-radius:50%;background:#188038;color:#fff;' +
-      'font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;' +
-      'box-shadow:0 1px 5px rgba(0,0,0,.45);border:2px solid #fff;}' +
-    '.mt-nb-pin .wc{position:absolute;top:-8px;right:-10px;width:16px;height:16px;border-radius:50%;background:#fff;' +
-      'font-size:10px;font-style:normal;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.3);}' +
+    // 釘子＝類別 Emoji（加油站⛽／停車場🅿️／便利商店🏪）為主，白底＋類別色外框
+    '.mt-nb-pin{position:relative;width:32px;height:32px;border-radius:50%;background:#fff;' +
+      'font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;' +
+      'box-shadow:0 1px 6px rgba(0,0,0,.4);border:2px solid #188038;}' +
+    // 排名數字＝右上角小徽章（縮小、不擋 Emoji）
+    '.mt-nb-pin .num{position:absolute;top:-7px;right:-7px;min-width:16px;height:16px;padding:0 3px;box-sizing:border-box;' +
+      'border-radius:8px;background:#188038;color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;' +
+      'box-shadow:0 1px 2px rgba(0,0,0,.35);}' +
+    // 廁所徽章移到右下角，避免和右上角數字打架
+    '.mt-nb-pin .wc{position:absolute;bottom:-6px;right:-8px;width:15px;height:15px;border-radius:50%;background:#fff;' +
+      'font-size:9px;font-style:normal;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 2px rgba(0,0,0,.3);}' +
     '#mt-nb-clear{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 56px);' +
       'z-index:16;display:none;border:none;background:rgba(0,0,0,.72);color:#fff;font:inherit;font-size:13px;' +
       'font-weight:600;padding:7px 15px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;}' +
@@ -160,8 +166,9 @@
     list.forEach(function (f, i) {
       try {
         var wcBadge = (cat.wc && f.wc === 'yes') ? '<i class="wc">🚻</i>' : '';
-        var html = '<div class="mt-nb-pin" style="background:' + cat.accent + '">' + (i + 1) + wcBadge + '</div>';
-        var icon = L.divIcon({ className: 'mt-nb-pinwrap', html: html, iconSize: [30, 30], iconAnchor: [15, 15] });
+        var numBadge = '<i class="num" style="background:' + cat.accent + '">' + (i + 1) + '</i>';
+        var html = '<div class="mt-nb-pin" style="border-color:' + cat.accent + '">' + cat.icon + numBadge + wcBadge + '</div>';
+        var icon = L.divIcon({ className: 'mt-nb-pinwrap', html: html, iconSize: [34, 34], iconAnchor: [17, 17] });
         var mk = L.marker([f.lat, f.lng], { icon: icon });
         mk.addTo(m);
         (function (ff) {
