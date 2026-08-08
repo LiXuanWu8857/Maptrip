@@ -23,7 +23,9 @@
       'align-items:stretch;width:max-content;pointer-events:none;}' +
     // 收起狀態＝縮回底部（我的位置那）：變形原點在更下方、往下位移多一點＋縮很小、透明。展開時歸零。
     // 所有 pill 等寬（以文字最寬者為基準）、內容置中
-    '#mt-sm .pill{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:8px;' +
+    // pointer-events 只在展開(.on)時開啟：收合中 pill 不吃觸控 → 手指還按著時，
+    // 下面那顆不會在收合位移中滑到手指下被標成 :active（修「按停車場卻加油站變深色」）。
+    '#mt-sm .pill{pointer-events:none;display:flex;align-items:center;justify-content:center;gap:8px;' +
       'height:42px;padding:0 18px;box-sizing:border-box;' +
       'border:none;border-radius:21px;background:#fff;color:#1a1a1a;font:inherit;font-size:14px;font-weight:600;' +
       'box-shadow:0 2px 10px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;' +
@@ -31,8 +33,8 @@
       'transform-origin:100% 100%;opacity:0;transform:translateY(24px) scale(.4);' +
       // 收合（基底）：平順的減速曲線、透明與位移同步（.26s），收起來順不突兀。
       'transition:opacity .26s cubic-bezier(.4,0,.2,1),transform .26s cubic-bezier(.4,0,.2,1);}' +
-    // 展開（.on）：帶一點回彈的長出感（transform 較長＋overshoot 曲線）。
-    '#mt-sm.on .pill{opacity:1;transform:translateY(0) scale(1);' +
+    // 展開（.on）：帶一點回彈的長出感（transform 較長＋overshoot 曲線）；此時才可點。
+    '#mt-sm.on .pill{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;' +
       'transition:opacity .2s ease,transform .34s cubic-bezier(.2,.9,.25,1.06);}' +
     // 搜尋選單開啟時淡出右側三顆 FAB：我的位置📍／指北針🧭／搜尋🔍本身（選單像從我的位置長出、畫面乾淨）
     '#locate-btn,#compass-btn,#hotspot-btn{transition:opacity .18s ease,transform .18s ease;}' +
