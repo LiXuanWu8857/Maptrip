@@ -147,6 +147,13 @@
     '#mt-nb-clear.on{display:block;}';
 
   var _cssAdded = false, _clearBtn = null, _markers = [];
+  // 搜尋結果自動清除：出現結果後 2 分鐘沒動作就自動清空（避免舊釘子留在圖上誤導）。
+  var AUTO_MS = 120000, _autoTimer = null;
+  function _setAutoMs(v) { AUTO_MS = v; }                 // 測試用
+  function _armAutoClear() {
+    if (_autoTimer) clearTimeout(_autoTimer);
+    _autoTimer = setTimeout(function () { _autoTimer = null; close(); say('搜尋結果已自動清除'); }, AUTO_MS);
+  }
   function _ensureUi() {
     if (!_cssAdded) { var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st); _cssAdded = true; }
     if (!_clearBtn) {
@@ -159,6 +166,7 @@
   }
 
   function clearMap() {
+    if (_autoTimer) { clearTimeout(_autoTimer); _autoTimer = null; }   // 清空同時取消自動清除計時
     var m = gmap();
     if (m) _markers.forEach(function (mk) { try { m.removeLayer(mk); } catch (_) {} });
     _markers = [];
@@ -197,10 +205,11 @@
   }
 
   function render(list, me, cat) {
-    drawMap(list, me, cat);
+    drawMap(list, me, cat);                 // drawMap→clearMap 會先取消舊計時器
     _ensureUi().classList.add('on');
     var wcHint = cat.wc ? '（🚻＝有廁所）' : '';
     say('找到 ' + list.length + ' 家' + cat.short + wcHint + '，點地圖上的釘子開車導航');
+    _armAutoClear();                        // 出現結果 → 起算 2 分鐘自動清除
   }
   function close() { clearMap(); }
 
@@ -232,8 +241,8 @@
   }
 
   window.MaptripNearby = {
-    run: run, close: close, clearMap: clearMap, CATS: CATS,
+    run: run, close: close, clearMap: clearMap, CATS: CATS, AUTO_MS_DEFAULT: 120000,
     _haversine: _haversine, _fmtDist: _fmtDist, _name: _name, _toilet: _toilet,
-    _parse: _parse, _overpassBody: _overpassBody, _note: _note, _drawMap: drawMap
+    _parse: _parse, _overpassBody: _overpassBody, _note: _note, _drawMap: drawMap, _setAutoMs: _setAutoMs
   };
 })();
