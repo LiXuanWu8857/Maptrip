@@ -27,7 +27,8 @@
       'height:42px;padding:0 18px;box-sizing:border-box;' +
       'border:none;border-radius:21px;background:#fff;color:#1a1a1a;font:inherit;font-size:14px;font-weight:600;' +
       'box-shadow:0 2px 10px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;' +
-      'transform-origin:calc(100% - 12px) 380%;opacity:0;transform:translateY(40px) scale(.35);' +
+      // 變形原點鎖在右下角＝右緣固定不動（消除彈出時右邊超出／回縮的橫向錯位），往上長出。
+      'transform-origin:100% 100%;opacity:0;transform:translateY(24px) scale(.4);' +
       // 收合（基底）：平順的減速曲線、透明與位移同步（.26s），收起來順不突兀。
       'transition:opacity .26s cubic-bezier(.4,0,.2,1),transform .26s cubic-bezier(.4,0,.2,1);}' +
     // 展開（.on）：帶一點回彈的長出感（transform 較長＋overshoot 曲線）。
