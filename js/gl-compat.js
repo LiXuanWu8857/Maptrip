@@ -76,6 +76,14 @@
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(t, x, y);
   }
+  // 數字自適應字級：以 baseFs 量文字寬，超過 maxW（盾內可用寬）就等比縮小塞進去
+  // （數字多＝縮小、盾形外框固定不變）。最小不小於 baseFs 的一半，避免糊成一團。
+  function _fitFs(baseFs, txt, maxW) {
+    var p = _cv(4, 4).getContext('2d');
+    p.font = 'bold ' + baseFs + 'px system-ui,-apple-system,Arial,sans-serif';
+    var w = p.measureText(txt).width;
+    return (w > maxW && w > 0) ? Math.max(baseFs * maxW / w, baseFs * 0.5) : baseFs;
+  }
   // 平滑盾框（省道/快速）：頂中／左右腰／底中 四錨點連續曲線，各處切線同向 → 無折點、無鋸齒。
   function _shieldPath(ctx, cx, top, W, H) {
     var nx = function (v) { return cx + v * W; }, ny = function (v) { return top + v * H; };
@@ -130,8 +138,8 @@
       _num(ctx, num, w / 2, h / 2, 15 * P, col.text);
       return ctx.getImageData(0, 0, w, h);
     }
-    // 省道 / 快速：平滑盾＋白內框、數字往下放大
-    var W = Math.max(30 * P, tw + 16 * P), H = Math.round(W * 1.02), pad = 2 * P;
+    // 省道 / 快速：平滑盾＋白內框。盾形外框「固定大小」，數字過寬（如 3 位數）自動縮小塞進盾身。
+    var W = 40 * P, H = Math.round(W * 1.02), pad = 2 * P;   // 固定盾框（不再隨位數變寬）
     var cw = W + pad * 2, chh = H + pad * 2, cx = cw / 2, top = pad;
     c = _cv(cw, chh); ctx = c.getContext('2d');
     _shieldPath(ctx, cx, top, W, H); ctx.fillStyle = col.fill; ctx.fill();
@@ -139,7 +147,9 @@
     ctx.save(); ctx.translate(cx, cy); ctx.scale(0.85, 0.85); ctx.translate(-cx, -cy);
     _shieldPath(ctx, cx, top, W, H); ctx.lineWidth = Math.max(1.6, W * 0.03) / 0.85; ctx.strokeStyle = '#ffffff'; ctx.stroke();
     ctx.restore();
-    _num(ctx, num, cx, top + H * 0.45, H * 0.44, col.text);
+    // 數字：以盾身在數字高度的可用寬（≈0.5W）為上限自動縮放，確保不溢出盾形
+    var fs2 = _fitFs(H * 0.46, num, W * 0.5);
+    _num(ctx, num, cx, top + H * 0.45, fs2, col.text);
     return ctx.getImageData(0, 0, cw, chh);
   }
   var _blankPx = { width: 1, height: 1, data: new Uint8Array(4) };
@@ -220,7 +230,7 @@
   }
   window.MaptripTwShields = {
     classify: classifyTwRoad, draw: drawTwShield,
-    install: installTwShields, sample: sampleTwRoads
+    install: installTwShields, sample: sampleTwRoads, _fitFs: _fitFs
   };
 
   function toLngLat(ll) {
