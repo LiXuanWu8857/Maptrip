@@ -16,7 +16,7 @@
 
   // 選單從「我的位置」FAB（bottom:64）那格起，最下面那顆（找客熱區）從該處長出、往上疊。
   var CSS =
-    '#mt-sm-bd{position:fixed;inset:0;z-index:16;background:transparent;display:none;}' +
+    '#mt-sm-bd{position:fixed;inset:0;z-index:16;background:transparent;display:none;-webkit-tap-highlight-color:transparent;}' +
     '#mt-sm-bd.on{display:block;}' +
     // 容器寬＝最寬那顆 pill（width:max-content），子項 align-items:stretch → 全部撐到同寬。
     '#mt-sm{position:fixed;right:14px;bottom:64px;z-index:17;display:flex;flex-direction:column-reverse;gap:10px;' +
@@ -27,6 +27,9 @@
     // 下面那顆不會在收合位移中滑到手指下被標成 :active（修「按停車場卻加油站變深色」）。
     '#mt-sm .pill{pointer-events:none;display:flex;align-items:center;justify-content:center;gap:8px;' +
       'height:42px;padding:0 18px;box-sizing:border-box;' +
+      // iOS 原生點擊高亮（-webkit-tap-highlight-color）在「變形/動畫中的堆疊按鈕」上會把那塊深色
+      // 畫到相鄰的下一顆（＝按停車場卻加油站變深色）。關掉它，只留自訂的 .picked 藍色高亮。
+      '-webkit-tap-highlight-color:transparent;' +
       'border:none;border-radius:21px;background:#fff;color:#1a1a1a;font:inherit;font-size:14px;font-weight:600;' +
       'box-shadow:0 2px 10px rgba(0,0,0,.22),0 0 0 .5px rgba(0,0,0,.06);cursor:pointer;' +
       // 變形原點鎖在右下角＝右緣固定不動（消除彈出時右邊超出／回縮的橫向錯位），往上長出。
