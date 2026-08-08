@@ -18,13 +18,15 @@
   // 便利商店品牌後備：OSM 常有把 7-11/全家…只給 name 沒給 shop=convenience 的情況，
   // 用「有 shop 標籤＋名稱吻合連鎖」補抓（避免只靠 shop=convenience 漏掉）。
   var STORE_BRAND = '7-ELEVEN|7-11|統一超商|small mart|全家|FamilyMart|Family Mart|萊爾富|Hi-Life|OK超商|OK mart|OK・mart|來來';
+  // 便利商店排除：蝦皮店到店等「純寄取貨點」在 OSM 常被標 shop=convenience，但不是便利商店 → 濾掉。
+  var STORE_EXCLUDE = '蝦皮|Shopee|店到店|賣貨便|蝦皮購物';
   // 類別設定：Overpass 選擇器（可多個做 union）、標題、圖示、釘子色、空結果文案、預設名稱、是否備註廁所
   var CATS = {
     fuel:    { sels: ['amenity=fuel'],
                title: '附近加油站',   icon: '⛽', accent: '#188038', empty: '附近 3 公里內找不到加油站',   dft: '加油站',   short: '加油站' },
     parking: { sels: ['amenity=parking'],
                title: '附近停車場',   icon: '🅿️', accent: '#1a56b0', empty: '附近 3 公里內找不到停車場',   dft: '停車場',   short: '停車場' },
-    store:   { sels: ['shop=convenience', 'shop][name~"' + STORE_BRAND + '",i'],
+    store:   { sels: ['shop=convenience', 'shop][name~"' + STORE_BRAND + '",i'], exclude: STORE_EXCLUDE,
                title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 3 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true }
   };
 
@@ -73,12 +75,16 @@
     var q = '[out:json][timeout:25];(' + parts.join('') + ');out center 120;';
     return 'data=' + encodeURIComponent(q);
   }
-  function _parse(elements, me, dft, wantWc) {
+  function _parse(elements, me, dft, wantWc, exclude) {
     var out = [], seen = {};
+    var exRe = exclude ? new RegExp(exclude, 'i') : null;
     (elements || []).forEach(function (e) {
       var lat = (e.lat != null) ? e.lat : (e.center && e.center.lat);
       var lng = (e.lon != null) ? e.lon : (e.center && e.center.lon);
       if (typeof lat !== 'number' || typeof lng !== 'number') return;
+      // 排除清單：蝦皮店到店等純寄取貨點（名稱/品牌/營運者任一命中就丟）
+      var tg = e.tags || {};
+      if (exRe && exRe.test((tg['name:zh'] || '') + ' ' + (tg.name || '') + ' ' + (tg.brand || '') + ' ' + (tg.operator || ''))) return;
       // union 會重覆命中同一點（多中心／多選擇器）→ 依 type+id 去重
       var key = (e.type || '') + '/' + (e.id != null ? e.id : (lat + ',' + lng));
       if (seen[key]) return;
@@ -219,7 +225,7 @@
     fetchOverpass(centers, cat.sels).then(function (data) {
       busy = false; setBusy(false);
       if (!data) { say('地圖服務暫時無法連線，稍後再試'); return; }
-      var list = _parse(data.elements, distFrom, cat.dft, !!cat.wc);
+      var list = _parse(data.elements, distFrom, cat.dft, !!cat.wc, cat.exclude);
       if (!list.length) { say(cat.empty); return; }
       render(list, searchAt, cat);
     }).catch(function () { busy = false; setBusy(false); say('搜尋失敗，稍後再試'); });
