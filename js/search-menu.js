@@ -16,11 +16,13 @@
 
   // 選單從「我的位置」FAB（bottom:64）那格起，最下面那顆（找客熱區）從該處長出、往上疊。
   var CSS =
-    '#mt-sm-bd{position:fixed;inset:0;z-index:16;background:transparent;display:none;-webkit-tap-highlight-color:transparent;}' +
+    // z-index 提到底部列(20)之上：否則最下面那顆 pill 會被底部列蓋住、按不到／按到底部列。
+    '#mt-sm-bd{position:fixed;inset:0;z-index:21;background:transparent;display:none;-webkit-tap-highlight-color:transparent;}' +
     '#mt-sm-bd.on{display:block;}' +
     // 容器寬＝最寬那顆 pill（width:max-content），子項 align-items:stretch → 全部撐到同寬。
-    '#mt-sm{position:fixed;right:14px;bottom:64px;z-index:17;display:flex;flex-direction:column-reverse;gap:10px;' +
-      'align-items:stretch;width:max-content;pointer-events:none;}' +
+    // bottom 留「底部列高＋安全區」空間：pill 不再擠進底部列/home indicator 區（＝按到相鄰按鈕的元兇）。
+    '#mt-sm{position:fixed;right:14px;bottom:calc(72px + env(safe-area-inset-bottom, 0px));z-index:22;' +
+      'display:flex;flex-direction:column-reverse;gap:10px;align-items:stretch;width:max-content;pointer-events:none;}' +
     // 收起狀態＝縮回底部（我的位置那）：變形原點在更下方、往下位移多一點＋縮很小、透明。展開時歸零。
     // 所有 pill 等寬（以文字最寬者為基準）、內容置中
     // pointer-events 只在展開(.on)時開啟：收合中 pill 不吃觸控 → 手指還按著時，
