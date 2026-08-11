@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.321';
+const APP_VERSION  = '1.1.322';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -593,8 +593,8 @@ document.addEventListener('visibilitychange', () => {
 function endTrip(fromFloat) { return MaptripRecorder.endTrip(fromFloat); }
 
 // 更新「已落盤」的行程：補車資 / 付款方式 / 貼路座標，並重畫該趟路線。（以 id 重新定位避免寫到孤兒物件）
-async function finalizeSavedTrip(trip, fare, paymentMethod, label, commission, dispatch) {
-  return MaptripRecorder.finalizeSavedTrip(trip, fare, paymentMethod, label, commission, dispatch);
+async function finalizeSavedTrip(trip, fare, paymentMethod, label, commission, dispatch, tip, tipMethod) {
+  return MaptripRecorder.finalizeSavedTrip(trip, fare, paymentMethod, label, commission, dispatch, tip, tipMethod);
 }
 
 // ===== 進行中行程的「當機／重載」復原（js/recorder.js）=====
@@ -623,6 +623,8 @@ function _pushCommission(tripId, commission, dispatch) {
 function toggleDispatch() { return MaptripFareDialog.toggleDispatch(); }
 function _readFareExtra() { return MaptripFareDialog._readFareExtra(); }
 function _setFareExtra(commission, dispatch) { return MaptripFareDialog._setFareExtra(commission, dispatch); }
+function _readTip() { return MaptripFareDialog._readTip(); }
+function _setTip(tip, method) { return MaptripFareDialog._setTip(tip, method); }
 function _showCommissionField(show) { return MaptripFareDialog._showCommissionField(show); }
 function showFareDialog(trip) { return MaptripFareDialog.showFareDialog(trip); }
 
@@ -1042,6 +1044,7 @@ function editFare(e, idx) {
   const skipBtn = document.getElementById('fare-skip');
   input.value = trip.fare || '';
   _setFareExtra(trip.commission, trip.dispatch);
+  _setTip(trip.tip, trip.tipMethod);   // 小費/加收
   _showCommissionField(true);   // 編輯時可改抽成
   cashBtn.disabled = false; cardBtn.disabled = false;
   skipBtn.textContent = '取消'; skipBtn.disabled = false;
@@ -1059,10 +1062,12 @@ function editFare(e, idx) {
 
   const saveEdit = (paymentMethod) => {
     const ex = _readFareExtra();
+    const tp = _readTip();
     trip.fare = parseInt(input.value) || 0;
     trip.paymentMethod = paymentMethod;
     trip.commission = ex.commission;
     trip.dispatch = ex.dispatch;
+    trip.tip = tp.tip; trip.tipMethod = tp.tip ? tp.tipMethod : '';
     if (paymentMethod !== 'other') trip.label = '';   // 由「其他」轉成付費 → 清掉備注
     close();
     saveTodayToStorage();
@@ -1094,6 +1099,7 @@ function editHistoryFare(e, day, idx) {
   const skipBtn = document.getElementById('fare-skip');
   input.value = trip.fare || '';
   _setFareExtra(trip.commission, trip.dispatch);
+  _setTip(trip.tip, trip.tipMethod);   // 小費/加收
   _showCommissionField(true);   // 編輯時可改抽成
   cashBtn.disabled = false; cardBtn.disabled = false;
   skipBtn.textContent = '取消'; skipBtn.disabled = false;
@@ -1113,6 +1119,8 @@ function editHistoryFare(e, day, idx) {
   const saveEdit = (paymentMethod) => {
     const fare = parseInt(input.value) || 0;
     const ex = _readFareExtra();
+    const tp = _readTip();
+    const tipMethod = tp.tip ? tp.tipMethod : '';
     const cur = loadTrips();
     const target = (cur[day] || []).find(t => t.id === tripId);
     if (target) {
@@ -1120,6 +1128,7 @@ function editHistoryFare(e, day, idx) {
       target.paymentMethod = paymentMethod;
       target.commission = ex.commission;
       target.dispatch = ex.dispatch;
+      target.tip = tp.tip; target.tipMethod = tipMethod;
       if (paymentMethod !== 'other') target.label = '';   // 由「其他」轉成付費 → 清掉備注
       saveTrips(cur);
       if (window.MaptripSync) MaptripSync.syncDays([day]);
@@ -1127,7 +1136,7 @@ function editHistoryFare(e, day, idx) {
     // 若編輯的是「今日」的趟，記憶體中的 todayTrips 也要同步，
     // 否則下一次 saveTodayToStorage 合併會用舊值蓋回去
     const mem = todayTrips.find(t => t.id === tripId);
-    if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; mem.commission = ex.commission; mem.dispatch = ex.dispatch; if (paymentMethod !== 'other') mem.label = ''; }
+    if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; mem.commission = ex.commission; mem.dispatch = ex.dispatch; mem.tip = tp.tip; mem.tipMethod = tipMethod; if (paymentMethod !== 'other') mem.label = ''; }
     _pushCommission(tripId, ex.commission, ex.dispatch);
     close();
     renderHistorySheet();

@@ -52,6 +52,7 @@
   }
   function _extraTag(t) {
     let s = '';
+    if (t.tip)        s += `　<span class="extra-tag">小費 ${t.tip}${(t.tipMethod === 'card') ? '刷' : '現'}</span>`;
     if (t.commission) s += `　<span class="extra-tag">抽成 ${t.commission}</span>`;
     if (t.dispatch)   s += `　<span class="extra-tag">叫車 ${t.dispatch}</span>`;
     return s;
@@ -62,6 +63,9 @@
       const f = t.fare || 0; total += f;
       if (t.paymentMethod === 'card') card += f;
       else if (t.paymentMethod === 'cash') cash += f;
+      // 小費/加收：計入總計，並依「小費付款方式」分流到刷卡/現金
+      const tip = t.tip || 0;
+      if (tip) { total += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
     });
     return { card, cash, total };
   }

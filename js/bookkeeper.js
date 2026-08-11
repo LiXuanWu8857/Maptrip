@@ -465,7 +465,7 @@
       var arr = days[day] || [];
       arr.forEach(function (t) {
         if (t.paymentMethod === 'other') return;
-        fare += t.fare || 0;
+        fare += (t.fare || 0) + (t.tip || 0);   // 車資＋小費/加收都算營收
         var c = commissions && commissions[String(t.id)];
         comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
         disp += (c && c.dispatch != null) ? c.dispatch : (t.dispatch || 0);
@@ -546,6 +546,8 @@
       var f = t.fare || 0;
       if (t.paymentMethod === 'cash') cash += f;
       else if (t.paymentMethod === 'card') card += f;
+      var tip = t.tip || 0;   // 小費/加收：依小費付款方式分流
+      if (tip) { if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
       comm += c.commission != null ? c.commission : (t.commission || 0);
       disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
     });

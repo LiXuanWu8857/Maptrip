@@ -275,12 +275,13 @@
   // 更新「已落盤」的行程：補車資 / 付款方式 / 貼路座標，並重畫該趟路線。
   // 注意：貼路是慢速網路操作，期間畫面可能被雲端同步刷新（todayTrips 換成新物件），
   // 所以寫回時一律用「行程 id」重新定位，不依賴物件同一性，否則結果會寫到孤兒物件上遺失。
-  async function finalizeSavedTrip(trip, fare, paymentMethod, label, commission, dispatch) {
+  async function finalizeSavedTrip(trip, fare, paymentMethod, label, commission, dispatch, tip, tipMethod) {
     const apply = (t) => {
       t.fare = fare;
       t.paymentMethod = paymentMethod;
       if (commission !== undefined) t.commission = commission || 0;   // 抽成
       if (dispatch !== undefined) t.dispatch = dispatch || 0;         // 叫車費
+      if (tip !== undefined) { t.tip = tip || 0; t.tipMethod = (tip ? (tipMethod || 'cash') : ''); }  // 小費/加收
       if (label !== undefined) t.label = label || '';
     };
     apply(trip);

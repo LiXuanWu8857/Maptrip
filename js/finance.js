@@ -110,6 +110,9 @@
         comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
         disp += (c && c.dispatch != null) ? c.dispatch : (t.dispatch || 0);
         if (t.paymentMethod === 'card') card += f; else cash += f;
+        // 小費/加收（同一筆、付款方式可與主車資不同，例如刷卡車資＋現金小費）
+        var tip = t.tip || 0;
+        if (tip) { fare += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
       });
     });
     var expTotal = 0;

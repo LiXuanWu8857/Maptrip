@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.321';</script>
+<script>window.INDEX_VERSION = '1.1.322';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -379,6 +379,13 @@ try {
       <input id="fare-commission" type="number" inputmode="numeric" placeholder="0" min="0"></label>
     <button type="button" id="fare-dispatch-toggle" class="fare-toggle" onclick="toggleDispatch()">
       <span class="fare-toggle-lbl">叫車費</span><span class="fare-toggle-val">無</span></button>
+  </div>
+  <!-- 小費/加收：同一筆可另收一筆（付款方式可與主車資不同，例：刷卡車資＋現金小費） -->
+  <div id="fare-tip-row">
+    <label class="fare-extra" id="fare-tip-wrap"><span>小費/加收</span>
+      <input id="fare-tip" type="number" inputmode="numeric" placeholder="0" min="0"></label>
+    <button type="button" id="fare-tip-method" class="fare-toggle" onclick="MaptripFareDialog&&MaptripFareDialog.toggleTipMethod()">
+      <span class="fare-toggle-lbl">小費付款</span><span class="fare-toggle-val">現金</span></button>
   </div>
   <div id="fare-btns">
     <button id="fare-skip">其他</button>

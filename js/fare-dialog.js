@@ -13,6 +13,23 @@
   const DISPATCH_FEE = 10;
   let _dispatchOn = false;   // 車資對話框目前叫車費開關
   let _dispatchAmt = DISPATCH_FEE;  // 目前金額（載入舊趟時沿用該趟的值）
+  let _tipMethod = 'cash';   // 小費/加收的付款方式（預設現金）
+
+  function updateTipToggle() {
+    const btn = document.getElementById('fare-tip-method');
+    if (!btn) return;
+    btn.classList.toggle('on', _tipMethod === 'cash');   // 現金亮起
+    btn.querySelector('.fare-toggle-val').textContent = _tipMethod === 'cash' ? '現金' : '刷卡';
+  }
+  function toggleTipMethod() { _tipMethod = _tipMethod === 'cash' ? 'card' : 'cash'; updateTipToggle(); }
+  function _readTip() {
+    return { tip: parseInt((document.getElementById('fare-tip') || {}).value) || 0, tipMethod: _tipMethod };
+  }
+  function _setTip(tip, method) {
+    const el = document.getElementById('fare-tip'); if (el) el.value = tip || '';
+    _tipMethod = (method === 'card') ? 'card' : 'cash';
+    updateTipToggle();
+  }
 
   function updateDispatchToggle() {
     const btn = document.getElementById('fare-dispatch-toggle');
@@ -52,6 +69,7 @@
     document.getElementById('fs-dist').textContent   = fmtDist(trip.totalDist);
     document.getElementById('fare-input').value = '';
     _setFareExtra(0, DISPATCH_FEE);   // 叫車費預設「有」10 元；沒叫車費再點一下關掉
+    _setTip(0, 'cash');            // 小費/加收預設 0、現金
     _showCommissionField(false);   // 完成當下不問抽成（兩天後才知道）
 
     document.getElementById('fare-overlay').style.display = 'block';
@@ -65,9 +83,10 @@
     const save = (fare, paymentMethod, label) => {
       // 行程在 endTrip 時已落盤；這裡立即關閉對話框，車資與貼路在背景補上
       const ex = _readFareExtra();
+      const tp = _readTip();
       document.getElementById('fare-overlay').style.display = 'none';
       document.getElementById('fare-dialog').classList.remove('show');
-      finalizeSavedTrip(trip, fare, paymentMethod, label || '', ex.commission, ex.dispatch);
+      finalizeSavedTrip(trip, fare, paymentMethod, label || '', ex.commission, ex.dispatch, tp.tip, tp.tipMethod);
     };
 
     cashBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'cash');
@@ -83,8 +102,11 @@
     DISPATCH_FEE: DISPATCH_FEE,
     updateDispatchToggle: updateDispatchToggle,
     toggleDispatch: toggleDispatch,
+    toggleTipMethod: toggleTipMethod,
     _readFareExtra: _readFareExtra,
     _setFareExtra: _setFareExtra,
+    _readTip: _readTip,
+    _setTip: _setTip,
     _showCommissionField: _showCommissionField,
     showFareDialog: showFareDialog
   };
