@@ -20,8 +20,9 @@
     '#mt-sm-bd{position:fixed;inset:0;z-index:21;background:transparent;display:none;-webkit-tap-highlight-color:transparent;}' +
     '#mt-sm-bd.on{display:block;}' +
     // 容器寬＝最寬那顆 pill（width:max-content），子項 align-items:stretch → 全部撐到同寬。
-    // bottom 留「底部列高＋安全區」空間：pill 不再擠進底部列/home indicator 區（＝按到相鄰按鈕的元兇）。
-    '#mt-sm{position:fixed;right:14px;bottom:calc(72px + env(safe-area-inset-bottom, 0px));z-index:22;' +
+    // bottom:64 讓最下面那顆貼齊底部列上緣（與底部列同一基準、不加 safe-area）；
+    // z-index:22 提到底部列(20)之上 → 就算貼著底部列也永遠在上、按得到（修好觸控後可放回底部）。
+    '#mt-sm{position:fixed;right:14px;bottom:64px;z-index:22;' +
       'display:flex;flex-direction:column-reverse;gap:10px;align-items:stretch;width:max-content;pointer-events:none;}' +
     // 收起狀態＝縮回底部（我的位置那）：變形原點在更下方、往下位移多一點＋縮很小、透明。展開時歸零。
     // 所有 pill 等寬（以文字最寬者為基準）、內容置中

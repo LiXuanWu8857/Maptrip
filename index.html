@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.322';</script>
+<script>window.INDEX_VERSION = '1.1.323';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -110,6 +110,9 @@ try {
 <style>
 /* 頂部安全區 + 頂列 + 地圖：style.css 靠網路才載入，但這裡是 inline 立即生效，
    避免 location.reload() 後 style.css 尚未取回時出現頂部大片空白。 */
+/* iOS 原生點擊高亮（-webkit-tap-highlight-color）在變形/動畫/堆疊元素上會把深色畫到相鄰元素
+   （按停車場→加油站變深色、按行程列→下一列變深色）。全域關掉，改用各自 :active 回饋。 */
+* { -webkit-tap-highlight-color: transparent; }
 #top-safe { display: none !important; }
 #top-bar {
   position: fixed !important;
@@ -385,7 +388,7 @@ try {
     <label class="fare-extra" id="fare-tip-wrap"><span>小費/加收</span>
       <input id="fare-tip" type="number" inputmode="numeric" placeholder="0" min="0"></label>
     <button type="button" id="fare-tip-method" class="fare-toggle" onclick="MaptripFareDialog&&MaptripFareDialog.toggleTipMethod()">
-      <span class="fare-toggle-lbl">小費付款</span><span class="fare-toggle-val">現金</span></button>
+      <span class="fare-toggle-lbl">付款</span><span class="fare-toggle-val">現金</span></button>
   </div>
   <div id="fare-btns">
     <button id="fare-skip">其他</button>

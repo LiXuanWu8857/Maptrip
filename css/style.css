@@ -384,7 +384,7 @@ html, body {
   border-top: 1px solid rgba(0,0,0,0.08);
   z-index: 31; display: flex; flex-direction: column;
   animation: slideUp 0.25s ease;
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  /* 不加 safe-area padding：底部不留白（與底部列同一設計，白邊少） */
   box-shadow: 0 -4px 24px rgba(0,0,0,0.1);
   transition: max-height 0.2s ease, border-radius 0.2s ease;
 }
@@ -653,9 +653,10 @@ html, body {
 }
 #fare-input::placeholder { color: #dadce0; font-weight: 400; font-size: 1rem; }
 /* 抽成 / 叫車費（記錄公司抽成用，可留空） */
-#fare-extra-row { display: flex; gap: 10px; margin-bottom: 16px; }
+#fare-extra-row, #fare-tip-row { display: flex; gap: 10px; margin-bottom: 16px; }
+/* 左（輸入）大、右（切換）小，比例 2:1 */
 .fare-extra {
-  flex: 1; display: flex; align-items: center; gap: 8px;
+  flex: 2; display: flex; align-items: center; gap: 8px;
   background: #f8f9fa; border: 1.5px solid rgba(0,0,0,0.12);
   border-radius: 12px; padding: 9px 12px;
 }
