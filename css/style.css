@@ -479,6 +479,9 @@ html, body {
 .trip-row {
   display: flex; align-items: center; gap: 12px; padding: 12px 18px;
   border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; transition: background 0.1s;
+  /* iOS：禁止選字/長按選單、點擊視為 manipulation → 避免點列時文字被選取造成點按錯位到下一列 */
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .trip-row:active { background: rgba(0,0,0,0.03); }
 
