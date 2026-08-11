@@ -57,12 +57,13 @@
     '#mt-sm .pill:nth-child(4){transition-delay:.045s;}' +
     '#mt-sm .pill:nth-child(5){transition-delay:0s;}' +
     '#mt-sm .pill .i{font-size:18px;line-height:1;}' +
-    '#mt-sm .pill:active{background:#f1f3f4;}' +
+    // 不用 :active（觸控按下態）：動畫期間 :active 會落在「手指按下當下」的那顆，可能與最後
+    // click 到的那顆不同（iOS 座標/時序差）→ 高亮跑到相鄰按鈕。改成只用 .picked（由 click
+    // handler 標在「真正被點到」的那顆，永遠正確）。
     // 被按的那顆：藍色高亮，且收合時「原地淡出」（不套用往下位移的收合變形、無延遲）
     '#mt-sm .pill.picked{background:#e8f0fe;color:#1a73e8;box-shadow:0 2px 12px rgba(26,115,232,.4);}' +
     '#mt-sm:not(.on) .pill.picked{transform:translateY(0) scale(1);opacity:0;transition-delay:0s;}' +
     '@media (prefers-color-scheme: dark){#mt-sm .pill{background:#2d2d2d;color:#e8eaed;box-shadow:0 2px 10px rgba(0,0,0,.5);}' +
-      '#mt-sm .pill:active{background:#3a3a3a;}' +
       '#mt-sm .pill.picked{background:#1e3a5f;color:#8ab4f8;}}';
 
   var _built = false, _open = false, _bd = null, _menu = null, _fabTimer = null;
@@ -79,10 +80,25 @@
       b.className = 'pill'; b.setAttribute('data-k', it.k);
       b.innerHTML = '<span>' + it.label + '</span><span class="i">' + it.icon + '</span>';
       b.addEventListener('click', function () { pick(it.k, b); });
+      b.addEventListener('touchstart', function (ev) { _diag(it.k, ev); }, { passive: true });
       _menu.appendChild(b);
     });
     _bd.addEventListener('click', close);
     document.body.appendChild(_bd); document.body.appendChild(_menu);
+  }
+
+  // 真機黑盒子診斷：比對「touchstart 路由到的那顆(target)」vs「手指座標實際覆蓋的那顆(under)」。
+  // 兩者不同＝座標空間錯位（例如 WKWebView safe-area viewport 位移）＝高亮跑到相鄰按鈕的真凶。
+  // 只在有 __mtLog（App 黑盒子）時記錄；純函式部分不受影響。
+  function _diag(targetK, ev) {
+    try {
+      if (!window.__mtLog) return;
+      var t = ev && ev.touches && ev.touches[0]; if (!t) return;
+      var under = document.elementFromPoint(t.clientX, t.clientY);
+      var up = under && under.closest ? under.closest('#mt-sm .pill') : null;
+      var uk = up ? up.getAttribute('data-k') : (under ? (under.id || under.className || '?') : 'none');
+      window.__mtLog('sm target=' + targetK + ' under=' + uk + ' y=' + Math.round(t.clientY) + (targetK !== uk ? ' MISMATCH' : ''));
+    } catch (_) {}
   }
 
   function open() {
@@ -127,5 +143,5 @@
     else if (window.MaptripNearby) window.MaptripNearby.run(kind);
   }
 
-  window.MaptripSearchMenu = { toggle: toggle, open: open, close: close, _pick: pick, _items: ITEMS };
+  window.MaptripSearchMenu = { toggle: toggle, open: open, close: close, _pick: pick, _items: ITEMS, _diag: _diag };
 })();
