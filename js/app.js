@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.324';
+const APP_VERSION  = '1.1.325';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -981,28 +981,9 @@ function goHome() {
   try { if (document.body.classList.contains('day-preview-active')) exitDayPreview(); } catch (_) {}
 }
 
-// 真機黑盒子診斷：行程列觸控錯位（按第 2 筆卻標到第 3 筆）。
-// target＝touchstart 事件路由到的列；under＝手指座標(elementFromPoint)覆蓋的列。
-// 兩者不同＝座標空間錯位（WKWebView viewport 位移 → 觸控座標與版面不同基準）。
-// 重現後從「歷史底部版本號連點 3 下」的黑盒子看 rowtap 那幾行（含 y／各列 top）。
-(function bindRowTapDiag() {
-  if (typeof window === 'undefined' || !('ontouchstart' in window)) return;
-  document.addEventListener('touchstart', function (ev) {
-    try {
-      if (!window.__mtLog) return;
-      var t = ev.touches && ev.touches[0]; if (!t) return;
-      var tgt = ev.target && ev.target.closest ? ev.target.closest('.trip-row') : null;
-      var under = document.elementFromPoint(t.clientX, t.clientY);
-      var underRow = under && under.closest ? under.closest('.trip-row') : null;
-      if (!tgt && !underRow) return;   // 不是行程列
-      var ti = tgt ? tgt.getAttribute('data-row') : 'none';
-      var ui = underRow ? underRow.getAttribute('data-row') : 'none';
-      var tt = tgt ? Math.round(tgt.getBoundingClientRect().top) : -1;
-      var ut = underRow ? Math.round(underRow.getBoundingClientRect().top) : -1;
-      window.__mtLog('rowtap target=' + ti + '(' + tt + ') under=' + ui + '(' + ut + ') y=' + Math.round(t.clientY) + (ti !== ui ? ' MISMATCH' : ''));
-    } catch (_) {}
-  }, { passive: true, capture: true });
-})();
+// 行程列觸控錯位診斷（v1.1.324）已用真機黑盒子確認修好（target=under、無 MISMATCH，
+// 落點皆在正確列內）＝iOS 選字手勢干擾造成，已由 .trip-row 的 user-select:none 等解決。
+// 診斷移除，避免每次點列都灌爆黑盒子環狀緩衝（會擠掉開機/崩潰事件）。
 
 function renderTripSheet() {
   const body = document.getElementById('sheet-body');
