@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.325';</script>
+<script>window.INDEX_VERSION = '1.1.326';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -479,6 +479,8 @@ try {
 <script>document.write('<scr' + 'ipt src="js/search-menu.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 客人取消快速收款：一鍵記一筆 $40 刷卡 -->
 <script>document.write('<scr' + 'ipt src="js/cancel-fee.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 行程列點按錯位修正（iOS）：點按由「起手那一列」直接觸發 -->
+<script>document.write('<scr' + 'ipt src="js/row-tap.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 
 <!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，
      全部失敗才自動重載一次（避免「第一次開地圖掛掉、要按重置」）。 -->

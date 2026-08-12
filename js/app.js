@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.325';
+const APP_VERSION  = '1.1.326';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -981,9 +981,9 @@ function goHome() {
   try { if (document.body.classList.contains('day-preview-active')) exitDayPreview(); } catch (_) {}
 }
 
-// 行程列觸控錯位診斷（v1.1.324）已用真機黑盒子確認修好（target=under、無 MISMATCH，
-// 落點皆在正確列內）＝iOS 選字手勢干擾造成，已由 .trip-row 的 user-select:none 等解決。
-// 診斷移除，避免每次點列都灌爆黑盒子環狀緩衝（會擠掉開機/崩潰事件）。
+// 行程列點按錯位修正已抽成模組 js/row-tap.js（MaptripRowTap，自綁 document）。
+// 心法：手指「起手的列」（touchstart target）永遠正確（真機黑盒子證實），故點按改由該列直接觸發，
+// 並 preventDefault 擋掉可能被 iOS 位移的原生 click；回饋高亮也加在正確那列。
 
 function renderTripSheet() {
   const body = document.getElementById('sheet-body');

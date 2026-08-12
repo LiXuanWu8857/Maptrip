@@ -483,7 +483,8 @@ html, body {
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-.trip-row:active { background: rgba(0,0,0,0.03); }
+/* 不用 :active（iOS 會把它畫到相鄰列＝顯示錯位）；點按回饋改由 tap-router 幫「正確那列」加 .row-tap */
+.trip-row.row-tap { background: rgba(0,0,0,0.06); }
 
 .trip-num {
   width: 30px; height: 30px; border-radius: 50%; background: #1a73e8; color: #fff;
@@ -910,7 +911,7 @@ html, body {
   .sheet-header { border-bottom-color: rgba(255,255,255,0.06); color: #e8eaed; }
   .sheet-close { color: #9aa0a6; }
   .trip-row { border-bottom-color: rgba(255,255,255,0.05); }
-  .trip-row:active { background: rgba(255,255,255,0.04); }
+  .trip-row.row-tap { background: rgba(255,255,255,0.07); }
   .trip-time { color: #e8eaed; }
   .day-summary { background: #222; border-bottom-color: rgba(255,255,255,0.05); color: #9aa0a6; }
   .fl-card { color: #6ab4ff; }
