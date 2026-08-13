@@ -292,11 +292,15 @@
   }
 
   // 「允許記帳者修改車資」開關（依 _myAllowFareEdit）。給 id 方便切換時就地更新、不整頁重畫。
-  function _fareToggleHtml() {
+  // 只有按鈕本體（切換時 outerHTML 替換這顆，不含進階說明 → 不會重複增生）。
+  function _fareBtnHtml() {
     var on = !!_myAllowFareEdit;
-    return '<div class="bk-note" style="margin-top:14px">進階：授權後，記帳者可以修改你每一趟的車資（改動會同步回你的紀錄）。</div>' +
-      '<button id="bk-faretoggle" class="bk-fare-tg' + (on ? ' on' : '') + '" onclick="MaptripBookkeeper.toggleFareEdit()">' +
+    return '<button id="bk-faretoggle" class="bk-fare-tg' + (on ? ' on' : '') + '" onclick="MaptripBookkeeper.toggleFareEdit()">' +
       (on ? '✓ 已允許記帳者修改車資（點一下關閉）' : '🔒 允許記帳者修改車資（目前關閉）') + '</button>';
+  }
+  function _fareToggleHtml() {
+    return '<div class="bk-note" style="margin-top:14px">進階：授權後，記帳者可以修改你每一趟的車資（改動會同步回你的紀錄）。</div>' +
+      _fareBtnHtml();
   }
   // 司機切換開關：樂觀更新按鈕外觀 + 寫雲端 meta/access；失敗還原。
   function toggleFareEdit() {
@@ -304,12 +308,12 @@
     var next = !_myAllowFareEdit;
     _myAllowFareEdit = next;
     var btn = document.getElementById('bk-faretoggle');
-    if (btn) btn.outerHTML = _fareToggleHtml();
+    if (btn) btn.outerHTML = _fareBtnHtml();
     S().setAllowFareEdit(next).then(function () {
       if (window.toast) toast(next ? '已允許記帳者修改車資' : '已關閉記帳者改車資');
     }).catch(function (e) {
       _myAllowFareEdit = !next;
-      var b2 = document.getElementById('bk-faretoggle'); if (b2) b2.outerHTML = _fareToggleHtml();
+      var b2 = document.getElementById('bk-faretoggle'); if (b2) b2.outerHTML = _fareBtnHtml();
       if (window.toast) toast('設定失敗：' + ((e && e.code) || '未知'));
     });
   }
