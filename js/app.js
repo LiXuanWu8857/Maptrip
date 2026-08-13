@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.332';
+const APP_VERSION  = '1.1.333';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1604,7 +1604,7 @@ function renderHistorySheet() {
           <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
         </div>`;
       }).join('');
-      return `<div class="history-day" onclick="toggleDay('${day}')">
+      return `<div class="history-day" data-row="D${day}" onclick="toggleDay('${day}')">
           <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
           <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : ''}</span>
           <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
@@ -1614,7 +1614,7 @@ function renderHistorySheet() {
         <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
     }).join('');
 
-    return `<div class="history-month" onclick="toggleMonth('${mk}')">
+    return `<div class="history-month" data-row="M${mk}" onclick="toggleMonth('${mk}')">
         <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
         <span class="month-info">
           <span class="month-title">${monthLabel}</span>
