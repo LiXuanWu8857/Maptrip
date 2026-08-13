@@ -7,3 +7,6 @@ ios/
 
 # 系統檔
 .DS_Store
+
+# 沙箱測試暫存（容器重啟會消失，不進版控）
+scratchpad/
