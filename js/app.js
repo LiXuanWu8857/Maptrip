@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.333';
+const APP_VERSION  = '1.1.334';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1177,7 +1177,7 @@ function editHistoryFare(e, day, idx) {
     if (mem) { mem.fare = fare; mem.paymentMethod = paymentMethod; mem.commission = ex.commission; mem.dispatch = ex.dispatch; mem.tip = tp.tip; mem.tipMethod = tipMethod; if (paymentMethod !== 'other') mem.label = ''; }
     _pushCommission(tripId, ex.commission, ex.dispatch);
     close();
-    renderHistorySheet();
+    renderHistorySheet(true);   // 保留目前展開的月/日與捲動位置，不跳回最新那天
   };
 
   cashBtn.onclick = () => saveEdit('cash');
@@ -1265,7 +1265,7 @@ function saveCommissionBatch() {
     if (window.MaptripSync) MaptripSync.syncDays([day]);
   }
   closeCommissionBatch();
-  renderHistorySheet();
+  renderHistorySheet(true);   // 保留目前展開的月/日與捲動位置
   toast(changed ? `已更新 ${changed} 筆抽成` : '沒有變更');
 }
 
@@ -1516,7 +1516,7 @@ function deleteHistoryTrip(e, day, idx) {
     updateTopBar();
   }
   removeTripFromStorage(trip.id);   // 儲存+雲端+墓碑
-  renderHistorySheet();
+  renderHistorySheet(true);   // 保留目前展開的月/日與捲動位置
   toast('已刪除該趟行程');
 }
 
@@ -1545,7 +1545,38 @@ function closeHistory() {
   document.getElementById('sheet-overlay').style.display = 'none';
 }
 
-function renderHistorySheet() {
+// 快照/還原「歷史清單」的展開狀態與捲動位置：編輯/刪除/補抽成後重畫時保留使用者所在位置，
+// 不要跳回「最新那天」（renderHistorySheet 預設只展開最新月/日並捲到頂）。
+function _historySnapshot() {
+  const body = document.getElementById('history-body');
+  if (!body) return null;
+  const openMonths = {}, openDays = {};
+  body.querySelectorAll('.month-days').forEach(el => { if (!el.classList.contains('collapsed')) openMonths[el.id] = 1; });
+  body.querySelectorAll('.day-rows').forEach(el => { if (!el.classList.contains('collapsed')) openDays[el.id] = 1; });
+  return { openMonths, openDays, scrollTop: body.scrollTop };
+}
+function _historyRestore(snap) {
+  if (!snap) return;
+  const body = document.getElementById('history-body');
+  if (!body) return;
+  body.querySelectorAll('.month-days').forEach(el => {
+    const open = !!snap.openMonths[el.id];
+    el.classList.toggle('collapsed', !open);
+    const caret = el.previousElementSibling && el.previousElementSibling.querySelector('.month-caret');
+    if (caret) caret.textContent = open ? '▼' : '▶';
+  });
+  body.querySelectorAll('.day-rows').forEach(el => {
+    const open = !!snap.openDays[el.id];
+    el.classList.toggle('collapsed', !open);
+    const caret = el.previousElementSibling && el.previousElementSibling.querySelector('.day-caret');
+    if (caret) caret.textContent = open ? '▼' : '▶';
+  });
+  body.scrollTop = snap.scrollTop || 0;
+}
+
+function renderHistorySheet(keepState) {
+  // keepState：保留目前展開的月/日與捲動位置（編輯/刪除/補抽成後用），避免跳回最新那天
+  const _snap = keepState ? _historySnapshot() : null;
   const body = document.getElementById('history-body');
   const raw = loadTrips();
   // 併入記帳者補登的手動紀錄（顯示層）：可能有「只有手動紀錄、沒有 GPS 行程」的日子，故取聯集
@@ -1624,6 +1655,8 @@ function renderHistorySheet() {
       </div>
       <div class="month-days${monthOpen ? '' : ' collapsed'}" id="month-days-${mk}">${daysHtml}</div>`;
   }).join('');
+
+  if (_snap) _historyRestore(_snap);   // 還原展開狀態＋捲動位置（編輯/刪除/補抽成後）
 }
 
 // 設定歷史某日休息時間（小時）— 只就地更新該日/該月工作時長，避免整頁重繪收折
@@ -1779,7 +1812,7 @@ function refreshAfterSync() {
   const ts = document.getElementById('trip-sheet');
   if (ts && ts.style.display !== 'none') renderTripSheet();
   const hs = document.getElementById('history-sheet');
-  if (hs && hs.style.display !== 'none') renderHistorySheet();
+  if (hs && hs.style.display !== 'none') renderHistorySheet(true);   // 同步回來時保留使用者所在位置
 }
 
 // ── 回放已抽到 js/replay.js（MaptripReplay）；狀態＋動畫迴圈整組搬入，用 getter 注入 map 與
