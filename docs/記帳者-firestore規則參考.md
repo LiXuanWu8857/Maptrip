@@ -11,6 +11,8 @@
 
 - `users/{driverUid}/days/{day}`　　行程（司機寫；記帳者讀）
 - `users/{driverUid}/commissions/{tripId}`　抽成（司機寫；**記帳者可寫**；司機端訂閱回讀）
+  - v291 新增選填欄位 `fareOverride`/`payOverride`（記帳者改車資，**僅在司機開啟 `allowFareEdit` 時可寫**）
+- `users/{driverUid}/meta/access` 的 `allowFareEdit: bool`（司機自己寫；記帳者可讀，決定能否改車資）
 - `users/{driverUid}/expenses/{expId}`　支出（加油等；司機寫；**記帳者可讀可寫可刪**；雙向訂閱回讀）
 - `users/{driverUid}/manualTrips/{tripId}`　手動紀錄（記帳者代補登；**記帳者可讀可寫可刪**；不寫進 days）
 - `users/{driverUid}/meta/access`　`{ bookkeepers: {uid:name}, ... }` 授權清單（只司機自己）
@@ -35,6 +37,21 @@ service cloud.firestore {
     }
     function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
 
+    // 司機是否開啟「允許記帳者改車資」（#3）。用 get() 讀 access 文件。
+    function allowsFareEdit(driverUid) {
+      return exists(/databases/$(database)/documents/users/$(driverUid)/meta/access) &&
+        get(/databases/$(database)/documents/users/$(driverUid)/meta/access).data.allowFareEdit == true;
+    }
+    // 這次寫入有沒有「改動」車資覆蓋欄位（沒帶、或帶了但值沒變＝沒改動；merge 會保留舊值故要比對）。
+    function fareOverrideUnchanged() {
+      return !('fareOverride' in request.resource.data)
+        || (resource != null && request.resource.data.fareOverride == resource.data.fareOverride);
+    }
+    function payOverrideUnchanged() {
+      return !('payOverride' in request.resource.data)
+        || (resource != null && request.resource.data.payOverride == resource.data.payOverride);
+    }
+
     match /users/{uid} {
       // 使用者本人可讀寫自己 user 文件（若有）
       allow read, write: if isOwner(uid);
@@ -45,9 +62,13 @@ service cloud.firestore {
         allow write: if isOwner(uid);
       }
 
-      // 抽成：本人讀寫；記帳者可讀可寫（這是記帳者的核心權限）
+      // 抽成：本人讀寫；記帳者可讀、可寫抽成/叫車。
+      // 但「車資覆蓋」fareOverride/payOverride（#3）＝記帳者只有在司機開啟 allowFareEdit 時才准改動。
       match /commissions/{tripId} {
-        allow read, write: if isOwner(uid) || isBookkeeper(uid);
+        allow read: if isOwner(uid) || isBookkeeper(uid);
+        allow write: if isOwner(uid)
+          || ( isBookkeeper(uid)
+               && ( (fareOverrideUnchanged() && payOverrideUnchanged()) || allowsFareEdit(uid) ) );
       }
 
       // 支出：本人讀寫；記帳者可讀可寫可刪（記帳者報表要看淨利＝營收−抽成−支出）
@@ -109,6 +130,10 @@ service cloud.firestore {
 6. **記帳者讀寫支出**：B 讀 A 的 `expenses` → 可讀；B 新增/刪一筆 A 的支出 → 可寫；A 端 `listenExpenses` 即時看到。
 7. **未授權者碰不到支出**：C（沒兌換）讀或寫 A 的 `expenses` → **必須被拒**。
 8. **撤銷後支出也讀不到**：A 撤銷 B 後，B 讀 A 的 `expenses` → **必須被拒**（`isBookkeeper` 已不成立）。
+9. **手動補登（#1）**：B 寫 A 的 `manualTrips` 一筆 → 可寫；A 端 App 訂閱後在今日/歷史看到「手動」列，A 可刪除該筆。
+10. **改車資需授權（#3）**：A 的 `allowFareEdit=false`（預設）時，B 寫含 `fareOverride` 的 commissions → **必須被拒**；
+    A 開啟開關後 B 再寫 → 可寫，且 A 端車資被覆蓋。**只帶 commission/dispatch（沒動車資）→ 不受開關影響、照常可寫。**
+11. **開關只有司機能改**：B 嘗試寫 A 的 `meta/access`（含 allowFareEdit）→ **必須被拒**（meta write 只本人）。
 
 > ⚠️ 支出含加油等個人成本，開放記帳者讀寫＝把「看帳全貌」給了記帳者。發佈前想清楚這是你要的授權範圍；
 > 若只想給「看」不給「改」，用規則裡註解的唯讀版本（read 給記帳者、write 收回本人）。

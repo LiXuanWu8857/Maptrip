@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  let auth = null, db = null, user = null, unsub = null, unsubDel = null, unsubComm = null, ready = false;
+  let auth = null, db = null, user = null, unsub = null, unsubDel = null, unsubComm = null, unsubManual = null, ready = false;
   let cloudInfo = { days: 0, trips: 0, at: 0 };   // 雲端資料摘要（診斷用）
   const warnedDays = new Set();                    // 已提示過備份失敗的日期（避免重複跳提示）
 
@@ -54,6 +54,7 @@
       if (unsub) { unsub(); unsub = null; }
       if (unsubDel) { unsubDel(); unsubDel = null; }
       if (unsubComm) { unsubComm(); unsubComm = null; }
+      if (unsubManual) { unsubManual(); unsubManual = null; }
     }
   }
 
@@ -74,6 +75,7 @@
     // 換帳號一併重置支出雲端同步（取消舊訂閱、清支出快取、下次開報表重新綁新帳號），
     // 否則會顯示上一個帳號的支出、舊訂閱還在跑（與 v265 行程隔離同一類坑）。
     try { if (window.MaptripFinance && MaptripFinance.resetExpenseSync) MaptripFinance.resetExpenseSync(); } catch (_) {}
+    try { if (window.MaptripManual && MaptripManual.clear) MaptripManual.clear(); } catch (_) {}   // 換帳號清手動紀錄快取
     try { if (window.refreshAfterSync) window.refreshAfterSync(); } catch (_) {}
     log('account switch → local cleared');
   }
@@ -85,6 +87,7 @@
     if (unsub) { unsub(); unsub = null; }
     if (unsubDel) { unsubDel(); unsubDel = null; }
     if (unsubComm) { unsubComm(); unsubComm = null; }
+    if (unsubManual) { unsubManual(); unsubManual = null; }
     pullAndListen();
     toastMsg('已清除本機並重新從雲端下載');
   }
@@ -225,7 +228,7 @@
   }
   // 記帳者：讀某司機的行程 + 抽成 + 名稱
   async function readDriverData(driverUid) {
-    var res = { days: {}, commissions: {}, expenses: [], manualTrips: [], name: '' };
+    var res = { days: {}, commissions: {}, expenses: [], manualTrips: [], name: '', allowFareEdit: false };
     if (!ready || !user) return res;
     var base = db.collection('users').doc(driverUid);
     // 五個子集合原本逐一 await（序列 5 趟 round-trip，記帳者選司機後常等很久）。
@@ -238,23 +241,29 @@
       base.collection('days').get(),                 // 不吞：失敗要拋
       soft(base.collection('commissions').get()),
       soft(base.collection('expenses').get()),
-      soft(base.collection('manualTrips').get())
+      soft(base.collection('manualTrips').get()),
+      soft(base.collection('meta').doc('access').get())   // 授權改車資開關（#3）
     ]);
-    var p = r[0], q = r[1], cq = r[2], eq = r[3], mq = r[4];
+    var p = r[0], q = r[1], cq = r[2], eq = r[3], mq = r[4], ac = r[5];
     if (p && p.exists) res.name = (p.data().name) || '';
     q.forEach(function (doc) { res.days[doc.id] = (doc.data() || {}).trips || []; });
     if (cq) cq.forEach(function (doc) { res.commissions[doc.id] = doc.data() || {}; });
     if (eq) eq.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; res.expenses.push(e); });
     if (mq) mq.forEach(function (doc) { var m = doc.data() || {}; m.id = doc.id; res.manualTrips.push(m); });
+    if (ac && ac.exists) res.allowFareEdit = !!(ac.data() || {}).allowFareEdit;
     return res;
   }
-  // 司機本人或記帳者：寫某司機某趟的抽成
-  async function writeCommission(driverUid, tripId, commission, dispatch) {
+  // 司機本人或記帳者：寫某司機某趟的抽成（extra 可帶 {fareOverride, payOverride}＝記帳者改車資，#3）。
+  // fareOverride/payOverride 傳 undefined 就不動該欄位（merge:true）；傳 null 代表清除覆蓋。
+  async function writeCommission(driverUid, tripId, commission, dispatch, extra) {
     if (!ready || !user) throw new Error('尚未登入');
+    var payload = { commission: commission || 0, dispatch: dispatch || 0, updatedAt: Date.now(), by: user.uid };
+    if (extra && 'fareOverride' in extra) payload.fareOverride = extra.fareOverride;   // 可為數字或 null（清除）
+    if (extra && 'payOverride' in extra) payload.payOverride = extra.payOverride;
     await db.collection('users').doc(driverUid).collection('commissions').doc(String(tripId))
-      .set({ commission: commission || 0, dispatch: dispatch || 0, updatedAt: Date.now(), by: user.uid }, { merge: true });
+      .set(payload, { merge: true });
   }
-  // 司機本人：主動抓一次自己的抽成集合（記帳者填的），套進本機各趟 t.commission/t.dispatch。
+  // 司機本人：主動抓一次自己的抽成集合（記帳者填的抽成/車資覆蓋），套進本機各趟。
   // 平常有 onSnapshot 即時同步，這支供「收支」手動更新鈕：登入即抓、不必等監聽。回傳套用筆數。
   async function pullCommissions() {
     if (!ready || !user) throw new Error('尚未登入');
@@ -262,9 +271,24 @@
     var applied = 0;
     snap.forEach(function (doc) {
       var c = doc.data() || {};
-      if (window.applyCommission && window.applyCommission(doc.id, c.commission || 0, c.dispatch || 0)) applied++;
+      if (window.applyCommission && window.applyCommission(doc.id, c.commission || 0, c.dispatch || 0, c.fareOverride, c.payOverride)) applied++;
     });
     return applied;
+  }
+  // ── 授權記帳者改車資的開關（meta/access.allowFareEdit）──
+  // 讀司機的 access 文件（bookkeepers + allowFareEdit）。記帳者讀某司機、司機讀自己皆可。
+  async function getAccess(driverUid) {
+    if (!ready || !user) return { bookkeepers: {}, allowFareEdit: false };
+    var uid = driverUid || user.uid;
+    var snap = await db.collection('users').doc(uid).collection('meta').doc('access').get();
+    var d = (snap.exists && snap.data()) || {};
+    return { bookkeepers: d.bookkeepers || {}, allowFareEdit: !!d.allowFareEdit };
+  }
+  // 司機本人：設定「允許記帳者修改車資」開關。
+  async function setAllowFareEdit(on) {
+    if (!ready || !user) throw new Error('尚未登入');
+    await db.collection('users').doc(user.uid).collection('meta').doc('access')
+      .set({ allowFareEdit: !!on }, { merge: true });
   }
 
   // ── 支出（expenses）：司機本人或記帳者皆可讀寫某司機的支出集合 ──
@@ -429,16 +453,24 @@
     if (unsub) unsub();
     if (unsubDel) unsubDel();
     if (unsubComm) unsubComm();
+    if (unsubManual) unsubManual();
     try {
-      // 監聽自己的「抽成」集合：記帳者改的抽成會即時同步回司機本機
+      // 監聽自己的「抽成」集合：記帳者改的抽成/車資覆蓋會即時同步回司機本機
       unsubComm = db.collection('users').doc(user.uid).collection('commissions').onSnapshot(snap => {
         let changed = false;
         snap.forEach(doc => {
           const c = doc.data() || {};
-          if (window.applyCommission && window.applyCommission(doc.id, c.commission || 0, c.dispatch || 0)) changed = true;
+          if (window.applyCommission && window.applyCommission(doc.id, c.commission || 0, c.dispatch || 0, c.fareOverride, c.payOverride)) changed = true;
         });
         if (changed && window.refreshAfterSync) window.refreshAfterSync();
       }, err => log('comm snapshot err ' + (err && err.code)));
+    } catch (_) {}
+    try {
+      // 監聽自己的「手動補登」集合：記帳者代補的紀錄 → 顯示層合併（不進 days）
+      unsubManual = db.collection('users').doc(user.uid).collection('manualTrips').onSnapshot(snap => {
+        var list = []; snap.forEach(doc => { var m = doc.data() || {}; m.id = doc.id; list.push(m); });
+        if (window.MaptripManual) { MaptripManual.set(list); if (window.refreshAfterSync) window.refreshAfterSync(); }
+      }, err => log('manual snapshot err ' + (err && err.code)));
     } catch (_) {}
     try {
       // 先訂閱刪除名單（墓碑），確保天資料抵達前就知道哪些趟已刪除
@@ -577,6 +609,7 @@
     listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,
     listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
     readDriverData: readDriverData, writeCommission: writeCommission, pullCommissions: pullCommissions,
+    getAccess: getAccess, setAllowFareEdit: setAllowFareEdit,
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
     resetLocal: resetLocal,

@@ -125,6 +125,8 @@
   // 算錢部分改走共用 monthReport（單一來源）；工時 workMs 仍在此就地累加（需 app.js 全域）。
   function revenueOfMonth(month) {
     var raw = (window.loadTrips ? loadTrips() : {}) || {};
+    // 併入記帳者補登的手動紀錄（顯示層，不進 days）→ 車資算進營收（工時 workMs 內部排除手動）
+    if (window.MaptripManual && MaptripManual.mergeInto) raw = MaptripManual.mergeInto(raw);
     var rep = monthReport(raw, null, null, month);   // commissions=null → 用行程自帶 t.commission
     var workMs = 0;
     Object.keys(raw).forEach(function (day) {

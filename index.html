@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.327';</script>
+<script>window.INDEX_VERSION = '1.1.328';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -435,6 +435,8 @@ try {
 <!-- 通用工具函式（距離/格式化/費用/休息時間）：無依賴，最先載，app.js 薄包裝在載入時即引用 -->
 <script>document.write('<scr' + 'ipt src="js/util.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/store.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 記帳者補登紀錄的顯示層合併（不進 days）：sync.js/app.js/finance.js 都會用到，排在它們之前 -->
+<script>document.write('<scr' + 'ipt src="js/manual-trips.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/sync.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/finance.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/bookkeeper.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>

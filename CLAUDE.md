@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.291**（2026-08-05）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.328**（2026-08-05）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -107,6 +107,22 @@
   預覽上加勾選框 `#shot-other-cb`「包含『其他』紀錄」（`_showOtherToggle` 依當天有無「其他」顯示/隱藏；勾選即
   `captureTripsScreenshot(_shotDayKey, checked)` 重畫）。整天都是「其他」→ 無法排除則自動包含。單趟截圖不顯示此框。
   測試 `misc290.js`（勾選框存在/預設隱藏/文案）
+- **記帳者補登紀錄同步到司機（v328，#1）** `js/manual-trips.js`（MaptripManual）：記帳者代補登的
+  `manualTrips` 用**顯示層合併**併進司機的今日/歷史（標「手動」、司機可刪），**絕不寫進 days**（避免污染雲端、
+  避免被司機存檔蓋掉）。記憶體＋localStorage 快取；`set/forDay/mergeDay/mergeInto/days/remove/clear`，手動趟標
+  `_manual`、依 startTime 排序、GPS 原物件不改。`sync.js` 司機登入後訂閱自己的 manualTrips → `MaptripManual.set`
+  → `refreshAfterSync`（`unsubManual`，換帳號 clear）。`app.js` renderTripSheet/renderHistorySheet 併入（含
+  只有手動的日子取聯集）、GPS 列用真實索引呼叫既有 handler、手動列走 `deleteManualRow`→`deleteManualTrip`；
+  金額算進當日總計。`finance.js` `revenueOfMonth` 用 `MaptripManual.mergeInto` 把手動車資算進月營收（工時 workMs
+  內部排除手動）。測試 `manualmerge.js` 13 項。
+- **授權記帳者改車資（v328，#3）**：記帳者改的車資存成**覆蓋值** `fareOverride/payOverride`（放 `commissions/{tripId}`
+  文件），司機 App 讀到就套用。`sync.js` `writeCommission(...,extra)`＋`getAccess/setAllowFareEdit`；`readDriverData`
+  回 `allowFareEdit`；commissions 監聽/`pullCommissions` 帶 override 給 `applyCommission`（app.js 擴充：套 fareOverride
+  →`t.fare`（清 `_roadBad`）、payOverride→`t.paymentMethod`，沿用「寫 days＋存檔」路徑，收支自然一致）。司機端同步面板
+  加「允許記帳者修改車資」開關（`meta/access.allowFareEdit`，**預設關**，`sync-ui.js toggleAllowFareEdit`）。
+  `bookkeeper.js` 授權時編輯列才出現車資輸入框、存檔寫 fareOverride、列顯示覆蓋車資（`edited` 標記）。
+  **安全根在 Firestore 規則**：commissions 寫入含 `fareOverride/payOverride` 需 `allowFareEdit==true`（見規則參考 doc
+  第 9–11 項，**務必第二帳號實測**）。測試 `farebk.js` 10、`applyoverride.js` 13（抽提 applyCommission 驗覆蓋邏輯）。
 - **上車熱點 × 時段（v248，在「分析」分頁）** `js/finance.js`：把每趟 `coords[0]`
   上車點聚成 300m 網格，跨全部歷史（不受月份篩選，因熱點需要量）＋一天切 8 段
   （清晨/早尖峰/上午/中午/下午/晚尖峰/晚間/深夜，深夜跨午夜）。呈現「各時段最熱上車點」
@@ -384,7 +400,8 @@
   `storage.js`（序列化/合併存檔/壓實/墓碑/營業日，store.js 之上的高階持久化；注入 getTodayTrips；
   retrySnapBacklog/loadTodayFromStorage 因重畫地圖留 app.js）、`sync-ui.js`（登入閘門/同步面板 UI，
   sync.js 之上；refreshAfterSync 留 app.js）、`orient.js`（羅盤/朝車頭/方向光束，依賴注入 map 與
-  heading 狀態；對外開 cancelBearingAnim/syncBearingFromMap 供 initMap 手勢/rotate 呼叫）。
+  heading 狀態；對外開 cancelBearingAnim/syncBearingFromMap 供 initMap 手勢/rotate 呼叫）、
+  `manual-trips.js`（v328，記帳者補登紀錄的顯示層合併 MaptripManual，不進 days）。
   **app.js 3909→2225 行**。剩多為歷史清單/單趟預覽 UI（重耦合 map/圖層/DOM，逐一小抽即可）。
   後續新模組：`nav.js`（一鍵導航選單）、`nearby.js`（找附近加油/停車/超商，Overpass）、
   `addr-search.js`（搜尋地址）、`search-menu.js`（右下角搜尋 FAB speed-dial）、

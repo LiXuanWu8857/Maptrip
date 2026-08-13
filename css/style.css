@@ -485,6 +485,13 @@ html, body {
 }
 /* 不用 :active，也不加 .row-tap 背景高亮：iOS 會把清單列的背景高亮「畫到相鄰下一列」（合成位移），
    造成「高亮顯示在按的下面那格」。tap-router 已讓點按立即開啟正確那趟＝已有回饋，不需背景高亮。 */
+/* 記帳者補登的手動紀錄列：淡橘底 + 「手動」小標（靜態背景、非點按高亮，不受上述合成位移影響） */
+.trip-row.manual-row { background: rgba(245,124,0,0.05); cursor: default; }
+.manual-badge { display: inline-block; font-size: 0.64rem; font-weight: 700; color: #e8710a;
+  background: rgba(245,124,0,0.12); border-radius: 5px; padding: 1px 6px; vertical-align: middle; }
+@media (prefers-color-scheme: dark) {
+  .trip-row.manual-row { background: rgba(245,124,0,0.10); }
+}
 
 .trip-num {
   width: 30px; height: 30px; border-radius: 50%; background: #1a73e8; color: #fff;

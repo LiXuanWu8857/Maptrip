@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.327';
+const APP_VERSION  = '1.1.328';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -8,26 +8,26 @@ function saveTrips(raw) { TripStore.setAll(raw); }
 
 // 把「抽成集合」的某趟抽成套回本機行程（記帳者在雲端改抽成 → 司機本機同步）。
 // 回傳 true 表示有變動（呼叫端據以重繪）。
-function applyCommission(tripId, commission, dispatch) {
+// 套記帳者填的抽成/叫車，以及（#3）授權時的「車資覆蓋」fareOverride/payOverride。
+// override 傳 undefined＝該欄位不動；傳數字/字串＝套用。沿用「寫進 days＋存檔」路徑（與抽成同一條，
+// 收支報表自然跟著對）。回傳是否有變動（有才觸發重畫）。
+function applyCommission(tripId, commission, dispatch, fareOverride, payOverride) {
   try {
     const id = isNaN(+tripId) ? tripId : +tripId;   // 趟 id 通常是數字
     const raw = loadTrips();
     let changed = false;
-    Object.keys(raw).forEach(day => {
-      (raw[day] || []).forEach(t => {
-        if (t && (t.id === id || String(t.id) === String(tripId))) {
-          if ((t.commission || 0) !== (commission || 0) || (t.dispatch || 0) !== (dispatch || 0)) {
-            t.commission = commission || 0; t.dispatch = dispatch || 0; changed = true;
-          }
-        }
-      });
-    });
+    const apply = (t) => {
+      if (!(t && (t.id === id || String(t.id) === String(tripId)))) return;
+      if ((t.commission || 0) !== (commission || 0) || (t.dispatch || 0) !== (dispatch || 0)) {
+        t.commission = commission || 0; t.dispatch = dispatch || 0; changed = true;
+      }
+      if (fareOverride != null && (t.fare || 0) !== fareOverride) { t.fare = fareOverride; delete t._roadBad; changed = true; }
+      if (payOverride != null && payOverride !== '' && t.paymentMethod !== payOverride) { t.paymentMethod = payOverride; changed = true; }
+    };
+    Object.keys(raw).forEach(day => (raw[day] || []).forEach(apply));
     if (changed) {
       saveTrips(raw);
-      // 記憶體中的今日清單也同步
-      todayTrips.forEach(t => {
-        if (t && (t.id === id || String(t.id) === String(tripId))) { t.commission = commission || 0; t.dispatch = dispatch || 0; }
-      });
+      todayTrips.forEach(apply);   // 記憶體中的今日清單也同步
     }
     return changed;
   } catch (_) { return false; }
@@ -987,17 +987,20 @@ function goHome() {
 
 function renderTripSheet() {
   const body = document.getElementById('sheet-body');
-  if (!todayTrips.length) {
+  const dk = todayKey();
+  // 併入記帳者補登的手動紀錄（顯示層，不進 days）：依 startTime 排序
+  const merged = window.MaptripManual ? MaptripManual.mergeDay(todayTrips, dk) : todayTrips;
+  if (!merged.length) {
     body.innerHTML = '<div class="empty-state">今日尚無行程紀錄<br>按「開始行程」開始追蹤</div>'; return;
   }
-  const totalDist = todayTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
-  const restMin = getRestMin(todayKey());
+  const totalDist = merged.reduce((s, t) => s + (t.totalDist || 0), 0);
+  const restMin = getRestMin(dk);
   const restHr = restMin ? +(restMin / 60).toFixed(2) : '';
-  const work = workMs(todayTrips, restMin);
-  const fareLine = _fareLineHtml(todayTrips, work);
+  const work = workMs(merged, restMin);              // 手動趟無 endTime，workMs 內部自動排除
+  const fareLine = _fareLineHtml(merged, work);      // 車資統計含手動趟
   const summary = `<div class="day-summary">
     <div class="ds-top">
-      <span>${todayTrips.length} 趟</span>
+      <span>${merged.length} 趟</span>
       <span>${fmtDist(totalDist)}</span>
       <button class="screenshot-btn" onclick="captureTripsScreenshot(null)">截圖</button>
     </div>
@@ -1009,20 +1012,51 @@ function renderTripSheet() {
                value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span>
     </div>
   </div>`;
-  body.innerHTML = summary + todayTrips.map((t, i) => `
-    <div class="trip-row" data-row="t${i}" onclick="showSoloTripFromToday(${i}); closeSheet()">
+  body.innerHTML = summary + merged.map((t, i) => {
+    if (t._manual) return _manualRowHtml(t, i + 1);
+    const oi = todayTrips.indexOf(t);                // GPS 趟：用真實索引呼叫既有 handler
+    return `
+    <div class="trip-row" data-row="t${i}" onclick="showSoloTripFromToday(${oi}); closeSheet()">
       <div class="trip-num">${i + 1}</div>
       <div class="trip-meta">
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
         <div class="trip-stats">
           ${fmtDist(t.totalDist)}
           ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}
-          <button class="fare-edit-btn" onclick="editFare(event,${i})">${(t.fare || t.paymentMethod === 'other') ? '✏' : '＋金額'}</button>
+          <button class="fare-edit-btn" onclick="editFare(event,${oi})">${(t.fare || t.paymentMethod === 'other') ? '✏' : '＋金額'}</button>
         </div>
       </div>
-      <span class="trip-shot" onclick="captureTodayTripShot(event,${i})">📷</span>
-      <span class="trip-del" onclick="deleteTodayTrip(event,${i})">🗑</span>
-    </div>`).join('');
+      <span class="trip-shot" onclick="captureTodayTripShot(event,${oi})">📷</span>
+      <span class="trip-del" onclick="deleteTodayTrip(event,${oi})">🗑</span>
+    </div>`;
+  }).join('');
+}
+
+// 手動紀錄列（記帳者補登；司機可刪、不可編、無地圖）。n＝顯示序號。
+function _manualRowHtml(t, n) {
+  const fareTag = t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t);
+  return `
+    <div class="trip-row manual-row">
+      <div class="trip-num">${n}</div>
+      <div class="trip-meta">
+        <div class="trip-time">${fmtTime(t.startTime)}　<span class="manual-badge">手動</span></div>
+        <div class="trip-stats">${fareTag}${_extraTag(t)}</div>
+      </div>
+      <span class="trip-del" onclick="deleteManualRow(event,'${String(t.id).replace(/'/g, "\\'")}')">🗑</span>
+    </div>`;
+}
+
+// 司機刪除記帳者補登的手動紀錄（刪雲端那筆；不動 days）
+function deleteManualRow(e, id) {
+  if (e) e.stopPropagation();
+  if (!confirm('刪除這筆手動紀錄？')) return;
+  try {
+    if (window.MaptripManual) MaptripManual.remove(id);      // 樂觀移除，畫面即時消失
+    if (window.MaptripSync && MaptripSync.deleteManualTrip && MaptripSync.myUid && MaptripSync.myUid()) {
+      MaptripSync.deleteManualTrip(MaptripSync.myUid(), id).catch(() => toast('刪除未同步到雲端'));
+    }
+  } catch (_) {}
+  refreshAfterSync();
 }
 
 // 設定今日休息時間（輸入為小時，內部存分鐘）
@@ -1514,7 +1548,13 @@ function closeHistory() {
 function renderHistorySheet() {
   const body = document.getElementById('history-body');
   const raw = loadTrips();
-  const days = Object.keys(raw).sort().reverse().filter(d => raw[d]?.length > 0);
+  // 併入記帳者補登的手動紀錄（顯示層）：可能有「只有手動紀錄、沒有 GPS 行程」的日子，故取聯集
+  const daySet = {};
+  Object.keys(raw).forEach(d => { if (raw[d] && raw[d].length) daySet[d] = 1; });
+  if (window.MaptripManual) MaptripManual.days().forEach(d => { daySet[d] = 1; });
+  const mergedByDay = {};
+  Object.keys(daySet).forEach(d => { mergedByDay[d] = window.MaptripManual ? MaptripManual.mergeDay(raw[d] || [], d) : (raw[d] || []); });
+  const days = Object.keys(daySet).filter(d => mergedByDay[d].length).sort().reverse();
   if (!days.length) { body.innerHTML = '<div class="empty-state">尚無歷史紀錄</div>'; return; }
 
   // 依月份（YYYY-MM）分組，月份由近到遠
@@ -1528,16 +1568,16 @@ function renderHistorySheet() {
   let globalDayIdx = 0;
   body.innerHTML = months.map((mk, monthIdx) => {
     const mDays = monthMap[mk];
-    const mTrips = mDays.flatMap(d => raw[d]);
+    const mTrips = mDays.flatMap(d => mergedByDay[d]);
     const mDist = mTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
-    const mWork = mDays.reduce((s, d) => s + workMs(raw[d], getRestMin(d)), 0);
+    const mWork = mDays.reduce((s, d) => s + workMs(mergedByDay[d], getRestMin(d)), 0);
     const mFareLine = _fareLineHtml(mTrips, mWork);
     const [yy, mm] = mk.split('-');
     const monthLabel = `${yy}年${parseInt(mm, 10)}月`;
     const monthOpen = monthIdx === 0;   // 最近月份展開，較遠月份預設收折
 
     const daysHtml = mDays.map(day => {
-      const trips = raw[day];
+      const trips = mergedByDay[day];
       const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
       const dRestMin = getRestMin(day);
       const dRestHr = dRestMin ? +(dRestMin / 60).toFixed(2) : '';
@@ -1548,17 +1588,22 @@ function renderHistorySheet() {
       const restRow = `<div class="dr-rest">工作 <b id="work-${day}">${fmtWork(dWork)}</b>　休息
         <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5"
                value="${dRestHr}" placeholder="0" onchange="setHistoryRest('${day}', this.value)"> 小時</div>`;
-      const rows = restRow + trips.map((t, i) => `
-        <div class="trip-row" data-row="h${i}" onclick="showHistoryTrip('${day}',${i})">
+      const rows = restRow + trips.map((t, i) => {
+        if (t._manual) return _manualRowHtml(t, i + 1);
+        const oi = (raw[day] || []).indexOf(t);        // GPS 趟：用真實索引呼叫既有 handler
+        return `
+        <div class="trip-row" data-row="h${i}" onclick="showHistoryTrip('${day}',${oi})">
+
           <div class="trip-num">${i + 1}</div>
           <div class="trip-meta">
             <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
             <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
           </div>
-          <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${i})">✏</span>
-          <span class="trip-del" onclick="deleteHistoryTrip(event,'${day}',${i})">🗑</span>
+          <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${oi})">✏</span>
+          <span class="trip-del" onclick="deleteHistoryTrip(event,'${day}',${oi})">🗑</span>
           <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
-        </div>`).join('');
+        </div>`;
+      }).join('');
       return `<div class="history-day" onclick="toggleDay('${day}')">
           <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
           <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : ''}</span>
