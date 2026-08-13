@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.328**（2026-08-05）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.330**（2026-08-05）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -119,8 +119,12 @@
   文件），司機 App 讀到就套用。`sync.js` `writeCommission(...,extra)`＋`getAccess/setAllowFareEdit`；`readDriverData`
   回 `allowFareEdit`；commissions 監聽/`pullCommissions` 帶 override 給 `applyCommission`（app.js 擴充：套 fareOverride
   →`t.fare`（清 `_roadBad`）、payOverride→`t.paymentMethod`，沿用「寫 days＋存檔」路徑，收支自然一致）。司機端同步面板
-  加「允許記帳者修改車資」開關（`meta/access.allowFareEdit`，**預設關**，`sync-ui.js toggleAllowFareEdit`）。
+  加「允許記帳者修改車資」開關（`meta/access.allowFareEdit`，**預設關**）。
   `bookkeeper.js` 授權時編輯列才出現車資輸入框、存檔寫 fareOverride、列顯示覆蓋車資（`edited` 標記）。
+  **v330 修兩點（使用者回報）**：①開關本來放在**同步面板**、使用者在「記帳者」面板找不到 → **移到記帳者面板
+  『授權我的記帳者』區**（`bookkeeper.js toggleFareEdit`/`_fareToggleHtml`；`sync-ui.js` 的版本已移除）；②記帳者
+  首頁開啟慢 → `renderHome` 的 `listBookkeepers/listLinkedDrivers/getAccess` 三讀改 `Promise.all` 併發
+  （processInviteClaims 仍先跑，因有寫入副作用）。交接文件見 `docs/記帳者-功能與交接.md`。測試 `bkfaretoggle.js` 8。
   **安全根在 Firestore 規則**：commissions 寫入含 `fareOverride/payOverride` 需 `allowFareEdit==true`（見規則參考 doc
   第 9–11 項，**務必第二帳號實測**）。測試 `farebk.js` 10、`applyoverride.js` 13（抽提 applyCommission 驗覆蓋邏輯）。
 - **上車熱點 × 時段（v248，在「分析」分頁）** `js/finance.js`：把每趟 `coords[0]`

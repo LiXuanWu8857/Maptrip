@@ -13,7 +13,6 @@
   'use strict';
 
   var ctx = {};
-  var _allowFareEdit = null;   // 授權記帳者改車資開關的狀態快取（null＝未抓、undefined＝抓取中）
   function APPVER() { return ctx.appVersion || ''; }
 
   function openSyncDialog() {
@@ -81,7 +80,6 @@
       statusEl.innerHTML = '雲端同步尚未設定完成，請稍後再試。';
       actEl.innerHTML = '';
     } else if (st.state === 'signedout') {
-      _allowFareEdit = null;   // 登出 → 清掉開關快取
       // 保留已輸入的值（重繪時不清空）
       const prevEmail = (document.getElementById('sync-email') || {}).value || '';
       const prevPw = (document.getElementById('sync-pw') || {}).value || '';
@@ -98,41 +96,12 @@
       statusEl.innerHTML = '已登入　<b>' + (st.email || '') + '</b><br><span class="sync-ok">✓ 行程自動同步中</span>'
         + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟'
         + '　本機：' + (TripStore.bytes() / 1048576).toFixed(1) + ' MB（' + TripStore.mode() + '）</span>';
-      // 授權記帳者改車資開關：狀態快取，第一次登入態渲染時抓一次（避免每次重繪都打雲端）
-      if (_allowFareEdit === null && MaptripSync.getAccess) {
-        _allowFareEdit = undefined;   // 抓取中，避免重複發起
-        MaptripSync.getAccess().then(function (a) { _allowFareEdit = !!a.allowFareEdit; renderSyncPanel(); })
-          .catch(function () { _allowFareEdit = false; renderSyncPanel(); });
-      }
-      var fareBtn = '';
-      if (_allowFareEdit === undefined) {
-        fareBtn = '<button class="sync-out" style="margin-top:6px" disabled>車資授權：載入中…</button>';
-      } else {
-        var on = !!_allowFareEdit;
-        fareBtn = '<button class="sync-out" style="margin-top:6px' + (on ? ';color:#188038;border-color:rgba(24,128,56,.4)' : '') + '" ' +
-          (busy ? 'disabled' : '') + ' onclick="MaptripSyncUI.toggleAllowFareEdit()">' +
-          (on ? '✓ 記帳者可改車資（點一下關閉）' : '🔒 允許記帳者修改車資') + '</button>' +
-          '<div class="sync-hint" style="margin-top:4px">開啟後，記帳者才能修改你的每趟車資（改動會同步回你的紀錄）。</div>';
-      }
+      // 「允許記帳者修改車資」開關已移到「記帳者」面板的『授權我的記帳者』區（語意相符處），此處不再放。
       actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
-        fareBtn +
         '<button class="sync-out" style="margin-top:6px" ' +
         'onclick="if(confirm(\'清除這台裝置的本機行程，改從雲端重新下載？（用於：換帳號後仍看到別帳號的行程）\'))MaptripSync.resetLocal()">' +
         '🧹 清除本機並重抓雲端</button>';
     }
-  }
-
-  // 司機切換「允許記帳者修改車資」：樂觀更新 + 寫雲端；失敗還原。
-  function toggleAllowFareEdit() {
-    if (!(window.MaptripSync && MaptripSync.setAllowFareEdit)) return;
-    var next = !_allowFareEdit;
-    _allowFareEdit = next; renderSyncPanel();
-    MaptripSync.setAllowFareEdit(next).then(function () {
-      if (window.toast) toast(next ? '已允許記帳者修改車資' : '已關閉記帳者改車資');
-    }).catch(function (e) {
-      _allowFareEdit = !next; renderSyncPanel();
-      if (window.toast) toast('設定失敗：' + ((e && e.code) || '未知'));
-    });
   }
 
   function submitSyncLogin() {
@@ -151,8 +120,7 @@
     submitGateLogin: submitGateLogin,
     maybeAskName: maybeAskName,
     renderSyncPanel: renderSyncPanel,
-    submitSyncLogin: submitSyncLogin,
-    toggleAllowFareEdit: toggleAllowFareEdit
+    submitSyncLogin: submitSyncLogin
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

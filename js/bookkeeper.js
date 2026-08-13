@@ -14,6 +14,7 @@
   var _cache = null;       // 某司機的 { days, commissions, expenses, name }
   var _bks = [];           // 目前清單：授權我的記帳者（onclick 只傳 uid、名字查表，杜絕注入）
   var _drivers = [];       // 目前清單：我協助記帳的司機
+  var _myAllowFareEdit = false;   // 我（司機）是否允許記帳者改我的車資（#3；meta/access.allowFareEdit）
   var _docClickWired = false;
   var _mount = 'bk-body';  // 內容寫進哪個容器 id：sheet 模式='bk-body'；電腦滿版='bk-home-body'
 
@@ -63,6 +64,9 @@
       'border:none;background:var(--bk-acc-fill);border-radius:12px;font-size:.92rem;color:var(--bk-on-acc);font-weight:600;font-family:inherit;cursor:pointer}' +
       '.bk-div{height:1px;background:var(--bk-bd);margin:20px 0}' +
       '.bk-note{font-size:.74rem;color:var(--bk-muted);margin:0 2px 10px;line-height:1.6}' +
+      '.bk-fare-tg{width:100%;margin-top:4px;padding:11px;border:1px solid var(--bk-bd);background:var(--bk-s1);' +
+      'border-radius:12px;font-size:.86rem;color:var(--bk-t2);font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.bk-fare-tg.on{background:var(--bk-acc-bg);color:var(--bk-acc-t);border-color:var(--bk-acc-t)}' +
       '.bk-hrow{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:.5px solid var(--bk-bd)}' +
       '.bk-hrow .nm{flex:1;font-size:.9rem;color:var(--bk-text)}' +
       '.bk-hrow .op{background:none;border:none;color:var(--bk-danger);font-size:.8rem;font-family:inherit;cursor:pointer;padding:4px 6px}' +
@@ -250,10 +254,15 @@
     setTitle('記帳者');
     setBody('<div class="bk-empty">載入中…</div>');
     var s = S();
-    var bks = [], drivers = [];
+    // processInviteClaims 有副作用（把待處理的兌換寫成授權），要先跑完；之後三個讀取併發（加速開啟）。
     try { if (s.processInviteClaims) await s.processInviteClaims(); } catch (_) {}
-    try { bks = await s.listBookkeepers(); } catch (_) {}
-    try { drivers = await s.listLinkedDrivers(); } catch (_) {}
+    var res = await Promise.all([
+      (s.listBookkeepers ? s.listBookkeepers() : Promise.resolve([])).catch(function () { return []; }),
+      (s.listLinkedDrivers ? s.listLinkedDrivers() : Promise.resolve([])).catch(function () { return []; }),
+      (s.getAccess ? s.getAccess() : Promise.resolve({ allowFareEdit: false })).catch(function () { return { allowFareEdit: false }; })
+    ]);
+    var bks = res[0] || [], drivers = res[1] || [];
+    _myAllowFareEdit = !!(res[2] && res[2].allowFareEdit);
     _bks = bks || []; _drivers = drivers || [];   // onclick 只傳安全的 uid，名字查表
 
     var h = '';
@@ -277,7 +286,32 @@
         '<button class="op" onclick="MaptripBookkeeper.removeBk(\'' + esc(b.uid) + '\')">撤銷</button></div>';
     });
     h += '<button class="bk-solid" onclick="MaptripBookkeeper.invite()">＋ 產生邀請碼給記帳者</button>';
+    // 允許記帳者修改車資（#3）：預設關；開了記帳者才能改你的每趟車資
+    h += _fareToggleHtml();
     setBody(h);
+  }
+
+  // 「允許記帳者修改車資」開關（依 _myAllowFareEdit）。給 id 方便切換時就地更新、不整頁重畫。
+  function _fareToggleHtml() {
+    var on = !!_myAllowFareEdit;
+    return '<div class="bk-note" style="margin-top:14px">進階：授權後，記帳者可以修改你每一趟的車資（改動會同步回你的紀錄）。</div>' +
+      '<button id="bk-faretoggle" class="bk-fare-tg' + (on ? ' on' : '') + '" onclick="MaptripBookkeeper.toggleFareEdit()">' +
+      (on ? '✓ 已允許記帳者修改車資（點一下關閉）' : '🔒 允許記帳者修改車資（目前關閉）') + '</button>';
+  }
+  // 司機切換開關：樂觀更新按鈕外觀 + 寫雲端 meta/access；失敗還原。
+  function toggleFareEdit() {
+    if (!(S() && S().setAllowFareEdit)) { if (window.toast) toast('雲端未啟用'); return; }
+    var next = !_myAllowFareEdit;
+    _myAllowFareEdit = next;
+    var btn = document.getElementById('bk-faretoggle');
+    if (btn) btn.outerHTML = _fareToggleHtml();
+    S().setAllowFareEdit(next).then(function () {
+      if (window.toast) toast(next ? '已允許記帳者修改車資' : '已關閉記帳者改車資');
+    }).catch(function (e) {
+      _myAllowFareEdit = !next;
+      var b2 = document.getElementById('bk-faretoggle'); if (b2) b2.outerHTML = _fareToggleHtml();
+      if (window.toast) toast('設定失敗：' + ((e && e.code) || '未知'));
+    });
   }
 
   // ---------- 某司機檢視（記帳者）：載入 + 繪製分離（月份切換/編輯免重抓） ----------
@@ -828,7 +862,7 @@
     open: open, close: close, render: render, mountAsHome: mountAsHome, invite: invite, copy: copy, join: join,
     removeBk: removeBk, unlink: unlink, removeCurrentDriver: removeCurrentDriver,
     openDriver: openDriver, switchDriver: switchDriver, toggleDrvMenu: toggleDrvMenu, setMonth: setMonth,
-    back: back, edit: edit, saveComm: saveComm,
+    back: back, edit: edit, saveComm: saveComm, toggleFareEdit: toggleFareEdit,
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
