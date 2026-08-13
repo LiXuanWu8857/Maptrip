@@ -1,7 +1,8 @@
 /* =============================================================
  * row-tap.js — 行程列點按錯位修正（MaptripRowTap）
  * -------------------------------------------------------------
- * 問題：iOS WKWebView 在底部 sheet 的行程清單裡，點某一列時「顯示/開啟」會落到相鄰的下一列。
+ * 問題：iOS WKWebView 在底部 sheet 的堆疊清單（行程列／歷史日期列／月份列）裡，
+ * 點某一列時「顯示/開啟」會落到相鄰的下一列。
  * 真機黑盒子（rowtap 診斷）證實：touchstart 事件路由到的列（＝手指起手那一列）永遠正確，
  * 但原生 :active／合成 click 有時被位移到相鄰列。
  * 解法：點按一律改由「起手那一列」直接觸發（row.click()），並 preventDefault 擋掉隨後可能被位移的
@@ -19,11 +20,16 @@
   var sRow = null, sx = 0, sy = 0, moved = false;
   var MOVE_TOL = 10;   // 位移超過此值＝捲動/拖曳，不當點按
 
-  // 只接管「列本身」的點按：從觸控目標往上找最近的 onclick 元素，必須就是 .trip-row。
-  // （列內的編輯/刪除/截圖各有自己的 onclick → closest 會先命中它們 → 不接管、交給原生。）
+  // 會接管的「列」類型：底部 sheet 裡會被 iOS 合成位移的堆疊清單列。
+  // 行程列（trip-row）、歷史日期列（history-day）、歷史月份列（history-month）。
+  var ROW_CLASSES = ['trip-row', 'history-day', 'history-month'];
+  // 只接管「列本身」的點按：從觸控目標往上找最近的 onclick 元素，必須就是上述列之一。
+  // （列內的地圖/抽成/回放/編輯/刪除各有自己的 onclick → closest 會先命中它們 → 不接管、交給原生。）
   function _rowOf(target) {
     var oc = (target && target.closest) ? target.closest('[onclick]') : null;
-    return (oc && oc.classList && oc.classList.contains('trip-row')) ? oc : null;
+    if (!oc || !oc.classList) return null;
+    for (var i = 0; i < ROW_CLASSES.length; i++) if (oc.classList.contains(ROW_CLASSES[i])) return oc;
+    return null;
   }
 
   function onStart(e) {
