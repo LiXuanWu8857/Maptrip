@@ -2,6 +2,21 @@
   margin: 0; padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  /* 全域關掉文字選取＋iOS 長按放大鏡/選單（長按看金額不會變成反白選字）。
+     真正需要打字/選字的輸入元素在下面重新開回來。 */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+/* 輸入類元素保留選字/編輯（否則車資/金額/email 等欄位不好編輯） */
+input, textarea, select, [contenteditable="true"] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 html, body {

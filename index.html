@@ -100,7 +100,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.334';</script>
+<script>window.INDEX_VERSION = '1.1.335';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -112,7 +112,8 @@ try {
    避免 location.reload() 後 style.css 尚未取回時出現頂部大片空白。 */
 /* iOS 原生點擊高亮（-webkit-tap-highlight-color）在變形/動畫/堆疊元素上會把深色畫到相鄰元素
    （按停車場→加油站變深色、按行程列→下一列變深色）。全域關掉，改用各自 :active 回饋。 */
-* { -webkit-tap-highlight-color: transparent; }
+* { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 #top-safe { display: none !important; }
 #top-bar {
   position: fixed !important;
