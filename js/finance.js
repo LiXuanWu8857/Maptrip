@@ -433,8 +433,9 @@
     if (_view === 'an') { hydratePickupNames(); bindChartTips(); }
   }
 
-  // 長按長條圖看金額（手機沒有 hover，title 看不到）：長按 220ms 顯示氣泡，放開隱藏。
-  // 事件委派綁在 #finance-body（跨 render 不變），氣泡掛 document.body（不被 overflow 裁切）。
+  // 點一下長條圖看金額（手機沒有 hover，title 看不到）：按一下顯示金額氣泡，
+  // 再按同一根 / 按別處 / 捲動 / 4 秒後自動收起。事件委派綁在 #finance-body（跨 render 不變），
+  // 氣泡掛 document.body（不被 overflow 裁切）。
   function bindChartTips() {
     var body = document.getElementById('finance-body');
     if (!body || body._tipBound) return;
@@ -442,7 +443,7 @@
 
     var tip = document.getElementById('fin-tip');
     if (!tip) { tip = document.createElement('div'); tip.id = 'fin-tip'; tip.style.display = 'none'; document.body.appendChild(tip); }
-    var active = null, holdTimer = null, sx = 0, sy = 0, pressBar = null;
+    var active = null, autoHide = null;
 
     function show(bar) {
       var txt = bar.getAttribute('data-tip'); if (!txt) return;
@@ -456,36 +457,29 @@
       if (top < 8) top = r.bottom + 8;           // 太靠頂就顯示在長條下方
       tip.style.left = Math.round(left) + 'px';
       tip.style.top = Math.round(top) + 'px';
+      clearTimeout(autoHide); autoHide = setTimeout(hide, 4000);   // 4 秒自動收起
     }
     function hide() {
-      clearTimeout(holdTimer); holdTimer = null; pressBar = null;
+      clearTimeout(autoHide); autoHide = null;
       tip.style.display = 'none';
       if (active) { active.classList.remove('press'); active = null; }
     }
+    tip._finHide = hide;   // 供測試/外部收起
 
-    body.addEventListener('touchstart', function (e) {
+    // 按一下長條 → 顯示；再按同一根 / 按內容其他地方 → 收起
+    body.addEventListener('click', function (e) {
       var bar = e.target.closest && e.target.closest('.fin-bar');
-      if (!bar) return;
-      var t = e.touches[0]; sx = t.clientX; sy = t.clientY; pressBar = bar;
-      clearTimeout(holdTimer);
-      holdTimer = setTimeout(function () { show(bar); }, 220);   // 220ms＝長按門檻（快速捲動不誤觸）
-    }, { passive: true });
-    body.addEventListener('touchmove', function (e) {
-      if (!pressBar || active) return;                           // 已顯示就維持；還沒顯示才判斷取消
-      var t = e.touches[0]; if (!t) return;
-      if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) {
-        clearTimeout(holdTimer); holdTimer = null; pressBar = null;   // 明顯移動＝在捲動/拖曳 → 取消長按
-      }
-    }, { passive: true });
-    body.addEventListener('touchend', hide);
-    body.addEventListener('touchcancel', hide);
-    body.addEventListener('scroll', hide, { passive: true });
-
-    // 桌面滑鼠：按住看、放開隱藏
-    body.addEventListener('mousedown', function (e) {
-      var bar = e.target.closest && e.target.closest('.fin-bar'); if (bar) show(bar);
+      if (!bar) { hide(); return; }
+      if (bar === active) { hide(); return; }
+      show(bar);
     });
-    window.addEventListener('mouseup', hide);
+    body.addEventListener('scroll', hide, { passive: true });
+    // 點到報表內容以外（關閉/其他區域）也收起
+    document.addEventListener('click', function (e) {
+      if (!active) return;
+      var inBody = e.target.closest && e.target.closest('#finance-body');
+      if (!inBody) hide();
+    });
   }
 
   function renderIO() {
@@ -576,8 +570,8 @@
 
     if (!rev.trips) return h + '<div class="fin-empty">本月尚無載客紀錄可分析</div>';
 
-    // 每小時營收（24 條）；長按看金額（data-tip）
-    h += '<div class="fin-sec">各時段營收 <span class="fin-hint">長按看金額</span></div><div class="fin-chart"><div class="fin-bars">';
+    // 每小時營收（24 條）；點一下看金額（data-tip）
+    h += '<div class="fin-sec">各時段營收 <span class="fin-hint">點一下看金額</span></div><div class="fin-chart"><div class="fin-bars">';
     var maxH = Math.max.apply(null, a.byHour.map(function (x) { return x.fare; })) || 1;
     a.byHour.forEach(function (x, i) {
       var pct = Math.round(x.fare / maxH * 100);
@@ -589,8 +583,8 @@
     });
     h += '</div></div>';
 
-    // 星期幾營收（7 條）；長按看金額
-    h += '<div class="fin-sec">各星期營收 <span class="fin-hint">長按看金額</span></div><div class="fin-chart"><div class="fin-bars wd">';
+    // 星期幾營收（7 條）；點一下看金額
+    h += '<div class="fin-sec">各星期營收 <span class="fin-hint">點一下看金額</span></div><div class="fin-chart"><div class="fin-bars wd">';
     var maxW = Math.max.apply(null, a.byDow.map(function (x) { return x.fare; })) || 1;
     a.byDow.forEach(function (x, i) {
       var pct = Math.round(x.fare / maxW * 100);
@@ -717,7 +711,7 @@
     monthReport: monthReport,       // 單一算錢來源：記帳者月報表與 finance 共用
     _analyzePickups: analyzePickups, _bucketIndexOf: bucketIndexOf, _pickName: pickName,
     pullComm: pullComm,                // 收支頁「更新記帳者抽成」鈕
-    _bindChartTips: bindChartTips };   // 供測試：長條圖長按看金額
+    _bindChartTips: bindChartTips };   // 供測試：長條圖點一下看金額
   window.openFinance = open;
   window.closeFinance = close;
 })();
