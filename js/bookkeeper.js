@@ -67,6 +67,10 @@
       '.bk-fare-tg{width:100%;margin-top:4px;padding:11px;border:1px solid var(--bk-bd);background:var(--bk-s1);' +
       'border-radius:12px;font-size:.86rem;color:var(--bk-t2);font-weight:600;font-family:inherit;cursor:pointer}' +
       '.bk-fare-tg.on{background:var(--bk-acc-bg);color:var(--bk-acc-t);border-color:var(--bk-acc-t)}' +
+      '.bk-export{display:flex;gap:8px;margin:12px 0 4px}' +
+      '.bk-exp-btn{flex:1;padding:10px;border:1px solid var(--bk-acc-bd);background:var(--bk-acc-bg);color:var(--bk-acc-t);' +
+      'border-radius:12px;font-size:.86rem;font-weight:600;font-family:inherit;cursor:pointer}' +
+      '.bk-exp-btn.gh{background:var(--bk-s1);color:var(--bk-t2);border-color:var(--bk-bd)}' +
       '.bk-hrow{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:.5px solid var(--bk-bd)}' +
       '.bk-hrow .nm{flex:1;font-size:.9rem;color:var(--bk-text)}' +
       '.bk-hrow .op{background:none;border:none;color:var(--bk-danger);font-size:.8rem;font-family:inherit;cursor:pointer;padding:4px 6px}' +
@@ -380,6 +384,12 @@
     h += '<div class="bk-cards">' +
       _netCard(true, '當月淨利 · ' + sm.ym, mNet) +
       _netCard(false, '全部淨利', aNet) +
+      '</div>';
+
+    // 匯出 Excel（複製 TSV，貼進 Excel 自動分欄）：本月 + 全部兩顆
+    h += '<div class="bk-export">' +
+      '<button class="bk-exp-btn" onclick="MaptripBookkeeper.copyExcel(\'' + _month + '\')">📋 複製本月表格</button>' +
+      '<button class="bk-exp-btn gh" onclick="MaptripBookkeeper.copyExcel(\'\')">複製全部</button>' +
       '</div>';
 
     // 月報表（淨利，含支出）
@@ -862,8 +872,19 @@
     } catch (e) { if (window.toast) toast('更新失敗：' + ((e && e.message) || e)); }
   }
 
+  // 匯出目前司機的記帳資料成 TSV → 複製到剪貼簿（貼進 Excel 自動分欄）。ym=''＝全部。
+  function copyExcel(ym) {
+    if (!_cache) { if (window.toast) toast('尚未載入資料'); return; }
+    if (!window.MaptripExport) { if (window.toast) toast('匯出模組未載入'); return; }
+    MaptripExport.copyReport({
+      days: _cache.days, commissions: _cache.commissions,
+      manualTrips: _cache.manualTrips, expenses: _cache.expenses, name: _view && _view.name
+    }, ym || null);
+  }
+
   window.MaptripBookkeeper = {
     open: open, close: close, render: render, mountAsHome: mountAsHome, invite: invite, copy: copy, join: join,
+    copyExcel: copyExcel,
     removeBk: removeBk, unlink: unlink, removeCurrentDriver: removeCurrentDriver,
     openDriver: openDriver, switchDriver: switchDriver, toggleDrvMenu: toggleDrvMenu, setMonth: setMonth,
     back: back, edit: edit, saveComm: saveComm, toggleFareEdit: toggleFareEdit,
