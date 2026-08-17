@@ -348,8 +348,9 @@
       panel.id = 'hs-panel';
       document.body.appendChild(panel);
     }
+    var teamMode = meta.mode === 'team';
     if (!zones.length) {
-      panel.innerHTML = '<div class="hs-head"><span>🔥 找客熱區</span>' +
+      panel.innerHTML = '<div class="hs-head"><span>🔥 找客熱區</span>' + teamBtnHtml() +
         '<button class="hs-close" onclick="MaptripHotspots.close()">✕</button></div>' +
         '<div class="hs-empty">附近 2 公里內找不到明顯的人潮熱點。<br>可能是資料較少的區域，換個位置再試試。</div>';
       panel.style.display = 'block';
@@ -359,27 +360,116 @@
     var rows = zones.map(function (z, i) {
       var km = z.dist >= 1000 ? (z.dist / 1000).toFixed(1) + ' km' : Math.round(z.dist) + ' m';
       var arrow = '<span class="hs-arrow" style="transform:rotate(' + z.brg + 'deg)">↑</span>';
-      var name = z.histLed ? '你常上車的熱點' : z.reasons[0];
-      var sub = (histMode && z.count) ? (z.count + ' 趟 · 這個時段常上車') : z.reasons.join('、');
+      var name = teamMode ? z.reasons[0] : (z.histLed ? '你常上車的熱點' : z.reasons[0]);
+      var sub;
+      if (teamMode) {
+        sub = z.source === 'both' ? ('你 ' + z.ownCount + ' · 隊友 ' + z.teamCount)
+            : (z.source === 'own' ? ('你 ' + z.ownCount + ' 趟') : ('隊友 ' + z.teamCount + ' 筆'));
+      } else { sub = (histMode && z.count) ? (z.count + ' 趟 · 這個時段常上車') : z.reasons.join('、'); }
+      var badge = teamMode ? '<span class="hs-src hs-src-' + z.source + '">' +
+        (z.source === 'both' ? '共同' : z.source === 'team' ? '隊友' : '你') + '</span>' : '';
       return '<div class="hs-row" onclick="MaptripHotspots.focus(' + i + ')">' +
         '<div class="hs-rank" style="background:' + (RANKC[i] || '#1a73e8') + '">' + (i + 1) + '</div>' +
         '<div class="hs-dir">' + arrow + '<span>' + compass(z.brg) + '</span></div>' +
-        '<div class="hs-main"><div class="hs-name">' + name + '</div>' +
+        '<div class="hs-main"><div class="hs-name">' + name + badge + '</div>' +
         '<div class="hs-sub">' + sub + '</div></div>' +
         '<div class="hs-meta"><div class="hs-fire">' + fireIcons(z.score, max) + '</div>' +
         '<div class="hs-dist">' + km + '</div></div></div>';
     }).join('');
-    var title = histMode
-      ? '🔥 找客熱區 · 現在【' + (BUCKETS[meta.bucket] ? BUCKETS[meta.bucket].label : '此時段') + '】'
+    var buckLabel = (BUCKETS[meta.bucket] ? BUCKETS[meta.bucket].label : '此時段');
+    var title = teamMode ? '🔥 找客熱區 · 車隊【' + buckLabel + '】'
+      : histMode ? '🔥 找客熱區 · 現在【' + buckLabel + '】'
       : '🔥 找客熱區（2 公里內）';
-    var note = histMode
-      ? '你在附近 2km、這個時段的歷史上車點（同星期幾/假日加權，越上面越常上車）'
+    var note = teamMode
+      ? '你和車隊的去識別化上車熱點（自己加重、隊友當背景；只分享熱度，不分享行程/車資/身分）'
+      : histMode ? '你在附近 2km、這個時段的歷史上車點（同星期幾/假日加權，越上面越常上車）'
       : '依「會聚人的場所＋你的歷史上車點＋現在時段/星期」估算，越上面越有機會';
-    panel.innerHTML = '<div class="hs-head"><span>' + title + '</span>' +
+    panel.innerHTML = '<div class="hs-head"><span>' + title + '</span>' + teamBtnHtml() +
       '<button class="hs-close" onclick="MaptripHotspots.close()">✕</button></div>' +
       '<div class="hs-note">' + note + '</div>' +
       '<div class="hs-list">' + rows + '</div>';
     panel.style.display = 'block';
+  }
+
+  // ---- 車隊控制面板（建立/加入/邀請碼/回填/退出/分享開關）----
+  function teamBtnHtml() {
+    var t = teamInfo();
+    var label = (t && t.groupId) ? (t.shareHotspots ? '🚕 車隊' : '🚕 車隊·關') : '🚕 加入車隊';
+    return '<button class="hs-team-btn" onclick="MaptripHotspots.team()">' + label + '</button>';
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  function renderTeam() {
+    var el = document.getElementById('hs-team');
+    if (!el) { el = document.createElement('div'); el.id = 'hs-team'; document.body.appendChild(el); }
+    var head = '<div class="hs-head"><span>🚕 共享熱點 · 車隊</span>' +
+      '<button class="hs-close" onclick="MaptripHotspots.teamClose()">✕</button></div>';
+    if (!sync() || !signedIn()) {
+      el.innerHTML = head + '<div class="hs-empty">請先到選單「☁️ 同步」登入雲端，才能使用車隊共享熱點。</div>';
+      el.style.display = 'block'; return;
+    }
+    var t = teamInfo() || {};
+    var body;
+    if (!t.groupId) {
+      body = '<div class="hs-note">和幾個認識的司機朋友組一隊，互相看得到彼此的「上車熱點」。' +
+        '只分享<b>去識別化的熱度格子</b>（哪裡常有客），不會分享你的行程、車資或身分。</div>' +
+        '<div class="hs-team-btns">' +
+        '<button class="hs-tbtn primary" onclick="MaptripHotspots.teamCreate()">建立車隊</button>' +
+        '<button class="hs-tbtn" onclick="MaptripHotspots.teamJoin()">輸入邀請碼加入</button></div>';
+    } else {
+      var shareTxt = t.shareHotspots ? '分享中（貢獻＋看隊友）' : '已暫停分享';
+      body = '<div class="hs-team-name">車隊：<b>' + esc(t.name || '（未命名）') + '</b></div>' +
+        '<div class="hs-team-row"><span>分享我的去識別化熱點</span>' +
+        '<button class="hs-toggle ' + (t.shareHotspots ? 'on' : '') + '" onclick="MaptripHotspots.teamToggle()">' +
+        (t.shareHotspots ? '開' : '關') + '</button></div>' +
+        '<div class="hs-note">' + shareTxt + '</div>' +
+        '<div class="hs-team-btns">' +
+        '<button class="hs-tbtn" onclick="MaptripHotspots.teamInvite()">產生邀請碼</button>' +
+        '<button class="hs-tbtn" onclick="MaptripHotspots.teamBackfill()">分享我的歷史熱點</button>' +
+        '<button class="hs-tbtn danger" onclick="MaptripHotspots.teamLeave()">退出車隊</button></div>';
+    }
+    el.innerHTML = head + body;
+    el.style.display = 'block';
+  }
+  function openTeam() { renderTeam(); }
+  function teamClose() { var el = document.getElementById('hs-team'); if (el) el.style.display = 'none'; }
+  function refreshRun() { var me = pos(); if (me) run(); }
+  function teamCreate() {
+    var sy = sync(); if (!sy || !sy.createCarTeam) { say('請先登入雲端'); return; }
+    var name = prompt('車隊名稱（例如：夜班兄弟）'); if (name === null) return;
+    sy.createCarTeam(name).then(function (r) { say('車隊已建立：' + r.name); renderTeam(); refreshRun(); })
+      .catch(function (e) { say((e && e.message) || '建立失敗'); });
+  }
+  function teamJoin() {
+    var sy = sync(); if (!sy || !sy.joinCarTeam) { say('請先登入雲端'); return; }
+    var code = prompt('輸入車隊邀請碼'); if (!code) return;
+    sy.joinCarTeam(code).then(function () { say('已加入車隊'); renderTeam(); refreshRun(); })
+      .catch(function (e) { say((e && e.message) || '加入失敗'); });
+  }
+  function teamLeave() {
+    var sy = sync(); if (!sy || !sy.leaveCarTeam) return;
+    if (!confirm('確定退出車隊？退出後看不到隊友熱點，也不再分享。')) return;
+    sy.leaveCarTeam().then(function () { say('已退出車隊'); renderTeam(); refreshRun(); });
+  }
+  function teamToggle() {
+    var sy = sync(), t = teamInfo(); if (!sy || !sy.setShareHotspots || !t) return;
+    sy.setShareHotspots(!t.shareHotspots).then(function () { renderTeam(); refreshRun(); })
+      .catch(function (e) { say((e && e.message) || '設定失敗'); });
+  }
+  function teamInvite() {
+    var sy = sync(); if (!sy || !sy.createTeamInvite) return;
+    sy.createTeamInvite().then(function (code) {
+      try { if (navigator.clipboard) navigator.clipboard.writeText(code); } catch (_) {}
+      alert('車隊邀請碼（30 天有效，已複製）：\n\n' + code + '\n\n把它給司機朋友，用「輸入邀請碼加入」即可。');
+    }).catch(function (e) { say((e && e.message) || '產生失敗'); });
+  }
+  function teamBackfill() {
+    var sy = sync(); if (!sy || !sy.backfillTeamGrid) return;
+    var pk = historyPickups().filter(function (h) { return h.t; });
+    if (!pk.length) { say('沒有歷史上車點可回填'); return; }
+    if (!confirm('把你的歷史上車點（去識別化）分享給車隊？\n只上傳「格子熱度」，不含行程／車資／身分。')) return;
+    say('回填中…');
+    sy.backfillTeamGrid(pk).then(function (n) { say('已分享 ' + n + ' 個熱點格'); refreshRun(); })
+      .catch(function (e) { say((e && e.message) || '分享失敗'); });
   }
 
   function focusZone(i) {
@@ -396,21 +486,44 @@
     if (btn) btn.classList.toggle('loading', b);
   }
 
-  function run() {
-    if (busy) return;
-    var me = pos();
-    if (!me) { say('等待 GPS 訊號中…'); return; }
+  // ===== 共享熱點 / 車隊（Phase 1）：橋接 sync.js（雲端 I/O）＋ hotspot-share.js（去識別化純函式）=====
+  function sync() { return window.MaptripSync; }
+  function teamInfo() { try { var s = sync(); return (s && s.myTeam) ? s.myTeam() : null; } catch (_) { return null; } }
+  function inTeamShare() { var t = teamInfo(); return !!(t && t.groupId && t.shareHotspots); }
+  function signedIn() { try { var s = sync(); return !!(s && s.status && s.status().state === 'signedin'); } catch (_) { return false; } }
 
-    // 1) 即時：先用「當前時段的歷史上車點」秒出（不等網路），這才是使用者要的即時感
-    var hn = buildHistoryNow(me);
-    if (hn.zones.length) {
-      drawMap(hn.zones, me);
-      renderPanel(hn.zones, me, { mode: 'history', bucket: hn.bucket });
-      say('現在【' + (BUCKETS[hn.bucket] ? BUCKETS[hn.bucket].label : '此時段') + '】· 你這個時段的上車熱點');
-      return;
-    }
+  // 混合排名：自己的當前時段上車點（×2）＋隊友去識別化格子（k-匿名≥2、×1 當背景）。
+  // 讀隊 grid 是雲端非同步（需複合索引；讀不到就當沒隊友、只剩自己）。
+  function buildMixed(me) {
+    var S = window.MaptripHotspotShare, sy = sync();
+    if (!S || !sy || !sy.readGroupGrid || !inTeamShare()) return Promise.resolve(null);
+    var ctx = S.nowContext();
+    var pickups = historyPickups();
+    var ownMap = S.ownCellsNow(pickups, me, ctx, RADIUS);
+    return sy.readGroupGrid(me.lat, ctx, RADIUS).then(function (grid) {
+      var teamMap = S.teamCells(grid || [], me, { radiusM: RADIUS });
+      var zones = S.mix(ownMap, teamMap, me, TOP_N);
+      // 補上面板要用的顯示欄位（名稱/子標/趟數）
+      zones.forEach(function (z) {
+        z.histLed = z.source !== 'team';
+        z.reasons = [z.source === 'both' ? '你和隊友都常上車' : (z.source === 'own' ? '你常上車的熱點' : '隊友的熱點')];
+        z.count = (z.ownCount || 0) + (z.teamCount || 0);
+      });
+      return { ctx: ctx, zones: zones, teamDocs: (grid || []).length };
+    });
+  }
+  // 讀到隊 grid 後把面板從「我的」升級成「混合」（秒出我的、再靜靜補上隊友）。
+  function upgradeToMixed(me, fallbackOverpass) {
+    buildMixed(me).then(function (res) {
+      if (res && res.zones && res.zones.length) {
+        drawMap(res.zones, me);
+        renderPanel(res.zones, me, { mode: 'team', bucket: bucketOf(new Date().getHours()) });
+      } else if (fallbackOverpass) { overpassFallback(me); }
+    }).catch(function () { if (fallbackOverpass) overpassFallback(me); });
+  }
 
-    // 2) 這個時段還沒有歷史 → 退回附近場所（Overpass）估算
+  // 這個時段還沒有歷史 → 退回附近場所（Overpass）估算
+  function overpassFallback(me) {
     setBusy(true);
     say('這個時段還沒有歷史，改用附近場所估算…');
     fetchOverpass(me.lat, me.lng).then(function (data) {
@@ -430,13 +543,38 @@
     });
   }
 
+  function run() {
+    if (busy) return;
+    var me = pos();
+    if (!me) { say('等待 GPS 訊號中…'); return; }
+
+    // 1) 即時：先用「當前時段的歷史上車點」秒出（不等網路），這才是使用者要的即時感
+    var hn = buildHistoryNow(me);
+    if (hn.zones.length) {
+      drawMap(hn.zones, me);
+      renderPanel(hn.zones, me, { mode: 'history', bucket: hn.bucket });
+      say('現在【' + (BUCKETS[hn.bucket] ? BUCKETS[hn.bucket].label : '此時段') + '】· 你這個時段的上車熱點');
+      if (inTeamShare()) upgradeToMixed(me);   // 有車隊 → 再補上隊友熱點（混合）
+      return;
+    }
+
+    // 2) 自己這個時段還沒有歷史：有車隊先試隊友；否則/也沒隊友 → 退回附近場所
+    if (inTeamShare()) { upgradeToMixed(me, true); return; }
+    overpassFallback(me);
+  }
+
   function close() {
     var panel = document.getElementById('hs-panel');
     if (panel) panel.style.display = 'none';
+    teamClose();
     clearMap();
   }
 
   window.MaptripHotspots = { run: run, close: close, focus: focusZone,
-    _buildHistoryNow: buildHistoryNow, _bucketOf: bucketOf, _isOffDay: isOffDay, _dayFactor: dayFactor };
+    // 車隊控制
+    team: openTeam, teamClose: teamClose, teamCreate: teamCreate, teamJoin: teamJoin,
+    teamLeave: teamLeave, teamToggle: teamToggle, teamInvite: teamInvite, teamBackfill: teamBackfill,
+    _buildHistoryNow: buildHistoryNow, _bucketOf: bucketOf, _isOffDay: isOffDay, _dayFactor: dayFactor,
+    _buildMixed: buildMixed, _inTeamShare: inTeamShare };
   window.openHotspots = run;
 })();

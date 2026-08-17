@@ -291,6 +291,16 @@
     if (commission || dispatch) _pushCommission(trip.id, commission, dispatch);   // 抽成上雲
     updateTopBar();
 
+    // 共享熱點：完成一趟載客（有上車點、非「其他」）→ 對去識別化格子 count +1
+    // （只有加入車隊＋開分享才真的寫；前端去重＝一趟一次、每日上限）。座標只用粗網格。
+    try {
+      var _c0 = trip.coords && trip.coords[0];
+      if (_c0 && typeof _c0.lat === 'number' && paymentMethod !== 'other' &&
+          window.MaptripSync && MaptripSync.contributeHotspot) {
+        MaptripSync.contributeHotspot(_c0.lat, _c0.lng, trip.startTime || Date.now(), trip.id);
+      }
+    } catch (_) {}
+
     const road = await snapToRoads(trip.coords);
     if (road) {
       // 以 id 重新定位目前清單中的那筆（可能已被同步刷新換新）

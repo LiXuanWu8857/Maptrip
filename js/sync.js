@@ -47,7 +47,7 @@
       _pushLocalOK = dec.pushLocalOK;          // 只有「延續同帳號」才可回推本機獨有日子
       if (dec.clear) _clearLocalForSwitch();   // 換帳號 → 先清本機
       _setDataUid(u.uid);
-      pullAndListen(); loadProfile(); setTimeout(processInviteClaims, 1500);
+      pullAndListen(); loadProfile(); loadPrefs(); setTimeout(processInviteClaims, 1500);
     }
     else {
       profileName = ''; needsName = false;
@@ -76,6 +76,9 @@
     // 否則會顯示上一個帳號的支出、舊訂閱還在跑（與 v265 行程隔離同一類坑）。
     try { if (window.MaptripFinance && MaptripFinance.resetExpenseSync) MaptripFinance.resetExpenseSync(); } catch (_) {}
     try { if (window.MaptripManual && MaptripManual.clear) MaptripManual.clear(); } catch (_) {}   // 換帳號清手動紀錄快取
+    // 換帳號清共享熱點偏好快取（groupId 屬於帳號；貢獻計數/去重也重來）
+    _prefs = null;
+    try { localStorage.removeItem('mt_hs_prefs'); localStorage.removeItem('mt_hs_contrib'); localStorage.removeItem('mt_hs_done'); } catch (_) {}
     try { if (window.refreshAfterSync) window.refreshAfterSync(); } catch (_) {}
     log('account switch → local cleared');
   }
@@ -342,6 +345,185 @@
       var out = []; snap.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; out.push(e); });
       try { cb(out); } catch (_) {}
     }, function () {});
+  }
+
+  // ===== 共享找客熱點 / 車隊（Phase 1，私人小圈）=====
+  // 池子只存去識別化格子次數：groups/{gid}/grid/{cellId} = {gLat,gLng,dayType,bucket,count,updatedAt}
+  //   —— 無 uid、無精確座標、無車資、無實際時間點。k-匿名（讀取時 count<2 丟）在 hotspot-share.js。
+  // prefs（users/{uid}/meta/prefs）記 { shareHotspots, groupId, groupName }；本機鏡像一份 mt_hs_prefs
+  //   供 contribute 快讀（完成一趟就寫，不宜每趟再 round-trip 讀雲端）。
+  var PREFS_KEY = 'mt_hs_prefs';         // 本機鏡像 { shareHotspots, groupId, groupName }
+  var CONTRIB_KEY = 'mt_hs_contrib';     // 每日貢獻計數 { day:'YYYY-MM-DD', n }
+  var DONE_KEY = 'mt_hs_done';           // 已貢獻的 tripId 陣列（前端去重，一趟一次）
+  var DAILY_CAP = 300, BACKFILL_CAP = 500, BATCH = 400;
+  var _prefs = null;
+
+  function prefsDoc() { return db.collection('users').doc(user.uid).collection('meta').doc('prefs'); }
+  function _readPrefsLocal() { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || 'null'); } catch (_) { return null; } }
+  function _writePrefsLocal(p) { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p || {})); } catch (_) {} }
+  // 登入後載入偏好（先用本機鏡像秒回、再以雲端校正）。
+  async function loadPrefs() {
+    _prefs = _readPrefsLocal() || { shareHotspots: false, groupId: null, groupName: '' };
+    try {
+      var snap = await prefsDoc().get();
+      if (snap.exists) {
+        var d = snap.data() || {};
+        _prefs = { shareHotspots: !!d.shareHotspots, groupId: d.groupId || null, groupName: d.groupName || '' };
+        _writePrefsLocal(_prefs);
+      }
+    } catch (_) {}
+    updateUI();
+  }
+  // 目前車隊狀態（面板/貢獻用；優先記憶體快取、否則本機鏡像）。
+  function myTeam() {
+    var p = _prefs || _readPrefsLocal() || {};
+    return { groupId: p.groupId || null, shareHotspots: !!p.shareHotspots, name: p.groupName || '' };
+  }
+  function _saveTeamPrefs(p) { _prefs = p; _writePrefsLocal(p); return prefsDoc().set(p, { merge: true }); }
+  // 開/關「貢獻＋看隊友熱點」（沒退隊，只切分享）。
+  async function setShareHotspots(on) {
+    if (!ready || !user) throw new Error('尚未登入');
+    var t = myTeam();
+    await _saveTeamPrefs({ shareHotspots: !!on, groupId: t.groupId, groupName: t.name });
+    updateUI();
+  }
+  // 建立車隊（自己當隊長，自動加入並開分享）。回傳 { groupId, name }。
+  async function createCarTeam(name) {
+    if (!ready || !user) throw new Error('尚未登入');
+    name = (name || '').trim() || '我的車隊';
+    var ref = db.collection('groups').doc();
+    var gid = ref.id;
+    await ref.set({ name: name, ownerUid: user.uid, createdAt: Date.now(), memberCount: 1 });
+    await ref.collection('members').doc(user.uid).set({ name: myName(), joinedAt: Date.now() });
+    await _saveTeamPrefs({ shareHotspots: true, groupId: gid, groupName: name });
+    updateUI();
+    return { groupId: gid, name: name };
+  }
+  // 產生車隊邀請碼（比照記帳者邀請碼；30 天效期）。
+  async function createTeamInvite() {
+    if (!ready || !user) throw new Error('尚未登入');
+    var t = myTeam();
+    if (!t.groupId) throw new Error('請先建立或加入車隊');
+    for (var i = 0; i < 6; i++) {
+      var code = _randCode();
+      var ref = db.collection('groupInvites').doc(code);
+      var snap = await ref.get();
+      if (snap.exists) continue;
+      await ref.set({ groupId: t.groupId, groupName: t.name || '', by: user.uid, createdAt: Date.now(), exp: Date.now() + 30 * 864e5 });
+      return code;
+    }
+    throw new Error('請再試一次');
+  }
+  // 純函式（供測試）：車隊邀請碼是否可被 myUid 加入 → 阻擋原因字串，null=可加入。
+  function _teamClaimBlock(d, myUid, myGroupId) {
+    if (!d) return '邀請碼不存在';
+    if (d.exp && d.exp < Date.now()) return '邀請碼已過期';
+    if (d.groupId && d.groupId === myGroupId) return '你已經在這個車隊了';
+    return null;
+  }
+  // 用邀請碼加入車隊（加入 members、memberCount +1、寫 prefs 並開分享）。
+  async function joinCarTeam(code) {
+    if (!ready || !user) throw new Error('尚未登入');
+    code = (code || '').trim().toUpperCase();
+    if (!code) throw new Error('請輸入邀請碼');
+    var ref = db.collection('groupInvites').doc(code);
+    var snap = await ref.get();
+    var d = snap.exists ? snap.data() : null;
+    var block = _teamClaimBlock(d, user.uid, myTeam().groupId);
+    if (block) throw new Error(block);
+    var gref = db.collection('groups').doc(d.groupId);
+    await gref.collection('members').doc(user.uid).set({ name: myName(), joinedAt: Date.now() });
+    try { await gref.set({ memberCount: firebase.firestore.FieldValue.increment(1) }, { merge: true }); } catch (_) {}
+    await _saveTeamPrefs({ shareHotspots: true, groupId: d.groupId, groupName: d.groupName || '' });
+    updateUI();
+    return { groupId: d.groupId, name: d.groupName || '' };
+  }
+  // 退出車隊（移除 members、memberCount −1、清 prefs.groupId 並關分享）。
+  async function leaveCarTeam() {
+    if (!ready || !user) return;
+    var t = myTeam();
+    if (t.groupId) {
+      try { await db.collection('groups').doc(t.groupId).collection('members').doc(user.uid).delete(); } catch (_) {}
+      try { await db.collection('groups').doc(t.groupId).set({ memberCount: firebase.firestore.FieldValue.increment(-1) }, { merge: true }); } catch (_) {}
+    }
+    await _saveTeamPrefs({ shareHotspots: false, groupId: null, groupName: '' });
+    updateUI();
+  }
+  // 純函式（供測試）：每日貢獻上限。state＝已存 {day,n}、today＝'YYYY-MM-DD'、want＝要加幾次。
+  //   回 { take:實際可加, next:更新後 {day,n} }。跨日自動歸零。
+  function _capTake(state, today, want) {
+    want = (want == null) ? 1 : want;
+    var cur = (state && state.day === today) ? (state.n || 0) : 0;
+    var take = Math.max(0, Math.min(DAILY_CAP - cur, want));
+    return { take: take, next: { day: today, n: cur + take } };
+  }
+  function _todayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function _capRead() { try { return JSON.parse(localStorage.getItem(CONTRIB_KEY) || 'null'); } catch (_) { return null; } }
+  function _capWrite(s) { try { localStorage.setItem(CONTRIB_KEY, JSON.stringify(s)); } catch (_) {} }
+  function _doneList() { try { return JSON.parse(localStorage.getItem(DONE_KEY) || '[]'); } catch (_) { return []; } }
+  function _doneHas(id) { return _doneList().indexOf(String(id)) >= 0; }
+  function _doneAdd(id) { try { var s = _doneList(); s.push(String(id)); if (s.length > 2000) s = s.slice(-2000); localStorage.setItem(DONE_KEY, JSON.stringify(s)); } catch (_) {} }
+  // 完成一趟載客 → 對該去識別化格子 count +1（有開分享＋在車隊、前端去重、每日上限）。回傳有無寫入。
+  async function contributeHotspot(lat, lng, date, tripId) {
+    if (!ready || !user) return false;
+    var t = myTeam();
+    if (!t.shareHotspots || !t.groupId) return false;
+    if (typeof lat !== 'number' || typeof lng !== 'number') return false;
+    if (tripId != null && _doneHas(tripId)) return false;         // 一趟一次
+    var cap = _capTake(_capRead(), _todayStr(), 1);
+    if (cap.take < 1) return false;                               // 超過每日上限
+    var S = window.MaptripHotspotShare;
+    if (!S) return false;
+    var f = S.cellFields(lat, lng, date || new Date());
+    try {
+      await db.collection('groups').doc(t.groupId).collection('grid').doc(f.cellId)
+        .set({ gLat: f.gLat, gLng: f.gLng, dayType: f.dayType, bucket: f.bucket,
+               count: firebase.firestore.FieldValue.increment(1), updatedAt: Date.now() }, { merge: true });
+      _capWrite(cap.next);
+      if (tripId != null) _doneAdd(tripId);
+      return true;
+    } catch (_) { return false; }
+  }
+  // 讀「當前時段＋附近緯度帶」的隊 grid（複合查詢，需建索引 dayType+bucket+gLat）。經度在前端過濾。
+  // 回傳 [{gLat,gLng,count,updatedAt}]（k-匿名/半徑過濾由 hotspot-share.teamCells 做）。
+  async function readGroupGrid(lat, ctx, radiusM) {
+    var out = [];
+    if (!ready || !user) return out;
+    var t = myTeam();
+    if (!t.groupId) return out;
+    var S = window.MaptripHotspotShare;
+    if (!S) return out;
+    ctx = ctx || S.nowContext();
+    var band = S.latBand(lat, radiusM);
+    try {
+      var q = await db.collection('groups').doc(t.groupId).collection('grid')
+        .where('dayType', '==', ctx.dayType).where('bucket', '==', ctx.bucket)
+        .where('gLat', '>=', band.min).where('gLat', '<=', band.max).get();
+      q.forEach(function (doc) { var d = doc.data() || {}; out.push({ gLat: d.gLat, gLng: d.gLng, count: d.count || 0, updatedAt: d.updatedAt || 0 }); });
+    } catch (e) { log('readGroupGrid ' + (e && e.code)); }
+    return out;
+  }
+  // 回填：把「自己的歷史上車點」聚成去識別化格子、分批寫進隊 grid（單次上限 500 格）。回傳寫入格數。
+  async function backfillTeamGrid(pickups) {
+    if (!ready || !user) throw new Error('尚未登入');
+    var t = myTeam();
+    if (!t.groupId) throw new Error('請先建立或加入車隊');
+    var S = window.MaptripHotspotShare;
+    if (!S) return 0;
+    var cells = S.aggregateHistoryCells(pickups, BACKFILL_CAP);
+    var gridCol = db.collection('groups').doc(t.groupId).collection('grid');
+    var written = 0, i = 0;
+    while (i < cells.length) {
+      var batch = db.batch();
+      var chunk = cells.slice(i, i + BATCH);
+      chunk.forEach(function (c) {
+        batch.set(gridCol.doc(c.cellId), { gLat: c.gLat, gLng: c.gLng, dayType: c.dayType, bucket: c.bucket,
+          count: firebase.firestore.FieldValue.increment(c.delta), updatedAt: Date.now() }, { merge: true });
+      });
+      await batch.commit();
+      written += chunk.length; i += BATCH;
+    }
+    return written;
   }
 
   // Email + 密碼登入：純 API、不靠彈窗/轉址，在 App 內嵌瀏覽器 100% 可用。
@@ -613,5 +795,10 @@
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
     resetLocal: resetLocal,
-    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision };
+    // 共享熱點/車隊（Phase 1）
+    myTeam: myTeam, setShareHotspots: setShareHotspots,
+    createCarTeam: createCarTeam, createTeamInvite: createTeamInvite, joinCarTeam: joinCarTeam, leaveCarTeam: leaveCarTeam,
+    contributeHotspot: contributeHotspot, readGroupGrid: readGroupGrid, backfillTeamGrid: backfillTeamGrid,
+    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision,
+    _teamClaimBlock: _teamClaimBlock, _capTake: _capTake };
 })();

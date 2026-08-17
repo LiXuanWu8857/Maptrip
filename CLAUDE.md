@@ -145,6 +145,24 @@
   （±2h，1h 內滿權，修「差幾分鐘就整筆漏掉」）；③**最少 2 趟門檻**去單筆雜訊（全單筆才放寬）；
   ④**2026 國定假日表** `isOffDay`（假日需求型態≈週末，**表僅 2026、每年需更新**）。
   `_isOffDay/_dayFactor` 供測試（自檢 22 項全過）。天氣（下雨，Open-Meteo 免金鑰）暫緩
+- **共享找客熱點／車隊（v337，Phase 1「私人小圈」）**：讓司機除了自己的熱點，還能看到**車隊隊友**的上車熱點。
+  池子**只存去識別化格子**——300m 網格 × 8 時段 × 平日/假日，欄位 `{gLat,gLng,dayType,bucket,count,updatedAt}`，
+  **無 uid／精確座標／車資／時間點**。三層設計：
+  - `js/hotspot-share.js`（`MaptripHotspotShare`，純函式）：`cellFields/cellId/dayType/bucket`、`aggregateHistoryCells`
+    （回填聚合，同格合併＋依次數排序＋cap 500）、`ownCellsNow`（自己當前時段上車點聚格）、`teamCells`（隊友格 k-匿名
+    ≥2＋半徑過濾＋近 30 天×1/更舊×0.5）、`mix`（自×2＋隊×1 同格合併排名，source∈own/team/both）。測試 `hotspotshare.js` 23。
+  - `js/sync.js`：`myTeam/setShareHotspots`、`createCarTeam/createTeamInvite/joinCarTeam/leaveCarTeam`（比照記帳者邀請碼，
+    `groups/{gid}` + `members/{uid}` + `groupInvites/{CODE}`）、`contributeHotspot`（完成一趟載客 +1；前端去重一趟一次＋
+    **每日上限 300** `_capTake`）、`readGroupGrid`（`dayType==+bucket==+gLat 範圍` 複合查詢，**需建索引**）、
+    `backfillTeamGrid`（聚合＋分批 400/批＋單次上限 500）。prefs 存 `users/{uid}/meta/prefs`＋本機鏡像 `mt_hs_prefs`；
+    換帳號清快取。純函式 `_teamClaimBlock/_capTake` 測試 `hsteam.js` 21。
+  - `js/hotspots.js` 面板：頭列「🚕 車隊」鈕開 `#hs-team`（沒隊＝建立/輸入邀請碼；有隊＝分享開關/邀請碼/回填/退出）；
+    `run()` **先秒出「我的」歷史熱點、再非同步 `upgradeToMixed` 升級成「混合」**（列上 own/team/both 來源徽章）。
+    只分享熱度、不分享行程。接線測試 `hotspotpanel.js` 20。
+  - `js/recorder.js` `finalizeSavedTrip`：完成一趟載客（有上車點、非「其他」）→ 呼叫 `contributeHotspot`（有加入車隊＋開分享才寫）。
+  - **安全根在 Firestore 規則（見 `docs/共享熱點-firestore規則參考.md`）**：只有隊員能讀寫該隊 grid、count 只增不減、
+    grid 不含個資、邀請碼隊員才能建。**務必先建複合索引（grid: dayType+bucket+gLat）＋第二帳號 Playground 實測再發佈**。
+    設計草稿 `docs/共享熱點-設計草稿.md`（Phase 2 全體池待未來）。三支測試共 64 項全過零 pageerror
 - **記帳者模式** `js/bookkeeper.js`：邀請碼授權；記帳者唯讀行程、可編抽成；
   雙向即時同步（司機端訂閱 commissions → applyCommission 合併）。
   **v263 修 4 個自檢問題**：①**撤銷持久化**——`removeBookkeeper` 撤銷時把該記帳者兌換過的邀請碼標
