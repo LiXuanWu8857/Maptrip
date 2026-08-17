@@ -363,28 +363,40 @@
   function _writePrefsLocal(p) { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p || {})); } catch (_) {} }
   // 登入後載入偏好（先用本機鏡像秒回、再以雲端校正）。
   async function loadPrefs() {
-    _prefs = _readPrefsLocal() || { shareHotspots: false, groupId: null, groupName: '' };
+    _prefs = _readPrefsLocal() || { shareHotspots: false, groupId: null, groupName: '', shareGlobal: false };
     try {
       var snap = await prefsDoc().get();
       if (snap.exists) {
         var d = snap.data() || {};
-        _prefs = { shareHotspots: !!d.shareHotspots, groupId: d.groupId || null, groupName: d.groupName || '' };
+        _prefs = { shareHotspots: !!d.shareHotspots, groupId: d.groupId || null, groupName: d.groupName || '', shareGlobal: !!d.shareGlobal };
         _writePrefsLocal(_prefs);
       }
     } catch (_) {}
     updateUI();
   }
+  function _prefsNow() { return _prefs || _readPrefsLocal() || {}; }
   // 目前車隊狀態（面板/貢獻用；優先記憶體快取、否則本機鏡像）。
   function myTeam() {
-    var p = _prefs || _readPrefsLocal() || {};
+    var p = _prefsNow();
     return { groupId: p.groupId || null, shareHotspots: !!p.shareHotspots, name: p.groupName || '' };
   }
-  function _saveTeamPrefs(p) { _prefs = p; _writePrefsLocal(p); return prefsDoc().set(p, { merge: true }); }
+  // 全體共享（Phase 2）開關狀態。
+  function shareGlobalOn() { return !!_prefsNow().shareGlobal; }
+  // 合併寫入 prefs（保留未帶到的欄位）。
+  function _savePrefs(patch) {
+    var p = Object.assign({}, _prefsNow(), patch);
+    _prefs = p; _writePrefsLocal(p); return prefsDoc().set(p, { merge: true });
+  }
   // 開/關「貢獻＋看隊友熱點」（沒退隊，只切分享）。
   async function setShareHotspots(on) {
     if (!ready || !user) throw new Error('尚未登入');
-    var t = myTeam();
-    await _saveTeamPrefs({ shareHotspots: !!on, groupId: t.groupId, groupName: t.name });
+    await _savePrefs({ shareHotspots: !!on });
+    updateUI();
+  }
+  // 開/關「貢獻＋看全體熱點」（Phase 2；與車隊獨立）。
+  async function setShareGlobal(on) {
+    if (!ready || !user) throw new Error('尚未登入');
+    await _savePrefs({ shareGlobal: !!on });
     updateUI();
   }
   // 建立車隊（自己當隊長，自動加入並開分享）。回傳 { groupId, name }。
@@ -463,11 +475,19 @@
   function _doneList() { try { return JSON.parse(localStorage.getItem(DONE_KEY) || '[]'); } catch (_) { return []; } }
   function _doneHas(id) { return _doneList().indexOf(String(id)) >= 0; }
   function _doneAdd(id) { try { var s = _doneList(); s.push(String(id)); if (s.length > 2000) s = s.slice(-2000); localStorage.setItem(DONE_KEY, JSON.stringify(s)); } catch (_) {} }
-  // 完成一趟載客 → 對該去識別化格子 count +1（有開分享＋在車隊、前端去重、每日上限）。回傳有無寫入。
+  // ── grid 集合橋接：車隊 grid ＝ groups/{gid}/grid；全體 grid ＝ hotspotGrid（Phase 2）──
+  function teamGridCol() { var t = myTeam(); return t.groupId ? db.collection('groups').doc(t.groupId).collection('grid') : null; }
+  function globalGridCol() { return db.collection('hotspotGrid'); }
+  function _gridSet(col, f, delta) {
+    return col.doc(f.cellId).set({ gLat: f.gLat, gLng: f.gLng, dayType: f.dayType, bucket: f.bucket,
+      count: firebase.firestore.FieldValue.increment(delta || 1), updatedAt: Date.now() }, { merge: true });
+  }
+  // 完成一趟載客 → 對去識別化格子 count +1。車隊（開分享＋在隊）與全體（開全體分享）**各自都寫**。
+  // 前端去重＝一趟一次、每日上限。回傳有無寫入任何池。
   async function contributeHotspot(lat, lng, date, tripId) {
     if (!ready || !user) return false;
-    var t = myTeam();
-    if (!t.shareHotspots || !t.groupId) return false;
+    var t = myTeam(), toTeam = !!(t.shareHotspots && t.groupId), toGlobal = shareGlobalOn();
+    if (!toTeam && !toGlobal) return false;
     if (typeof lat !== 'number' || typeof lng !== 'number') return false;
     if (tripId != null && _doneHas(tripId)) return false;         // 一趟一次
     var cap = _capTake(_capRead(), _todayStr(), 1);
@@ -475,49 +495,46 @@
     var S = window.MaptripHotspotShare;
     if (!S) return false;
     var f = S.cellFields(lat, lng, date || new Date());
+    var writes = [];
+    if (toTeam) writes.push(_gridSet(teamGridCol(), f, 1));
+    if (toGlobal) writes.push(_gridSet(globalGridCol(), f, 1));
     try {
-      await db.collection('groups').doc(t.groupId).collection('grid').doc(f.cellId)
-        .set({ gLat: f.gLat, gLng: f.gLng, dayType: f.dayType, bucket: f.bucket,
-               count: firebase.firestore.FieldValue.increment(1), updatedAt: Date.now() }, { merge: true });
+      await Promise.all(writes);
       _capWrite(cap.next);
       if (tripId != null) _doneAdd(tripId);
       return true;
     } catch (_) { return false; }
   }
-  // 讀「當前時段＋附近緯度帶」的隊 grid（複合查詢，需建索引 dayType+bucket+gLat）。經度在前端過濾。
-  // 回傳 [{gLat,gLng,count,updatedAt}]（k-匿名/半徑過濾由 hotspot-share.teamCells 做）。
-  async function readGroupGrid(lat, ctx, radiusM) {
+  // 讀「當前時段＋附近緯度帶」的 grid（複合查詢，需建索引 dayType+bucket+gLat）。經度在前端過濾。
+  // col＝要查的 grid 集合。回傳 [{gLat,gLng,count,updatedAt}]（k-匿名/半徑過濾由 hotspot-share 做）。
+  async function _readGrid(col, lat, ctx, radiusM, tag) {
     var out = [];
-    if (!ready || !user) return out;
-    var t = myTeam();
-    if (!t.groupId) return out;
+    if (!ready || !user || !col) return out;
     var S = window.MaptripHotspotShare;
     if (!S) return out;
     ctx = ctx || S.nowContext();
     var band = S.latBand(lat, radiusM);
     try {
-      var q = await db.collection('groups').doc(t.groupId).collection('grid')
-        .where('dayType', '==', ctx.dayType).where('bucket', '==', ctx.bucket)
+      var q = await col.where('dayType', '==', ctx.dayType).where('bucket', '==', ctx.bucket)
         .where('gLat', '>=', band.min).where('gLat', '<=', band.max).get();
       q.forEach(function (doc) { var d = doc.data() || {}; out.push({ gLat: d.gLat, gLng: d.gLng, count: d.count || 0, updatedAt: d.updatedAt || 0 }); });
-    } catch (e) { log('readGroupGrid ' + (e && e.code)); }
+    } catch (e) { log((tag || 'readGrid') + ' ' + (e && e.code)); }
     return out;
   }
-  // 回填：把「自己的歷史上車點」聚成去識別化格子、分批寫進隊 grid（單次上限 500 格）。回傳寫入格數。
-  async function backfillTeamGrid(pickups) {
-    if (!ready || !user) throw new Error('尚未登入');
-    var t = myTeam();
-    if (!t.groupId) throw new Error('請先建立或加入車隊');
+  function readGroupGrid(lat, ctx, radiusM) { var c = teamGridCol(); return c ? _readGrid(c, lat, ctx, radiusM, 'readGroupGrid') : Promise.resolve([]); }
+  function readGlobalGrid(lat, ctx, radiusM) { return _readGrid(globalGridCol(), lat, ctx, radiusM, 'readGlobalGrid'); }
+  // 回填：把「自己的歷史上車點」聚成去識別化格子、分批寫進指定 grid（單次上限 500 格）。回傳寫入格數。
+  async function _backfill(col, pickups) {
+    if (!ready || !user || !col) throw new Error('尚未登入或未指定池');
     var S = window.MaptripHotspotShare;
     if (!S) return 0;
     var cells = S.aggregateHistoryCells(pickups, BACKFILL_CAP);
-    var gridCol = db.collection('groups').doc(t.groupId).collection('grid');
     var written = 0, i = 0;
     while (i < cells.length) {
       var batch = db.batch();
       var chunk = cells.slice(i, i + BATCH);
       chunk.forEach(function (c) {
-        batch.set(gridCol.doc(c.cellId), { gLat: c.gLat, gLng: c.gLng, dayType: c.dayType, bucket: c.bucket,
+        batch.set(col.doc(c.cellId), { gLat: c.gLat, gLng: c.gLng, dayType: c.dayType, bucket: c.bucket,
           count: firebase.firestore.FieldValue.increment(c.delta), updatedAt: Date.now() }, { merge: true });
       });
       await batch.commit();
@@ -525,6 +542,8 @@
     }
     return written;
   }
+  function backfillTeamGrid(pickups) { var c = teamGridCol(); if (!c) throw new Error('請先建立或加入車隊'); return _backfill(c, pickups); }
+  function backfillGlobalGrid(pickups) { return _backfill(globalGridCol(), pickups); }
 
   // Email + 密碼登入：純 API、不靠彈窗/轉址，在 App 內嵌瀏覽器 100% 可用。
   // 沒帳號就自動註冊，有帳號就登入；密碼錯誤才提示。
@@ -795,10 +814,12 @@
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
     resetLocal: resetLocal,
-    // 共享熱點/車隊（Phase 1）
+    // 共享熱點/車隊（Phase 1）＋全體池（Phase 2）
     myTeam: myTeam, setShareHotspots: setShareHotspots,
+    shareGlobalOn: shareGlobalOn, setShareGlobal: setShareGlobal,
     createCarTeam: createCarTeam, createTeamInvite: createTeamInvite, joinCarTeam: joinCarTeam, leaveCarTeam: leaveCarTeam,
-    contributeHotspot: contributeHotspot, readGroupGrid: readGroupGrid, backfillTeamGrid: backfillTeamGrid,
+    contributeHotspot: contributeHotspot, readGroupGrid: readGroupGrid, readGlobalGrid: readGlobalGrid,
+    backfillTeamGrid: backfillTeamGrid, backfillGlobalGrid: backfillGlobalGrid,
     _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision,
     _teamClaimBlock: _teamClaimBlock, _capTake: _capTake };
 })();

@@ -1,8 +1,11 @@
-# 共享找客熱點 / 車隊 — Firestore 安全規則參考（Phase 1）
+# 共享找客熱點 / 車隊 — Firestore 安全規則參考（Phase 1 車隊 ＋ Phase 2 全體）
 
+> ✅ **整理好、可整份貼上的完整規則在 repo 根目錄 `firestore.rules`**（含記帳者＋Phase 1＋Phase 2，
+> 一次貼進 Firebase 主控台就好）。本文是**逐段說明＋測試清單**。
+>
 > ⚠️ **這份規則我（開發端）無法在這裡實測**——規則部署在 Firebase console，不在 repo。
-> 這是**依目前資料模型寫的起點**，**務必先用 Rules Playground ＋第二組真實帳號驗證再發佈**。
-> JS 這層（`sync.js`）完全信任規則正確；「只有隊員能讀寫該隊 grid、格子只存去識別化熱度」的界線**只由這份規則保證**。
+> **務必先用 Rules Playground ＋第二組真實帳號驗證再發佈**。JS 這層（`sync.js`）完全信任規則正確；
+> 「只有隊員能讀寫該隊 grid、全體池 count 只增、格子只存去識別化熱度」的界線**只由規則保證**。
 
 ## 資料模型（`js/sync.js` 車隊段實際用到的路徑）
 
@@ -16,14 +19,24 @@
 
 > `meta/prefs` 不需另寫規則——沿用記帳者參考裡的 `match /meta/{doc}`（write 只本人；prefs 非 profile，記帳者也讀不到）。
 
-## 需要的複合索引（**務必先建，否則讀取查詢會被 Firestore 擋**）
+## Phase 2：全體去識別化池（`hotspotGrid`）
 
-讀隊 grid 的查詢是「兩個等值 + 一個範圍」：
+- 資料路徑：`hotspotGrid/{cellId}`，欄位與車隊 grid **完全相同** `{ gLat, gLng, dayType, bucket, count, updatedAt }`。
+- 偏好：`users/{uid}/meta/prefs.shareGlobal`（bool，只本人；與車隊 `groupId` 獨立，兩池可同時開）。
+- 權限：**任何登入者可讀可寫**（本來就是要給大家看/貢獻）、`count` 只增不減、不可刪。
+- **k-匿名門檻更高＝5**（車隊 2）：在前端 `hotspot-share.globalCells` 過濾（`GLOBAL_MIN_COUNT=5`），規則不管門檻。
+- 貢獻：司機完成一趟載客時，車隊（若在隊＋開分享）與全體（若開 `shareGlobal`）**各自都 +1**（同一趟前端去重一次、共用每日上限 300）。
+
+## 需要的複合索引（**務必先建兩個，否則讀取查詢會被 Firestore 擋**）
+
+讀 grid 的查詢是「兩個等值 + 一個範圍」，車隊與全體各需一個索引：
 ```
-groups/{gid}/grid  where dayType == …  where bucket == …  where gLat >= …  where gLat <= …
+groups/{gid}/grid  where dayType == …  where bucket == …  where gLat >= …  where gLat <= …   → 索引①
+hotspotGrid        where dayType == …  where bucket == …  where gLat >= …  where gLat <= …   → 索引②
 ```
-→ 需要 **集合（Collection）索引**：`grid`，欄位順序 `dayType (ASC)`、`bucket (ASC)`、`gLat (ASC)`。
+→ 各需 **集合（Collection）索引**，欄位順序 `dayType (ASC)`、`bucket (ASC)`、`gLat (ASC)`。
 第一次查詢失敗時，Firestore 主控台會回一個「建立索引」的直接連結，點下去建即可（約 1–2 分鐘生效）。
+（車隊 grid 是子集合，若要跨多隊查可改建「集合群組 Collection group」索引；本專案只查自己那一隊，一般集合索引即可。）
 
 ## 參考規則（**未實測，先在 Playground 驗證**；與記帳者規則並存，貼進同一個 `match /documents` 內）
 
@@ -97,6 +110,10 @@ service cloud.firestore {
 6. **邀請碼**：非隊員 by≠自己 建立 groupInvites → 拒；隊員產生 → 可；30 天 `exp` 過期由前端 `_teamClaimBlock` 擋。
 7. **退隊**：B `leaveCarTeam` → `members/B` 被刪、`memberCount` −1；退隊後 B 讀 grid → **必須被拒**。
 8. **k-匿名（前端）**：只有 1 筆的格子在讀取端（`teamCells`，門檻 2）不顯示——這是隱私/雜訊防線，非規則層。
+9. **全體池讀寫（Phase 2）**：登入者 D 開 `shareGlobal` → 完成載客後 `hotspotGrid` 對應格 +1；讀 `hotspotGrid` 拿得到附近格。
+10. **全體池 count 只增**：把 `hotspotGrid` 某格 count 改小/設 0 → **必須被拒**。
+11. **全體池 k-匿名（前端）**：count<5 的格在 `globalCells`（門檻 5）不顯示；同資料在車隊（門檻 2）才顯示。
+12. **兩池獨立**：只開車隊沒開全體 → 不寫 `hotspotGrid`；只開全體沒在車隊 → 不寫任何 `groups`。同開 → 一趟兩池各 +1。
 
 ## 隱私與防濫用（設計備註）
 

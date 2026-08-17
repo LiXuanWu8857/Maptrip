@@ -162,7 +162,15 @@
   - `js/recorder.js` `finalizeSavedTrip`：完成一趟載客（有上車點、非「其他」）→ 呼叫 `contributeHotspot`（有加入車隊＋開分享才寫）。
   - **安全根在 Firestore 規則（見 `docs/共享熱點-firestore規則參考.md`）**：只有隊員能讀寫該隊 grid、count 只增不減、
     grid 不含個資、邀請碼隊員才能建。**務必先建複合索引（grid: dayType+bucket+gLat）＋第二帳號 Playground 實測再發佈**。
-    設計草稿 `docs/共享熱點-設計草稿.md`（Phase 2 全體池待未來）。三支測試共 64 項全過零 pageerror
+    設計草稿 `docs/共享熱點-設計草稿.md`。三支測試共 64 項全過零 pageerror
+  - **Phase 2 全體去識別化池（v338）**：新增 `hotspotGrid/{cellId}`（頂層集合，結構同車隊 grid），**任何登入者可讀可寫、
+    count 只增不減**；偏好 `prefs.shareGlobal`（與車隊 groupId 獨立、兩池可同開）；k-匿名門檻更高＝5
+    （`hotspot-share.globalCells`，`GLOBAL_MIN_COUNT`）。`sync.js`：`setShareGlobal/shareGlobalOn/readGlobalGrid/
+    backfillGlobalGrid`；`contributeHotspot` 改成車隊＋全體**各自都寫**（同趟去重一次、共用每日上限 300）；grid 讀寫抽出
+    `_readGrid/_backfill/_gridSet` 共用（車隊＝`groups/{gid}/grid`、全體＝`hotspotGrid`）。`hotspots.js`：`mix` 擴成
+    **三層**（自×2＋隊×1＋全體×1，source∈own/team/global/both），共享面板加「🌐 全體」開關＋回填，`run()` 用 `anyShare()`
+    決定升級。**需第二個複合索引 `hotspotGrid: dayType+bucket+gLat`**。**整理好的完整規則在 repo 根 `firestore.rules`**
+    （記帳者＋Phase1＋Phase2 一次貼上）。三支測試擴到共 88 項全過零 pageerror
 - **記帳者模式** `js/bookkeeper.js`：邀請碼授權；記帳者唯讀行程、可編抽成；
   雙向即時同步（司機端訂閱 commissions → applyCommission 合併）。
   **v263 修 4 個自檢問題**：①**撤銷持久化**——`removeBookkeeper` 撤銷時把該記帳者兌換過的邀請碼標

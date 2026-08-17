@@ -17,8 +17,9 @@
   var GRID_DEG   = 0.003;    // 網格邊長（度）≈ 330m（緯度）
   var RADIUS_M   = 2500;     // 附近半徑（公尺）
   var MIN_COUNT  = 2;        // 隊友格子 k-匿名門檻（≥2 才顯示）
+  var GLOBAL_MIN_COUNT = 5;  // 全體池 k-匿名門檻（Phase 2；池子更大、門檻更高避免洩漏/雜訊）
   var BACKFILL_CAP = 500;    // 回填單次最多寫幾格
-  var OWN_W = 2, TEAM_W = 1; // 混合權重：自己的上車點加重、隊友當背景
+  var OWN_W = 2, TEAM_W = 1, GLOBAL_W = 1;  // 混合權重：自己加重、隊友/全體當背景
   var DAY = 86400000;
 
   // ---- 時段（8 段，與 hotspots.js / finance.js 一致；深夜跨午夜）----
@@ -143,21 +144,30 @@
     return out;
   }
 
-  // ---- 混合排名：自己 ×OWN_W、隊友 ×TEAM_W，同格子合併；回傳排名 zones ----
-  // 顯示條件：自己有(≥1) 或 隊友過了 k-匿名 的格子。
-  function mix(ownMap, teamMap, me, topN) {
+  // ---- 讀取端：全體池 grid（Phase 2）→ 同 teamCells，但 k-匿名門檻更高（GLOBAL_MIN_COUNT）----
+  function globalCells(gridDocs, me, opts) {
+    opts = opts || {};
+    if (opts.minCount == null) opts = Object.assign({}, opts, { minCount: GLOBAL_MIN_COUNT });
+    return teamCells(gridDocs, me, opts);
+  }
+
+  // ---- 混合排名：自己 ×OWN_W、隊友 ×TEAM_W、全體 ×GLOBAL_W，同格子合併；回傳排名 zones ----
+  // 顯示條件：自己有(≥1) 或 隊友/全體過了各自 k-匿名 的格子。globalMap 選填（Phase 2）。
+  function mix(ownMap, teamMap, me, topN, globalMap) {
     var keys = {};
-    Object.keys(ownMap || {}).forEach(function (k) { keys[k] = 1; });
-    Object.keys(teamMap || {}).forEach(function (k) { keys[k] = 1; });
+    [ownMap, teamMap, globalMap].forEach(function (m) { if (m) Object.keys(m).forEach(function (k) { keys[k] = 1; }); });
     var zones = Object.keys(keys).map(function (k) {
-      var o = (ownMap && ownMap[k]) || null, t = (teamMap && teamMap[k]) || null;
-      var gLat = (o && o.gLat) != null ? o.gLat : t.gLat, gLng = (o && o.gLng) != null ? o.gLng : t.gLng;
-      var ownCount = o ? o.count : 0, teamScore = t ? t.score : 0, teamCount = t ? t.count : 0;
-      var center = { lat: gLat, lng: gLng };
+      var o = (ownMap && ownMap[k]) || null, t = (teamMap && teamMap[k]) || null, g = (globalMap && globalMap[k]) || null;
+      var ref = o || t || g;
+      var center = { lat: ref.gLat, lng: ref.gLng };
+      var ownCount = o ? o.count : 0;
+      var teamScore = t ? t.score : 0, teamCount = t ? t.count : 0;
+      var globalScore = g ? g.score : 0, globalCount = g ? g.count : 0;
+      var bg = teamCount || globalCount;   // 有沒有「背景池」證據
       return {
-        center: center, score: ownCount * OWN_W + teamScore * TEAM_W,
-        ownCount: ownCount, teamCount: teamCount,
-        source: ownCount && teamCount ? 'both' : (ownCount ? 'own' : 'team'),
+        center: center, score: ownCount * OWN_W + teamScore * TEAM_W + globalScore * GLOBAL_W,
+        ownCount: ownCount, teamCount: teamCount, globalCount: globalCount,
+        source: (ownCount && bg) ? 'both' : (ownCount ? 'own' : (teamCount ? 'team' : 'global')),
         dist: haversine(me, center), brg: bearing(me, center)
       };
     });
@@ -167,11 +177,12 @@
 
   global.MaptripHotspotShare = {
     // 常數（供 sync/panel 對齊）
-    GRID_DEG: GRID_DEG, RADIUS_M: RADIUS_M, MIN_COUNT: MIN_COUNT, BACKFILL_CAP: BACKFILL_CAP,
+    GRID_DEG: GRID_DEG, RADIUS_M: RADIUS_M, MIN_COUNT: MIN_COUNT, GLOBAL_MIN_COUNT: GLOBAL_MIN_COUNT, BACKFILL_CAP: BACKFILL_CAP,
     // 純函式
     dayType: dayType, bucket: bucket, isOffDay: isOffDay,
     cellFields: cellFields, cellId: cellId, gridKey: gridKey, nowContext: nowContext, latBand: latBand,
-    aggregateHistoryCells: aggregateHistoryCells, ownCellsNow: ownCellsNow, teamCells: teamCells, mix: mix,
+    aggregateHistoryCells: aggregateHistoryCells, ownCellsNow: ownCellsNow,
+    teamCells: teamCells, globalCells: globalCells, mix: mix,
     haversine: haversine, bearing: bearing
   };
 })(typeof window !== 'undefined' ? window : globalThis);
