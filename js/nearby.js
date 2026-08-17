@@ -11,8 +11,12 @@
 
   var RADIUS = 3000;          // 搜尋半徑（公尺）：3km 對加油/停車/超商已足夠，且查詢更快
   var TOP_N  = 12;            // 最多標幾家（放寬，避免密集區把附近的擠掉）
+  // 多個公共 Overpass 鏡像：平行競速、先回先用。單一伺服器過載/掛掉不會讓搜尋整個死掉
+  // （kumi.systems 長期不穩，故補上 private.coffee / mail.ru 這兩個較穩定的鏡像）。
   var MIRRORS = [
     'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter'
   ];
   // 便利商店品牌後備：OSM 常有把 7-11/全家…只給 name 沒給 shop=convenience 的情況，
@@ -242,6 +246,7 @@
   window.MaptripNearby = {
     run: run, close: close, clearMap: clearMap, CATS: CATS, AUTO_MS_DEFAULT: 120000, hasResults: hasResults,
     _haversine: _haversine, _fmtDist: _fmtDist, _name: _name, _toilet: _toilet,
-    _parse: _parse, _overpassBody: _overpassBody, _note: _note, _drawMap: drawMap, _setAutoMs: _setAutoMs
+    _parse: _parse, _overpassBody: _overpassBody, _note: _note, _drawMap: drawMap, _setAutoMs: _setAutoMs,
+    _fetchOverpass: fetchOverpass, _mirrors: MIRRORS
   };
 })();

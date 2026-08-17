@@ -17,8 +17,11 @@
   var RADIUS = 2000;          // 搜尋半徑（公尺）
   var CELL   = 350;           // 聚合網格邊長（公尺）
   var TOP_N  = 6;             // 顯示前幾名熱區
+  // 多個公共 Overpass 鏡像：平行競速、先回先用（單一伺服器過載/掛掉不會整個失敗）。
   var MIRRORS = [
     'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter'
   ];
 
@@ -136,22 +139,30 @@
       ');out center tags 200;';
   }
 
-  // 抓 Overpass（依序試鏡像；20 秒逾時；失敗回 null）
+  // 抓 Overpass（所有鏡像平行競速、先回先用；全掛才回 null；15 秒逾時）。
+  // 改平行後多加鏡像也不會拖慢（原本依序 20s×N 全掛要等很久）。
   function fetchOverpass(la, ln) {
     var body = 'data=' + encodeURIComponent(overpassQuery(la, ln));
-    function tryAt(i) {
-      if (i >= MIRRORS.length) return Promise.resolve(null);
-      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-      var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 20000);
-      var opt = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body };
-      if (ctrl) opt.signal = ctrl.signal;
-      return fetch(MIRRORS[i], opt).then(function (r) {
-        clearTimeout(timer);
-        if (!r || !r.ok) throw new Error('http ' + (r && r.status));
-        return r.json();
-      }).catch(function () { clearTimeout(timer); return tryAt(i + 1); });
-    }
-    return tryAt(0);
+    return new Promise(function (resolve) {
+      var pending = MIRRORS.length, settled = false;
+      MIRRORS.forEach(function (url) {
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+        var opt = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body };
+        if (ctrl) opt.signal = ctrl.signal;
+        fetch(url, opt).then(function (r) {
+          clearTimeout(timer);
+          if (!r || !r.ok) throw new Error('http ' + (r && r.status));
+          return r.json();
+        }).then(function (data) {
+          if (!settled) { settled = true; resolve(data); }          // 先到先用
+        }).catch(function () {
+          clearTimeout(timer);
+          pending--;
+          if (pending <= 0 && !settled) { settled = true; resolve(null); }   // 全掛才失敗
+        });
+      });
+    });
   }
 
   // 歷史上車點（每趟 coords[0]），附發生時間供近期/同時段加權
@@ -610,6 +621,7 @@
     teamLeave: teamLeave, teamToggle: teamToggle, teamInvite: teamInvite, teamBackfill: teamBackfill,
     globalToggle: globalToggle, globalBackfill: globalBackfill,
     _buildHistoryNow: buildHistoryNow, _bucketOf: bucketOf, _isOffDay: isOffDay, _dayFactor: dayFactor,
-    _buildMixed: buildMixed, _inTeamShare: inTeamShare, _shareGlobalActive: shareGlobalActive, _anyShare: anyShare };
+    _buildMixed: buildMixed, _inTeamShare: inTeamShare, _shareGlobalActive: shareGlobalActive, _anyShare: anyShare,
+    _fetchOverpass: fetchOverpass, _mirrors: MIRRORS };
   window.openHotspots = run;
 })();
