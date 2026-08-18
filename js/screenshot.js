@@ -19,10 +19,16 @@ function _latlngToWorldPx(lat, lng, z) {
   return { x: (lng + 180) / 360 * s, y: (0.5 - Math.log((1 + t) / (1 - t)) / (4 * Math.PI)) * s };
 }
 
-function _loadTile(url) {
+// 載入一張圖磚。**必帶逾時**：CartoDB 圖磚伺服器過載/掛住時，Image 不會觸發 onload/onerror，
+// 沒逾時的話 Promise 永遠不 resolve → 上層 Promise.all 卡死 → 整張截圖出不來（全日尤甚，圖磚多）。
+// 逾時就當這張圖磚「跳過」（回 null，繪圖層 if(!img)return 略過），截圖照樣完成（底圖缺幾塊而已）。
+function _loadTile(url, timeoutMs) {
   return new Promise(r => {
     const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload = () => r(img); img.onerror = () => r(null); img.src = url;
+    let done = false;
+    const finish = v => { if (done) return; done = true; clearTimeout(timer); r(v); };
+    const timer = setTimeout(() => { try { img.src = ''; } catch (_) {} finish(null); }, timeoutMs || 6000);
+    img.onload = () => finish(img); img.onerror = () => finish(null); img.src = url;
   });
 }
 
