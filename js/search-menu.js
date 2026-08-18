@@ -1,17 +1,18 @@
 // search-menu.js — 右下角「🔍 搜尋」FAB 的彈出選單（speed-dial）：
-// 點 FAB 展開三個選項（找客熱區／加油站／停車場），點外面或選一項即收起。
+// 點 FAB 展開選項（找客熱區／加油站／停車場／便利商店／醫院／搜尋地址），點外面或選一項即收起。
 //   找客熱區 → window.openHotspots()
-//   加油站   → MaptripNearby.run('fuel')
-//   停車場   → MaptripNearby.run('parking')
+//   加油站/停車場/便利商店/醫院 → MaptripNearby.run(kind)
+//   搜尋地址 → MaptripAddr.open()
 (function () {
   'use strict';
 
   var ITEMS = [
-    { k: 'hotspot', icon: '🔥', label: '找客熱區' },
-    { k: 'fuel',    icon: '⛽', label: '加油站' },
-    { k: 'parking', icon: '🅿️', label: '停車場' },
-    { k: 'store',   icon: '🏪', label: '便利商店' },
-    { k: 'address', icon: '📍', label: '搜尋地址' }
+    { k: 'hotspot',  icon: '🔥', label: '找客熱區' },
+    { k: 'fuel',     icon: '⛽', label: '加油站' },
+    { k: 'parking',  icon: '🅿️', label: '停車場' },
+    { k: 'store',    icon: '🏪', label: '便利商店' },
+    { k: 'hospital', icon: '🏥', label: '醫院' },
+    { k: 'address',  icon: '📍', label: '搜尋地址' }
   ];
 
   // 選單從「我的位置」FAB（bottom:64）那格起，最下面那顆（找客熱區）從該處長出、往上疊。
@@ -52,13 +53,15 @@
     '#mt-sm.on .pill:nth-child(3){transition-delay:.09s;}' +
     '#mt-sm.on .pill:nth-child(4){transition-delay:.135s;}' +
     '#mt-sm.on .pill:nth-child(5){transition-delay:.18s;}' +
+    '#mt-sm.on .pill:nth-child(6){transition-delay:.225s;}' +
     // 收起（移除 .on → 套用這組基底延遲，被上面 .on 那組覆蓋）：反過來，
     // 最上面那顆先縮、最下面（最靠 FAB）最後縮＝跟長出動畫完全相反、像倒帶收回 FAB。
-    '#mt-sm .pill:nth-child(1){transition-delay:.18s;}' +
-    '#mt-sm .pill:nth-child(2){transition-delay:.135s;}' +
-    '#mt-sm .pill:nth-child(3){transition-delay:.09s;}' +
-    '#mt-sm .pill:nth-child(4){transition-delay:.045s;}' +
-    '#mt-sm .pill:nth-child(5){transition-delay:0s;}' +
+    '#mt-sm .pill:nth-child(1){transition-delay:.225s;}' +
+    '#mt-sm .pill:nth-child(2){transition-delay:.18s;}' +
+    '#mt-sm .pill:nth-child(3){transition-delay:.135s;}' +
+    '#mt-sm .pill:nth-child(4){transition-delay:.09s;}' +
+    '#mt-sm .pill:nth-child(5){transition-delay:.045s;}' +
+    '#mt-sm .pill:nth-child(6){transition-delay:0s;}' +
     '#mt-sm .pill .i{font-size:18px;line-height:1;}' +
     // 不用 :active（觸控按下態）：動畫期間 :active 會落在「手指按下當下」的那顆，可能與最後
     // click 到的那顆不同（iOS 座標/時序差）→ 高亮跑到相鄰按鈕。改成只用 .picked（由 click

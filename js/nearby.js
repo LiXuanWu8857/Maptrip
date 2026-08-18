@@ -31,7 +31,9 @@
     parking: { sels: ['amenity=parking'],
                title: '附近停車場',   icon: '🅿️', accent: '#1a56b0', empty: '附近 3 公里內找不到停車場',   dft: '停車場',   short: '停車場' },
     store:   { sels: ['shop=convenience', 'shop][name~"' + STORE_BRAND + '",i'], exclude: STORE_EXCLUDE,
-               title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 3 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true }
+               title: '附近便利商店', icon: '🏪', accent: '#e8710a', empty: '附近 3 公里內找不到便利商店', dft: '便利商店', short: '便利商店', wc: true },
+    hospital:{ sels: ['amenity=hospital'],
+               title: '附近醫院',     icon: '🏥', accent: '#c5221f', empty: '附近 3 公里內找不到醫院',     dft: '醫院',     short: '醫院' }
   };
 
   function pos()  { return window.__mtLive && window.__mtLive.pos; }
