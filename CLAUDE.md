@@ -171,6 +171,15 @@
     **三層**（自×2＋隊×1＋全體×1，source∈own/team/global/both），共享面板加「🌐 全體」開關＋回填，`run()` 用 `anyShare()`
     決定升級。**需第二個複合索引 `hotspotGrid: dayType+bucket+gLat`**。**整理好的完整規則在 repo 根 `firestore.rules`**
     （記帳者＋Phase1＋Phase2 一次貼上）。三支測試擴到共 88 項全過零 pageerror
+- **限時禁轉路口標注（v343，Phase 1 手動）** `js/restrictions.js`（MaptripRestrict）：手動標「限時禁左轉/右轉/迴轉/禁行」
+  的路口＋時段，地圖上標記，且**接近＋正好在限制時段內**才跳提醒。使用者選「兩者都要（先手動、之後補自動 OSM）」＋
+  「地圖標記＋接近提醒兩個合一」。**放置＝地圖中心**（gl-compat 的 map click 不帶 latlng，改用 `getCenter` 兩引擎都對）：
+  選單「🚫 標注禁轉路口」→ 中央十字＋瞄準列「就是這裡」→ 表單（類型/適用日 每天·平日·假日/時段）→ 存。
+  資料存**本機 localStorage `maptrip_restrict`**（Phase 1 未上雲）。時段解析容錯（`07-09`／`07:30-09:00`／多段空白或逗號分隔、
+  跨午夜），`_isActiveAt` 判日型＋時段，`_dueAlerts` 每 5 秒讀 `__mtLive.pos`、近 180m＋在時段才提醒、cooldown 120s、
+  離開清紀錄。點既有標記可編輯/刪除。app.js：選單 `restrict`→`startAdd`、boot 後 1.5s `MaptripRestrict.init()`（畫標記＋啟提醒）。
+  純函式 `_parseWindows/_isActiveAt/_dayScopeOk/_inWindow/_fmtWindows/_dueAlerts` 供測試。測試 `restricttest.js` 29＋
+  `restrictwire.js` 17＝46 全過零 pageerror。**待辦 Phase 2**：OSM `restriction:conditional` 自動抓當補充來源；未來可上雲同步。
 - **記帳者模式** `js/bookkeeper.js`：邀請碼授權；記帳者唯讀行程、可編抽成；
   雙向即時同步（司機端訂閱 commissions → applyCommission 合併）。
   **v263 修 4 個自檢問題**：①**撤銷持久化**——`removeBookkeeper` 撤銷時把該記帳者兌換過的邀請碼標

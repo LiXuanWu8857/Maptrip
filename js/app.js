@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.342';
+const APP_VERSION  = '1.1.343';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -919,6 +919,7 @@ function _dispatchMenu(action) {
   else if (action === 'address') { closeSheet(); if (window.MaptripAddr) MaptripAddr.open(); }
   else if (action === 'train') { closeSheet(); if (window.openTrainSettings) window.openTrainSettings(); }
   else if (action === 'metro') { closeSheet(); if (window.openMetroSettings) window.openMetroSettings(); }
+  else if (action === 'restrict') { closeSheet(); if (window.MaptripRestrict) MaptripRestrict.startAdd(); }
   else if (action === 'glmap') toggleGlEngine();
   else if (action === 'reviewtoggle') { if (window.MaptripDesktop) MaptripDesktop.toggle(); }
 }
@@ -2312,6 +2313,8 @@ function boot() {
   setTimeout(() => { try { enableDeviceCompass(true); } catch (_) {} }, 800);
   // 開機 10 秒後補貼路（未在記錄中才跑），逐步把「直線趟」修成真實路線
   setTimeout(() => { if (!activeTrip) retrySnapBacklog(); }, 10000);
+  // 限時禁轉路口：地圖穩定後畫出既有標注＋啟動接近提醒
+  setTimeout(() => { try { if (window.MaptripRestrict) MaptripRestrict.init(); } catch (_) {} }, 1500);
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');
