@@ -10,9 +10,20 @@
 (function (global) {
   'use strict';
 
-  var KEY = 'maptrip_restrict';
+  var KEY = 'maptrip_restrict';        // 手動標注（使用者擁有、可編輯）
+  var OSM_KEY = 'maptrip_restrict_osm'; // OSM 自動抓的快取（可重抓、唯讀）
+  var OSM_RADIUS = 2500;               // 自動抓半徑（公尺）
   var ALERT_M = 180;            // 接近提醒半徑（公尺）
   var ALERT_COOLDOWN = 120000;  // 同一路口最短提醒間隔（毫秒）
+  // 公共 Overpass 鏡像：平行競速、先回先用（與 nearby.js/hotspots.js 一致）
+  var MIRRORS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter'
+  ];
+  // OSM restriction 值 → 本模組類型（只取我們支援的 4 種；only_* 正向限制與其它略過）
+  var OSM_TYPE = { no_left_turn: 'noleft', no_right_turn: 'noright', no_u_turn: 'nouturn', no_entry: 'noentry' };
   var TYPES = {
     noleft:  { short: '禁左', label: '禁止左轉', glyph: '↰' },
     noright: { short: '禁右', label: '禁止右轉', glyph: '↱' },
@@ -29,6 +40,17 @@
   function add(rec) { var l = load(); l.push(rec); save(l); return rec; }
   function update(id, patch) { var l = load(), i = l.findIndex(function (r) { return r.id === id; }); if (i >= 0) { l[i] = Object.assign({}, l[i], patch); save(l); } return l[i]; }
   function remove(id) { save(load().filter(function (r) { return r.id !== id; })); }
+  // OSM 快取（唯讀，可重抓；以 id 上覆蓋合併，跨區域累積不互相蓋掉）
+  function _osmLoad() { try { return JSON.parse(localStorage.getItem(OSM_KEY) || '[]') || []; } catch (_) { return []; } }
+  function _osmSave(list) { try { localStorage.setItem(OSM_KEY, JSON.stringify(list || [])); } catch (_) {} }
+  function _osmMerge(recs) {
+    var map = {}; _osmLoad().forEach(function (r) { map[r.id] = r; });
+    (recs || []).forEach(function (r) { map[r.id] = r; });
+    var out = Object.keys(map).map(function (k) { return map[k]; });
+    _osmSave(out); return out;
+  }
+  // 手動＋OSM 的聯集（畫標記／接近提醒都用它）
+  function _allRecs() { return load().concat(_osmLoad()); }
 
   // ---------- 純函式：時段解析/判定/格式化（供測試）----------
   function _pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -95,6 +117,61 @@
     return { due: due, last: next };
   }
 
+  // ---------- OSM 自動抓：解析 restriction:conditional（純函式，供測試）----------
+  // 條件值範例："no_left_turn @ (Mo-Fr 07:00-09:00)"、"no_u_turn @ (Mo-Fr 07:00-09:00,17:00-19:00)"，
+  // 多筆用 ';' 分隔。回傳 [{type,day,windows}]（只留我們支援的 4 種）。
+  function _timeRanges(cond) {
+    var re = /(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/g, w = [], m;
+    while ((m = re.exec(cond))) { w.push({ from: (+m[1]) * 60 + (+m[2]), to: (+m[3]) * 60 + (+m[4]) }); }
+    return w;
+  }
+  function _dayScope(cond) {
+    var hasWk = /\b(Mo|Tu|We|Th|Fr)\b/.test(cond);   // Mo-Fr 也會命中 Mo/Fr
+    var hasWe = /\b(Sa|Su)\b/.test(cond);
+    if (hasWk && !hasWe) return 'wk';
+    if (hasWe && !hasWk) return 'we';
+    return 'all';
+  }
+  function _parseConditional(val) {
+    if (!val) return [];
+    var out = [];
+    String(val).split(';').forEach(function (part) {
+      var m = part.match(/^\s*([a-z_]+)\s*@\s*\(([^)]*)\)/i);
+      if (!m) return;
+      var type = OSM_TYPE[m[1]]; if (!type) return;
+      var cond = m[2];
+      out.push({ type: type, day: _dayScope(cond), windows: _timeRanges(cond) });
+    });
+    return out;
+  }
+  // Overpass 回來的 relation 元素 → 標注 recs（via 節點座標＝路口位置；out geom 帶 members 幾何）
+  function _parseOsmElements(els) {
+    var out = [];
+    (els || []).forEach(function (e) {
+      if (e.type !== 'relation') return;
+      var tags = e.tags || {};
+      var val = tags['restriction:conditional']; if (!val) return;
+      var parsed = _parseConditional(val); if (!parsed.length) return;
+      var via = null;
+      (e.members || []).forEach(function (mm) {
+        if (mm.role === 'via' && mm.type === 'node' && typeof mm.lat === 'number') via = { lat: mm.lat, lng: mm.lon };
+      });
+      if (!via) (e.members || []).forEach(function (mm) {   // 沒明確 via → 取任一節點成員
+        if (!via && mm.type === 'node' && typeof mm.lat === 'number') via = { lat: mm.lat, lng: mm.lon };
+      });
+      if (!via) return;
+      parsed.forEach(function (p, i) {
+        out.push({ id: 'osm' + e.id + '_' + i, source: 'osm', type: p.type, day: p.day, windows: p.windows, lat: via.lat, lng: via.lng });
+      });
+    });
+    return out;
+  }
+  function _overpassBody(lat, lng) {
+    var q = '[out:json][timeout:25];relation(around:' + OSM_RADIUS + ',' + lat + ',' + lng + ')' +
+      '["type"="restriction"]["restriction:conditional"];out tags geom;';
+    return 'data=' + encodeURIComponent(q);
+  }
+
   // ---------- 地圖 ----------
   function gmap() { return window.__mtLive && window.__mtLive.map; }
   function say(m) { if (window.toast) window.toast(m); }
@@ -104,23 +181,32 @@
     var t = TYPES[rec.type] || TYPES.noleft;
     var tw = _fmtWindows(rec);
     var dtag = (rec.day && rec.day !== 'all') ? ('<span class="mt-rx-d">' + DAYS[rec.day] + '</span>') : '';
-    return '<div class="mt-rx"><div class="mt-rx-ic">' + t.glyph + '</div>' +
-      '<div class="mt-rx-t">' + dtag + tw + '</div></div>';
+    var osm = rec.source === 'osm' ? ' mt-rx-osm' : '';
+    var badge = rec.source === 'osm' ? '<span class="mt-rx-d">OSM</span>' : '';
+    return '<div class="mt-rx' + osm + '"><div class="mt-rx-ic">' + t.glyph + '</div>' +
+      '<div class="mt-rx-t">' + badge + dtag + tw + '</div></div>';
   }
   function drawAll() {
     var m = gmap(); if (!m || !window.L) return;
     _ensureCss();
     clearMap();
-    load().forEach(function (rec) {
+    _allRecs().forEach(function (rec) {
       try {
         var icon = L.divIcon({ className: 'mt-rx-wrap', html: _iconHtml(rec), iconSize: [1, 1], iconAnchor: [0, 0] });
         var mk = L.marker([rec.lat, rec.lng], { icon: icon });
         mk.addTo(m);
-        (function (id) {
-          var open = function () { var r = load().find(function (x) { return x.id === id; }); if (r) openForm(r); };
+        (function (r0) {
+          var open = function () {
+            if (r0.source === 'osm') {   // OSM 自動抓：唯讀，點了只顯示資訊
+              var t = TYPES[r0.type] || {};
+              say('🛰 OSM：' + t.label + '（' + _fmtWindows(r0) + (r0.day !== 'all' ? '·' + DAYS[r0.day] : '') + '）自動抓、不可編輯');
+              return;
+            }
+            var r = load().find(function (x) { return x.id === r0.id; }); if (r) openForm(r);
+          };
           if (typeof mk.on === 'function') mk.on('click', open);
           else if (mk.getElement) { var el = mk.getElement(); if (el) el.addEventListener('click', open); }
-        })(rec.id);
+        })(rec);
         _markers.push(mk);
       } catch (_) {}
     });
@@ -137,6 +223,9 @@
       '.mt-rx-t{margin-top:1px;background:#d93025;color:#fff;font-size:10px;font-weight:700;line-height:1;' +
         'padding:2px 5px;border-radius:6px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.35);}' +
       '.mt-rx-d{background:rgba(255,255,255,.25);border-radius:4px;padding:0 3px;margin-right:3px;}' +
+      // OSM 自動抓＝橘色（與手動的紅色區隔）
+      '.mt-rx-osm .mt-rx-ic{border-color:#e8710a;color:#e8710a;}' +
+      '.mt-rx-osm .mt-rx-t{background:#e8710a;}' +
       // 中央十字（瞄準）
       '#mt-rx-cross{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:30;pointer-events:none;' +
         'font-size:30px;color:#d93025;text-shadow:0 0 3px #fff,0 0 3px #fff;display:none;}' +
@@ -261,7 +350,7 @@
   var _timer = null, _last = {};
   function _tick() {
     var pos = window.__mtLive && window.__mtLive.pos; if (!pos) return;
-    var list = load(); if (!list.length) return;
+    var list = _allRecs(); if (!list.length) return;
     var res = _dueAlerts(list, pos, Date.now(), _last, ALERT_M, ALERT_COOLDOWN);
     _last = res.last;
     res.due.forEach(function (r) {
@@ -272,10 +361,46 @@
   }
   function startAlerts() {
     if (_timer) return;
-    if (!load().length) return;             // 沒標注就不啟動計時器
+    if (!_allRecs().length) return;         // 沒標注（含 OSM）就不啟動計時器
     _timer = setInterval(_tick, 5000);
   }
   function stopAlerts() { if (_timer) { clearInterval(_timer); _timer = null; } }
+
+  // ---------- OSM 自動抓（Overpass 多鏡像平行競速）----------
+  var _fetching = false;
+  function _fetchOverpass(lat, lng) {
+    var body = _overpassBody(lat, lng);
+    return new Promise(function (resolve) {
+      var pending = MIRRORS.length, settled = false;
+      MIRRORS.forEach(function (url) {
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+        var opt = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body };
+        if (ctrl) opt.signal = ctrl.signal;
+        fetch(url, opt).then(function (r) { clearTimeout(timer); if (!r || !r.ok) throw new Error('http'); return r.json(); })
+          .then(function (d) { if (!settled) { settled = true; resolve(d); } })
+          .catch(function () { clearTimeout(timer); pending--; if (pending <= 0 && !settled) { settled = true; resolve(null); } });
+      });
+    });
+  }
+  // 抓「附近」的限時禁轉路口（中心＝目前定位，無則地圖中心）。回傳新增筆數。
+  function fetchOSM() {
+    if (_fetching) return;
+    var pos = (window.__mtLive && window.__mtLive.pos) || null;
+    var m = gmap(), center = pos;
+    if (!center && m && m.getCenter) { try { var c = m.getCenter(); center = { lat: c.lat, lng: c.lng }; } catch (_) {} }
+    if (!center) { say('等待 GPS 或地圖就緒'); return; }
+    _fetching = true; say('抓取附近禁轉路口（OSM）中…');
+    _fetchOverpass(center.lat, center.lng).then(function (data) {
+      _fetching = false;
+      if (!data) { say('地圖服務暫時無法連線，稍後再試'); return; }
+      var recs = _parseOsmElements(data.elements || []);
+      _osmMerge(recs);
+      drawAll(); startAlerts();
+      say(recs.length ? ('已抓到 ' + recs.length + ' 個限時禁轉路口') : '附近 OSM 沒有限時禁轉資料（可手動標注）');
+    }).catch(function () { _fetching = false; say('抓取失敗，稍後再試'); });
+  }
+  function clearOSM() { _osmSave([]); drawAll(); say('已清除自動抓的路口'); }
 
   // ---------- 生命週期 ----------
   function init() { try { drawAll(); startAlerts(); } catch (_) {} }
@@ -283,8 +408,11 @@
   global.MaptripRestrict = {
     init: init, startAdd: startAdd, drawAll: drawAll, openForm: openForm,
     all: all, add: add, remove: remove, startAlerts: startAlerts, stopAlerts: stopAlerts, TYPES: TYPES,
+    fetchOSM: fetchOSM, clearOSM: clearOSM,
     // 純函式（測試）
     _parseWindows: _parseWindows, _isActiveAt: _isActiveAt, _dayScopeOk: _dayScopeOk,
-    _inWindow: _inWindow, _fmtWindows: _fmtWindows, _fmtWin: _fmtWin, _dueAlerts: _dueAlerts, _haversine: _haversine
+    _inWindow: _inWindow, _fmtWindows: _fmtWindows, _fmtWin: _fmtWin, _dueAlerts: _dueAlerts, _haversine: _haversine,
+    _parseConditional: _parseConditional, _parseOsmElements: _parseOsmElements, _overpassBody: _overpassBody,
+    _dayScope: _dayScope, _timeRanges: _timeRanges, _allRecs: _allRecs, _osmMerge: _osmMerge
   };
 })(typeof window !== 'undefined' ? window : globalThis);

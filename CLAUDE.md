@@ -179,7 +179,15 @@
   跨午夜），`_isActiveAt` 判日型＋時段，`_dueAlerts` 每 5 秒讀 `__mtLive.pos`、近 180m＋在時段才提醒、cooldown 120s、
   離開清紀錄。點既有標記可編輯/刪除。app.js：選單 `restrict`→`startAdd`、boot 後 1.5s `MaptripRestrict.init()`（畫標記＋啟提醒）。
   純函式 `_parseWindows/_isActiveAt/_dayScopeOk/_inWindow/_fmtWindows/_dueAlerts` 供測試。測試 `restricttest.js` 29＋
-  `restrictwire.js` 17＝46 全過零 pageerror。**待辦 Phase 2**：OSM `restriction:conditional` 自動抓當補充來源；未來可上雲同步。
+  `restrictwire.js` 17＝46 全過零 pageerror。
+  - **Phase 2 OSM 自動抓（v344）**：選單「🛰 自動抓禁轉路口」→ `fetchOSM`：以目前定位（無則地圖中心）為中心
+    Overpass 查 `relation["type"="restriction"]["restriction:conditional"]`（多鏡像平行競速、`out tags geom` 取 via 節點座標）。
+    `_parseConditional` 解析 `no_left_turn @ (Mo-Fr 07:00-09:00)` 這種 opening-hours 式條件→ `{type,day,windows}`
+    （`_dayScope` 判平日/假日、`_timeRanges` 抓時段；只留 noleft/noright/nouturn/noentry，only_* 略過）；`_parseOsmElements`
+    取 role=via 節點當路口座標。**OSM 結果與手動分開存**（`maptrip_restrict_osm`，以 id 上覆蓋合併、可重抓/累積、唯讀＝點了只顯示
+    資訊不進表單），地圖上**橘色**（手動紅色）＋「OSM」小標。`_allRecs`＝手動∪OSM，drawAll/接近提醒都用它。測試 `restrictosm.js`
+    23（conditional 解析/relation→rec/查詢字串/合併/fetchOSM 端到端 route-mock）。**注意台灣 OSM 這類資料稀疏，多數路口抓不到→仍需手動補**。
+    **待辦**：未來手動標注可上雲同步。
 - **記帳者模式** `js/bookkeeper.js`：邀請碼授權；記帳者唯讀行程、可編抽成；
   雙向即時同步（司機端訂閱 commissions → applyCommission 合併）。
   **v263 修 4 個自檢問題**：①**撤銷持久化**——`removeBookkeeper` 撤銷時把該記帳者兌換過的邀請碼標
