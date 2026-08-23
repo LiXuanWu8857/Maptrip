@@ -58,10 +58,13 @@
   // 貼路結果需「貼合原始軌跡」：任一貼路點離原始軌跡折線超過 maxDev（公尺）
   // ＝被貼到別條路／繞了街廓（例：走高架橋卻被貼到橋下平面繞一圈）→ 判為不可信、棄用。
   // 長度檢查（snapSane）抓不到「只繞一個街廓」的小繞路（總長沒超過 1.4×），故補這道偏離檢查。
-  // 失效安全：棄用只是保留原始 GPS 軌跡（橋上 ±3m 其實很準），絕不會憑空生出假路線。
+  // 失效安全：棄用只是保留原始 GPS 軌跡（橋上/開闊路 ±3m 其實很準），絕不會憑空生出假路線。
+  // 門檻 55m（原 90m）：90m 太鬆，市區「走直角卻被貼成小街廓繞一圈」的小繞路（bulge 常 40~80m）
+  // 會漏網。收到 55m 後這類小繞路被判可疑、退回原始直角軌跡；寬馬路上道路中心線與 GPS 的正常
+  // 偏移仍在容忍內（開闊路 GPS ±3~5m）。
   function snapNear(result, coords, maxDev) {
     try {
-      maxDev = maxDev || 90;
+      maxDev = maxDev || 55;
       if (!result || result.length < 2 || !coords || coords.length < 2) return true;
       for (var i = 0; i < result.length; i++) {
         var best = Infinity, p = result[i];
