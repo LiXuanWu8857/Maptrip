@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.345';
+const APP_VERSION  = '1.1.346';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1576,6 +1576,15 @@ function _historyRestore(snap) {
   body.scrollTop = snap.scrollTop || 0;
 }
 
+// 單月實際跑車天數：傳入「當月每一天的行程陣列」，計入「至少有一趟非其他（載客）」的日子。
+// 整天只有「其他」（自用/非載客）或空的日子不算。純函式，供測試。
+function _workDaysCount(dayTripArrays) {
+  return (dayTripArrays || []).filter(function (arr) {
+    return (arr || []).some(function (t) { return t && t.paymentMethod !== 'other'; });
+  }).length;
+}
+if (typeof window !== 'undefined') window._workDaysCount = _workDaysCount;
+
 function renderHistorySheet(keepState) {
   // keepState：保留目前展開的月/日與捲動位置（編輯/刪除/補抽成後用），避免跳回最新那天
   const _snap = keepState ? _historySnapshot() : null;
@@ -1604,6 +1613,8 @@ function renderHistorySheet(keepState) {
     const mTrips = mDays.flatMap(d => mergedByDay[d]);
     const mDist = mTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
     const mWork = mDays.reduce((s, d) => s + workMs(mergedByDay[d], getRestMin(d)), 0);
+    // 單月實際跑車天數：整天只有「其他」（自用/非載客）的日子不算
+    const mWorkDays = _workDaysCount(mDays.map(d => mergedByDay[d]));
     const mFareLine = _fareLineHtml(mTrips, mWork);
     const [yy, mm] = mk.split('-');
     const monthLabel = `${yy}年${parseInt(mm, 10)}月`;
@@ -1651,7 +1662,7 @@ function renderHistorySheet(keepState) {
         <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
         <span class="month-info">
           <span class="month-title">${monthLabel}</span>
-          <span class="month-sub">${mTrips.length} 趟　${fmtDist(mDist)}　工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></span>
+          <span class="month-sub">${mWorkDays} 天　${mTrips.length} 趟　${fmtDist(mDist)}　工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></span>
           ${mFareLine ? `<span class="month-fare">${mFareLine}</span>` : ''}
         </span>
       </div>
