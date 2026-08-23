@@ -18,6 +18,14 @@
   var _docClickWired = false;
   var _mount = 'bk-body';  // 內容寫進哪個容器 id：sheet 模式='bk-body'；電腦滿版='bk-home-body'
 
+  // 記帳者端只認「與載客直接相關的營業成本」＝加油/洗車/保養維修。餐飲、停車/過路、靠行租金、
+  // 保險、其他屬司機私人開銷，不在記帳者端顯示、也不從淨利扣（否則會壓低薪水基數）。
+  // 注意：這只影響記帳者/檢視台視角；司機自己的收支報表（finance.js）照舊看得到全部分類。
+  var BK_EXP_CATS = ['fuel', 'carwash', 'maintain'];
+  function _bkExpOnly(exps) {
+    return (exps || []).filter(function (e) { return BK_EXP_CATS.indexOf(e && e.cat) >= 0; });
+  }
+
   function S() { return window.MaptripSync; }
   function nf(n) { return (Math.round(n) || 0).toLocaleString(); }
   function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, function (m) { return ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[m]; }); }
@@ -378,9 +386,12 @@
       }).join('') + '</div>';
     }
 
+    // 記帳者端只認營業成本支出（加油/洗車/保養），私人開銷不扣不顯示 → 一律用過濾後的支出
+    var bkExp = _bkExpOnly(data.expenses);
+
     // 上方兩張卡：左＝當月淨利、右＝全部淨利；大數字右側疊放「趟數 / 工時」小字
-    var mNet = _netStats(days, data.commissions, data.expenses, _month);
-    var aNet = _netStats(days, data.commissions, data.expenses, null);
+    var mNet = _netStats(days, data.commissions, bkExp, _month);
+    var aNet = _netStats(days, data.commissions, bkExp, null);
     h += '<div class="bk-cards">' +
       _netCard(true, '當月淨利 · ' + sm.ym, mNet) +
       _netCard(false, '全部淨利', aNet) +
@@ -393,10 +404,10 @@
       '</div>';
 
     // 月報表（淨利，含支出）
-    h += _reportSection({ days: days, commissions: data.commissions, expenses: data.expenses }, _month);
+    h += _reportSection({ days: days, commissions: data.commissions, expenses: bkExp }, _month);
 
-    // 支出
-    h += _expensesSection(data.expenses || []);
+    // 支出（只列加油/洗車/保養）
+    h += _expensesSection(bkExp);
 
     // 每趟（依選定月份過濾）＋日期分組。欄名置頂一列（時間/付款/車資/抽成/叫車），列內只放數值。
     var dayKeys = Object.keys(days).filter(function (d) { return String(d).slice(0, 7) === _month; }).sort().reverse();
@@ -688,14 +699,19 @@
       '</div>';
   }
 
-  // ---------- 司機支出（記帳者可讀寫刪；沿用 finance 的分類清單） ----------
-  function _cats() { return (window.MaptripFinance && MaptripFinance.CATS) || [{ k: 'other', label: '其他', icon: '📦' }]; }
+  // ---------- 司機支出（記帳者可讀寫刪；只限營業成本分類：加油/洗車/保養） ----------
+  // 記帳者新增/編輯支出的分類選單只給 BK_EXP_CATS（餐飲/停車等私人開銷不由記帳者經手）。
+  function _cats() {
+    var all = (window.MaptripFinance && MaptripFinance.CATS) || [{ k: 'fuel', label: '加油', icon: '⛽' }];
+    var pick = all.filter(function (c) { return BK_EXP_CATS.indexOf(c.k) >= 0; });
+    return pick.length ? pick : all;
+  }
   function _catOf(k) { var m = (window.MaptripFinance && MaptripFinance.CAT_MAP) || {}; return m[k] || { label: k || '其他', icon: '📦' }; }
   function _today() { try { return (window.todayKey && todayKey()) || new Date().toISOString().slice(0, 10); } catch (_) { return new Date().toISOString().slice(0, 10); } }
   function _monthNow() { return _today().slice(0, 7); }
 
   function _expForm(e) {
-    var cat = e ? (e.cat || 'other') : 'fuel';
+    var cat = e ? (e.cat || 'fuel') : 'fuel';
     var opts = _cats().map(function (c) {
       return '<option value="' + c.k + '"' + (c.k === cat ? ' selected' : '') + '>' + c.icon + ' ' + esc(c.label) + '</option>';
     }).join('');
@@ -720,7 +736,7 @@
     var list = (exps || []).slice().sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
     var mSum = 0; list.forEach(function (e) { if (String(e.day || '').slice(0, 7) === _month) mSum += (e.amount || 0); });
     var shown = list.filter(function (e) { return String(e.day || '').slice(0, 7) === _month; });
-    var h = '<div class="bk-sec">司機支出 · ' + _month + '（' + shown.length + '）　本月 NT$ ' + nf(mSum) +
+    var h = '<div class="bk-sec">司機支出（加油/洗車/保養）· ' + _month + '（' + shown.length + '）　本月 NT$ ' + nf(mSum) +
       '<button class="bk-explink" onclick="MaptripBookkeeper.expAdd()">＋ 記一筆</button></div>';
     if (_expEdit === '__new__') h += _expForm(null);
     if (!shown.length && _expEdit !== '__new__') h += '<div class="bk-empty">本月尚無支出</div>';
@@ -741,7 +757,8 @@
   function expEdit(id) { _expEdit = id; paintDriver(); }
   function expCancel() { _expEdit = null; paintDriver(); }
   async function expSave(id) {
-    var cat = (document.getElementById('bk-ecat') || {}).value || 'other';
+    var cat = (document.getElementById('bk-ecat') || {}).value || 'fuel';
+    if (BK_EXP_CATS.indexOf(cat) < 0) cat = 'fuel';   // 記帳者端只能記營業成本分類
     var amt = parseInt((document.getElementById('bk-eamt') || {}).value, 10) || 0;
     var day = (document.getElementById('bk-eday') || {}).value || _today();
     var note = ((document.getElementById('bk-enote') || {}).value || '').trim();
@@ -878,7 +895,8 @@
     if (!window.MaptripExport) { if (window.toast) toast('匯出模組未載入'); return; }
     MaptripExport.copyReport({
       days: _cache.days, commissions: _cache.commissions,
-      manualTrips: _cache.manualTrips, expenses: _cache.expenses, name: _view && _view.name
+      manualTrips: _cache.manualTrips, expenses: _bkExpOnly(_cache.expenses),  // 只帶營業成本（加油/洗車/保養）
+      name: _view && _view.name
     }, ym || null);
   }
 
@@ -891,7 +909,8 @@
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
-    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats
+    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
+    _bkExpOnly: _bkExpOnly, _cats: _cats, BK_EXP_CATS: BK_EXP_CATS
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;

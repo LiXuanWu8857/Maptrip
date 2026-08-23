@@ -8,6 +8,7 @@
 
   var CATS = [
     { k: 'fuel',      label: '加油',      icon: '⛽' },
+    { k: 'carwash',   label: '洗車',      icon: '🧼' },
     { k: 'maintain',  label: '保養維修',  icon: '🔧' },
     { k: 'rent',      label: '靠行/租金', icon: '🏢' },
     { k: 'insurance', label: '保險',      icon: '🛡️' },
