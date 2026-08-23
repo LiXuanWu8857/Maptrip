@@ -79,6 +79,8 @@
       '.bk-exp-btn{flex:1;padding:10px;border:1px solid var(--bk-acc-bd);background:var(--bk-acc-bg);color:var(--bk-acc-t);' +
       'border-radius:12px;font-size:.86rem;font-weight:600;font-family:inherit;cursor:pointer}' +
       '.bk-exp-btn.gh{background:var(--bk-s1);color:var(--bk-t2);border-color:var(--bk-bd)}' +
+      '.bk-sheet-in{width:100%;box-sizing:border-box;margin-top:8px;padding:10px;border:1px solid var(--bk-bd);' +
+      'border-radius:10px;background:var(--bk-s1);color:var(--bk-text);font-family:inherit;font-size:.86rem}' +
       '.bk-hrow{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:.5px solid var(--bk-bd)}' +
       '.bk-hrow .nm{flex:1;font-size:.9rem;color:var(--bk-text)}' +
       '.bk-hrow .op{background:none;border:none;color:var(--bk-danger);font-size:.8rem;font-family:inherit;cursor:pointer;padding:4px 6px}' +
@@ -300,7 +302,61 @@
     h += '<button class="bk-solid" onclick="MaptripBookkeeper.invite()">＋ 產生邀請碼給記帳者</button>';
     // 允許記帳者修改車資（#3）：預設關；開了記帳者才能改你的每趟車資
     h += _fareToggleHtml();
+    // 每日總結自動上傳 Google Sheets（記帳者端設定；按「已完成紀錄」時上傳）
+    h += _sheetSyncHtml();
     setBody(h);
+  }
+
+  // ---------- 每日上傳 Google Sheets 設定（記帳者端） ----------
+  function _sheetSyncHtml() {
+    var S2 = window.MaptripSheetSync;
+    if (!S2) return '';
+    var c = S2.getConfig();
+    return '<div class="bk-h2">☁️ 每日上傳 Google Sheets</div>' +
+      '<div class="bk-note">記帳者對好某天金額、按「✓ 已完成紀錄」後，該日總結自動寫進你的 Google 試算表' +
+      '（司機分檔、每月分頁、每日一列）。設定方式見 docs/google-sheets-同步設定.md。</div>' +
+      '<input id="bk-sheet-url" class="bk-sheet-in" placeholder="Apps Script /exec 網址" value="' + esc(c.url) + '">' +
+      '<input id="bk-sheet-secret" class="bk-sheet-in" placeholder="密碼（與 Apps Script 一致）" value="' + esc(c.secret) + '">' +
+      '<button id="bk-sheet-auto" class="bk-fare-tg' + (c.auto ? ' on' : '') + '" onclick="MaptripBookkeeper.sheetToggleAuto()">' +
+        (c.auto ? '✓ 已開啟自動上傳（點一下關閉）' : '🔕 自動上傳（目前關閉）') + '</button>' +
+      '<div class="bk-erow">' +
+        '<button onclick="MaptripBookkeeper.sheetSave()">儲存</button>' +
+        '<button class="gh" onclick="MaptripBookkeeper.sheetTest()">測試連線</button>' +
+      '</div>' +
+      '<div class="bk-note" id="bk-sheet-stat"></div>';
+  }
+  function _sheetReadInputs() {
+    return {
+      url: (document.getElementById('bk-sheet-url') || {}).value || '',
+      secret: (document.getElementById('bk-sheet-secret') || {}).value || ''
+    };
+  }
+  function sheetSave() {
+    if (!window.MaptripSheetSync) return;
+    var v = _sheetReadInputs();
+    MaptripSheetSync.setConfig(v.url, v.secret, MaptripSheetSync.getConfig().auto);
+    if (window.toast) toast('已儲存 Google Sheets 設定');
+  }
+  function sheetToggleAuto() {
+    if (!window.MaptripSheetSync) return;
+    var v = _sheetReadInputs();
+    var next = !MaptripSheetSync.getConfig().auto;
+    MaptripSheetSync.setConfig(v.url, v.secret, next);
+    var b = document.getElementById('bk-sheet-auto');
+    if (b) { b.className = 'bk-fare-tg' + (next ? ' on' : ''); b.textContent = next ? '✓ 已開啟自動上傳（點一下關閉）' : '🔕 自動上傳（目前關閉）'; }
+  }
+  function sheetTest() {
+    if (!window.MaptripSheetSync) return;
+    var v = _sheetReadInputs();
+    MaptripSheetSync.setConfig(v.url, v.secret, MaptripSheetSync.getConfig().auto);
+    var stat = document.getElementById('bk-sheet-stat');
+    if (stat) stat.textContent = '測試中…';
+    MaptripSheetSync.ping().then(function (r) {
+      if (!stat) return;
+      stat.textContent = r.ok ? '✓ 連線成功，可以用了'
+        : (r.uncertain ? '已送出但讀不到回應：請確認部署時「誰可以存取」選了「任何人」。可先實際上傳一天測試。'
+          : ('✗ 失敗：' + (r.error || '未知')));
+    });
   }
 
   // 「允許記帳者修改車資」開關（依 _myAllowFareEdit）。給 id 方便切換時就地更新、不整頁重畫。
@@ -654,7 +710,32 @@
     return found;
   }
 
-  function toggleDay(day) { _setDone(day, !_isDone(day)); paintDriver(); }
+  function toggleDay(day) {
+    var willDone = !_isDone(day);
+    _setDone(day, willDone);
+    paintDriver();
+    if (willDone) _uploadDay(day);   // 標記「已完成紀錄」＝記帳者確認 → 自動上傳當日總結
+  }
+  // 上傳某日總結到 Google Sheets（僅在已設定＋自動上傳開啟；整天只有「其他」不傳）。
+  function _uploadDay(day) {
+    if (!(window.MaptripSheetSync && MaptripSheetSync.autoOn())) return;
+    if (!_cache || !_view) return;
+    var days = _mergeManual(_cache.days, _cache.manualTrips);
+    var dayTrips = days[day] || [];
+    var trips = dayTrips.filter(function (t) { return t.paymentMethod !== 'other'; });
+    if (!trips.length) return;   // 沒有載客趟 → 不上傳
+    var sum = _daySummary(dayTrips, _cache.commissions);
+    var exp = _bkExpOnly(_cache.expenses).filter(function (e) { return String(e.day || '') === day; })
+      .reduce(function (s, e) { return s + (e.amount || 0); }, 0);
+    MaptripSheetSync.pushDay({
+      driverUid: _view.driverUid, driverName: _view.name, day: day,
+      trips: trips.length, summary: sum, expense: exp
+    }).then(function (r) {
+      if (!window.toast) return;
+      toast(r.ok ? ('☁️ ' + day + ' 已上傳 Google Sheets')
+        : (r.uncertain ? ('☁️ ' + day + ' 已送出（無法確認）') : ('上傳失敗：' + (r.error || '未知'))));
+    });
+  }
   function addTrip(day) { _addDay = (_addDay === day ? null : day); _editId = null; paintDriver(); }
   async function saveTrip(day) {
     var fare = parseInt((document.getElementById('bk-nf') || {}).value, 10) || 0;
@@ -907,6 +988,7 @@
     openDriver: openDriver, switchDriver: switchDriver, toggleDrvMenu: toggleDrvMenu, setMonth: setMonth,
     back: back, edit: edit, saveComm: saveComm, toggleFareEdit: toggleFareEdit,
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
+    sheetSave: sheetSave, sheetTest: sheetTest, sheetToggleAuto: sheetToggleAuto,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
     _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
