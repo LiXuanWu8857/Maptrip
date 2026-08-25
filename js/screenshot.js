@@ -198,6 +198,158 @@ function _showOtherToggle(hasOther, includeOther) {
   }
 }
 
+// 當月月結截圖（歷史「每月」標題的截圖鈕）：畫當月所有行程路線 + 總金額/總工時/出車天數/平均時薪，
+// 右上角顯示「XXXX年X月」。統計走 MaptripFinance.revenueOfMonth（與收支報表同一份真相：排除「其他」、
+// 含記帳者手動趟車資、工時內建排除手動）；路線只畫有 GPS 的載客趟（手動趟無座標）。
+async function captureMonthScreenshot(ym) {
+  ym = String(ym || '').slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(ym)) { toast('月份格式錯誤'); return; }
+  const raw = loadTrips();
+  const monthTrips = [];
+  Object.keys(raw).forEach(d => {
+    if (d.slice(0, 7) !== ym) return;
+    (raw[d] || []).forEach(t => { if (t.paymentMethod !== 'other') monthTrips.push(t); });
+  });
+
+  // 統計（單一真相來源：與收支報表一致）
+  const rev = (global.MaptripFinance && MaptripFinance.revenueOfMonth)
+    ? MaptripFinance.revenueOfMonth(ym)
+    : { fare: monthTrips.reduce((s, t) => s + (t.fare || 0), 0), workMs: 0,
+        trips: monthTrips.length, dist: monthTrips.reduce((s, t) => s + (t.totalDist || 0), 0) };
+  const workDays = _monthWorkDays(raw, ym);
+  if (!(rev.trips || monthTrips.length)) { toast('當月無行程可截圖'); return; }
+  const workH = rev.workMs / 3600000;
+  const perHour = workH > 0.05 ? rev.fare / workH : 0;
+  const monthLabel = ym.slice(0, 4) + '年' + parseInt(ym.slice(5, 7), 10) + '月';
+
+  const W = 390, H = 546;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * 2; canvas.height = H * 2;
+  const c = canvas.getContext('2d');
+  c.scale(2, 2);
+
+  c.fillStyle = '#141414'; _rrect(c, 0, 0, W, H, 24); c.fill();
+  _drawBrand(c, 20, 26, 40);
+
+  // 右上角：月份（大）+「月報表」小字
+  c.save();
+  c.textAlign = 'right'; c.textBaseline = 'alphabetic';
+  c.fillStyle = '#ffffff'; c.font = 'bold 22px system-ui, sans-serif';
+  c.fillText(monthLabel, W - 20, 46);
+  c.fillStyle = '#9aa0a6'; c.font = '11px system-ui, sans-serif';
+  c.fillText('月報表', W - 20, 64);
+  c.restore();
+
+  // 路線區
+  const rX = 16, rY = 88, rW = W - 32, rH = 286;
+  const allPts = [];
+  monthTrips.forEach(t => (t.roadCoords || t.coords || []).forEach(p => allPts.push([p.lat, p.lng])));
+
+  if (allPts.length > 1) {
+    let z = 9, sc, viewX0, viewY0;   // 預設 z=9 後備（極分散時）
+    for (let zz = 16; zz >= 9; zz--) {
+      const wxs = [], wys = [];
+      for (let pi = 0; pi < allPts.length; pi++) { const wp = _latlngToWorldPx(allPts[pi][0], allPts[pi][1], zz); wxs.push(wp.x); wys.push(wp.y); }
+      const bx = _bounds(wxs), by = _bounds(wys);
+      const sX = (bx[1] - bx[0]) || 1, sY0 = (by[1] - by[0]) || 1;
+      const _sc = Math.min(rW / sX, rH / sY0) * 0.72;
+      if (zz === 9 || (Math.ceil(rW / _sc / 256) + 1) * (Math.ceil(rH / _sc / 256) + 1) <= 16) {
+        z = zz; sc = _sc;
+        viewX0 = (bx[0] + bx[1]) / 2 - rW / (2 * sc);
+        viewY0 = (by[0] + by[1]) / 2 - rH / (2 * sc);
+        break;
+      }
+    }
+
+    const TS = 256, maxT = Math.pow(2, z) - 1;
+    const tx0 = Math.floor(viewX0 / TS), ty0 = Math.floor(viewY0 / TS);
+    const tx1 = Math.ceil((viewX0 + rW / sc) / TS), ty1 = Math.ceil((viewY0 + rH / sc) / TS);
+    const subs = ['a', 'b', 'c', 'd'], jobs = [];
+    for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) {
+      if (tx < 0 || ty < 0 || tx > maxT || ty > maxT) continue;
+      jobs.push(_loadTile(`https://${subs[(tx + ty) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}.png`).then(img => ({ img, tx, ty })));
+    }
+    const tiles = await Promise.all(jobs);
+
+    c.save();
+    c.beginPath(); _rrect(c, rX, rY, rW, rH, 14); c.clip();
+    c.fillStyle = '#1a2035'; c.fillRect(rX, rY, rW, rH);
+    tiles.forEach(({ img, tx, ty }) => { if (!img) return; c.drawImage(img, rX + (tx * TS - viewX0) * sc, rY + (ty * TS - viewY0) * sc, TS * sc, TS * sc); });
+
+    // 當月所有路線：單色半透明疊加（重疊處自然變密＝跑車熱度感），趟數多故不編號
+    const wp2c = (la, ln) => { const w = _latlngToWorldPx(la, ln, z); return [rX + (w.x - viewX0) * sc, rY + (w.y - viewY0) * sc]; };
+    c.globalAlpha = 0.55; c.strokeStyle = '#4fc3f7'; c.lineWidth = 1.6; c.lineCap = 'round'; c.lineJoin = 'round';
+    monthTrips.forEach(t => {
+      const pts = (t.roadCoords || t.coords || []);
+      if (pts.length < 2) return;
+      c.beginPath();
+      const p0 = wp2c(pts[0].lat, pts[0].lng); c.moveTo(p0[0], p0[1]);
+      for (let i = 1; i < pts.length; i++) { const pc = wp2c(pts[i].lat, pts[i].lng); c.lineTo(pc[0], pc[1]); }
+      c.stroke();
+    });
+    c.globalAlpha = 1;
+    c.restore();
+  } else {
+    c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
+    c.fillStyle = '#5f6368'; c.font = '13px system-ui, sans-serif'; c.textAlign = 'center';
+    c.fillText('本月無 GPS 路線', rX + rW / 2, rY + rH / 2);
+  }
+
+  // 統計區
+  const sY = rY + rH + 20;
+  c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(24, sY - 6); c.lineTo(W - 24, sY - 6); c.stroke();
+
+  // Hero：當月總金額
+  c.textAlign = 'center';
+  c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
+  c.fillText('當月總金額', W / 2, sY + 8);
+  c.fillStyle = '#34A853'; c.font = 'bold 26px system-ui, sans-serif';
+  c.fillText('NT$ ' + Math.round(rev.fare).toLocaleString(), W / 2, sY + 38);
+
+  // 三欄：總工時 / 出車天數 / 平均時薪
+  const cols = [W * 0.2, W * 0.5, W * 0.8];
+  const vals = [fmtWork(rev.workMs), workDays + ' 天', 'NT$ ' + Math.round(perHour).toLocaleString()];
+  const lbls = ['總工時', '出車天數', '平均時薪'];
+  cols.forEach((x, i) => {
+    c.fillStyle = '#ffffff'; c.font = 'bold 16px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 74);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 90);
+  });
+
+  // 趟數 · 里程
+  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
+  c.fillText((rev.trips || monthTrips.length) + ' 趟　·　' + fmtDist(rev.dist || 0), W / 2, sY + 112);
+
+  c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif';
+  c.fillText('Maptrip · 月報表', W / 2, H - 16);
+
+  await new Promise(resolve => {
+    canvas.toBlob(blob => {
+      _screenshotBlob = blob; _screenshotLabel = ym;
+      const url = URL.createObjectURL(blob);
+      document.getElementById('screenshot-img').src = url;
+      document.getElementById('screenshot-preview').style.display = 'flex';
+      _showOtherToggle(false);   // 月截圖不適用「其他」勾選框
+      resolve();
+    }, 'image/png');
+  });
+}
+
+// 當月「出車天數」：整天只有「其他」（自用/非載客）的日子不算；併入記帳者手動趟（與月標題一致）。純函式供測試。
+function _monthWorkDays(raw, ym) {
+  ym = String(ym || '').slice(0, 7);
+  const merged = (global.MaptripManual && MaptripManual.mergeInto) ? MaptripManual.mergeInto(raw) : (raw || {});
+  let n = 0;
+  Object.keys(merged).forEach(d => {
+    if (d.slice(0, 7) !== ym) return;
+    if ((merged[d] || []).some(t => t.paymentMethod !== 'other')) n++;
+  });
+  return n;
+}
+
+// 陣列 min/max（避免 Math.max(...大陣列) 在整月上千點時爆 call stack）
+function _bounds(nums) { let mn = Infinity, mx = -Infinity; for (let i = 0; i < nums.length; i++) { const v = nums[i]; if (v < mn) mn = v; if (v > mx) mx = v; } return [mn, mx]; }
+
 // 單趟截圖
 async function captureSingleTripScreenshot(trip) {
   if (!trip) return;
@@ -462,7 +614,9 @@ function _fullDateLabel(ts) {
   global.MaptripShot = {
     init: init,
     captureTripsScreenshot: captureTripsScreenshot,
+    captureMonthScreenshot: captureMonthScreenshot,
     captureSingleTripScreenshot: captureSingleTripScreenshot,
+    _monthWorkDays: _monthWorkDays,
     captureTodayTripShot: captureTodayTripShot,
     captureHistoryTripShot: captureHistoryTripShot,
     shareScreenshot: shareScreenshot,

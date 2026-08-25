@@ -491,6 +491,14 @@ html, body {
   color: #e8710a; border-radius: 8px; padding: 4px 10px;
   font-size: 0.78rem; font-weight: 600; font-family: inherit; cursor: pointer; flex-shrink: 0;
 }
+.month-shot-btn {
+  background: rgba(255,94,138,0.12); border: 1px solid rgba(255,94,138,0.32);
+  color: #d81b60; border-radius: 8px; padding: 4px 10px;
+  font-size: 0.78rem; font-weight: 700; font-family: inherit; cursor: pointer; flex-shrink: 0;
+}
+@media (prefers-color-scheme: dark) {
+  .month-shot-btn { background: rgba(255,94,138,0.18); border-color: rgba(255,94,138,0.4); color: #ff8fb3; }
+}
 /* 批次抽成編輯 */
 #commission-overlay {
   display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 40;

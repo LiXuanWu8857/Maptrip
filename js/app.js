@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.348';
+const APP_VERSION  = '1.1.349';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1665,6 +1665,7 @@ function renderHistorySheet(keepState) {
           <span class="month-sub">${mWorkDays} 天　${mTrips.length} 趟　${fmtDist(mDist)}　工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></span>
           ${mFareLine ? `<span class="month-fare">${mFareLine}</span>` : ''}
         </span>
+        <button class="month-shot-btn" onclick="event.stopPropagation();captureMonthShot('${mk}')">📷 月結</button>
       </div>
       <div class="month-days${monthOpen ? '' : ' collapsed'}" id="month-days-${mk}">${daysHtml}</div>`;
   }).join('');
@@ -1777,6 +1778,7 @@ function exitDayPreview() {
 //    todayTrips 以 init 注入。 ──
 MaptripShot.init({ todayTrips: () => todayTrips });
 function captureTripsScreenshot(dayKey, includeOther) { return MaptripShot.captureTripsScreenshot(dayKey, includeOther); }
+function captureMonthShot(ym) { return MaptripShot.captureMonthScreenshot(ym); }
 function captureSingleTripScreenshot(trip) { return MaptripShot.captureSingleTripScreenshot(trip); }
 function captureTodayTripShot(e, i) { return MaptripShot.captureTodayTripShot(e, i); }
 function captureHistoryTripShot(e, dayKey, i) { return MaptripShot.captureHistoryTripShot(e, dayKey, i); }
