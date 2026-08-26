@@ -234,14 +234,15 @@ async function captureMonthScreenshot(ym, stats) {
   _drawBrand(c, 20, 26, 40);
 
   // 右上角：月份（大）＋「月報表」小字放在月份右手邊、同一行（整組右對齊到 W-20）；
-  // 整排下移，讓字底與左邊 Logo 下緣（y=26+40=66）貼齊。
+  // 基準線對齊左邊「Maptrip」字標那一行（_drawBrand 以 middle baseline 畫在 y≈47，
+  // 其 alphabetic 基準線約 y≈52）→ 月份 baseline 取 52，左右兩行對齊同一水平線。
   c.save();
   c.textAlign = 'right'; c.textBaseline = 'alphabetic';
   c.font = '10px system-ui, sans-serif'; c.fillStyle = '#9aa0a6';
-  c.fillText('月報表', W - 20, 60);                      // 最右：小字，略上移對齊月份視覺中線
+  c.fillText('月報表', W - 20, 48);                      // 最右：小字，略上移對齊月份視覺中線
   const _tagW = c.measureText('月報表').width;
   c.font = 'bold 18px system-ui, sans-serif'; c.fillStyle = '#e8eaed';
-  c.fillText(monthLabel, W - 20 - _tagW - 6, 64);        // 月份大字接在小字左邊（留 6px 間距）；字底≈66＝Logo 下緣
+  c.fillText(monthLabel, W - 20 - _tagW - 6, 52);        // 月份大字接在小字左邊（留 6px 間距）
   c.restore();
 
   // 路線區
