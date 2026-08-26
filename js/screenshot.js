@@ -224,7 +224,7 @@ async function captureMonthScreenshot(ym, stats) {
   const perHour = workH > 0.05 ? rev.fare / workH : 0;
   const monthLabel = ym.slice(0, 4) + '年' + parseInt(ym.slice(5, 7), 10) + '月';
 
-  const W = 390, H = 546;
+  const W = 390, H = 520;
   const canvas = document.createElement('canvas');
   canvas.width = W * 2; canvas.height = H * 2;
   const c = canvas.getContext('2d');
@@ -233,14 +233,10 @@ async function captureMonthScreenshot(ym, stats) {
   c.fillStyle = '#141414'; _rrect(c, 0, 0, W, H, 24); c.fill();
   _drawBrand(c, 20, 26, 40);
 
-  // 右上角：月份（大）+「月報表」小字
-  c.save();
-  c.textAlign = 'right'; c.textBaseline = 'alphabetic';
-  c.fillStyle = '#ffffff'; c.font = 'bold 22px system-ui, sans-serif';
-  c.fillText(monthLabel, W - 20, 46);
-  c.fillStyle = '#9aa0a6'; c.font = '11px system-ui, sans-serif';
-  c.fillText('月報表', W - 20, 64);
-  c.restore();
+  // 右上角：月份 + 「月報表」小字（字級同每日截圖的日期/時長＝13px / 12px，同一個 _drawRightTwoLines）
+  _drawRightTwoLines(c, W - 20,
+    monthLabel, '13px system-ui, sans-serif', '#e8eaed', 46,
+    '月報表', '12px system-ui, sans-serif', '#9aa0a6', 66);
 
   // 路線區
   const rX = 16, rY = 88, rW = W - 32, rH = 286;
@@ -297,33 +293,33 @@ async function captureMonthScreenshot(ym, stats) {
     c.fillText('本月無 GPS 路線', rX + rW / 2, rY + rH / 2);
   }
 
-  // 統計區
+  // 統計區（字級一律對齊每日截圖：數值 bold 17px、標籤 11px、footer 10px）
   const sY = rY + rH + 20;
   c.strokeStyle = '#2a2a2a'; c.lineWidth = 1;
   c.beginPath(); c.moveTo(24, sY - 6); c.lineTo(W - 24, sY - 6); c.stroke();
 
-  // Hero：當月總金額
+  // Hero：當月總金額（值＝每日截圖同款 bold 17px，綠色作強調）
   c.textAlign = 'center';
   c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif';
-  c.fillText('當月總金額', W / 2, sY + 8);
-  c.fillStyle = '#34A853'; c.font = 'bold 26px system-ui, sans-serif';
-  c.fillText('NT$ ' + Math.round(rev.fare).toLocaleString(), W / 2, sY + 38);
+  c.fillText('當月總金額', W / 2, sY + 6);
+  c.fillStyle = '#34A853'; c.font = 'bold 17px system-ui, sans-serif';
+  c.fillText('NT$ ' + Math.round(rev.fare).toLocaleString(), W / 2, sY + 27);
 
   // 三欄：總工時 / 出車天數 / 平均時薪
   const cols = [W * 0.2, W * 0.5, W * 0.8];
   const vals = [fmtWork(rev.workMs), workDays + ' 天', 'NT$ ' + Math.round(perHour).toLocaleString()];
   const lbls = ['總工時', '出車天數', '平均時薪'];
   cols.forEach((x, i) => {
-    c.fillStyle = '#ffffff'; c.font = 'bold 16px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 74);
-    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 90);
+    c.fillStyle = '#ffffff'; c.font = 'bold 17px system-ui, sans-serif'; c.fillText(vals[i], x, sY + 60);
+    c.fillStyle = '#5f6368'; c.font = '11px system-ui, sans-serif'; c.fillText(lbls[i], x, sY + 76);
   });
 
   // 趟數 · 里程
-  c.fillStyle = '#9aa0a6'; c.font = '12px system-ui, sans-serif';
-  c.fillText((rev.trips || monthTrips.length) + ' 趟　·　' + fmtDist(rev.dist || 0), W / 2, sY + 112);
+  c.fillStyle = '#9aa0a6'; c.font = '11px system-ui, sans-serif';
+  c.fillText((rev.trips || monthTrips.length) + ' 趟　·　' + fmtDist(rev.dist || 0), W / 2, sY + 98);
 
   c.fillStyle = '#3c4043'; c.font = '10px system-ui, sans-serif';
-  c.fillText('Maptrip · 月報表', W / 2, H - 16);
+  c.fillText('Maptrip · 月報表', W / 2, H - 14);
 
   await new Promise(resolve => {
     canvas.toBlob(blob => {
