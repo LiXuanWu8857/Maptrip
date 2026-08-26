@@ -345,11 +345,14 @@
 - **歷史行程**：月/日收合清單、日預覽（白底黑線＋編號）、回放、刪除、休息時間設定
 - **回放**：今日或歷史日，鏡頭跟隨、速度調整；回放中所有自動運鏡讓路
 - **截圖**：單趟/全日，含日期時間、金額、「其他」顯示備註；分享／儲存合一
-- **月結截圖（v1.1.349）** `screenshot.js` `captureMonthScreenshot(ym)`：歷史「每月」標題列加「📷 月結」鈕
-  （`app.js` 薄包裝 `captureMonthShot`、`.month-shot-btn` 樣式）。畫當月所有載客路線（單色半透明疊加＝跑車熱度感、
-  趟數多不編號）＋右上角「XXXX年X月」＋當月總金額（hero 綠字）＋三欄總工時/出車天數/平均時薪＋底部趟數·里程。
-  統計走 `MaptripFinance.revenueOfMonth(ym)`（單一真相：排除「其他」、含記帳者手動趟車資、工時內建排除手動）；
-  出車天數 `_monthWorkDays`（純函式，整天只有「其他」不算、併入手動趟）。重用截圖引擎的 canvas 工具＋預覽/分享基礎設施。
+- **月結截圖（v1.1.349，v1.1.350 修數字）** `screenshot.js` `captureMonthScreenshot(ym, stats)`：歷史「每月」標題列
+  加「📷 月結」鈕。畫當月所有載客路線（單色半透明疊加＝跑車熱度感、趟數多不編號）＋右上角「XXXX年X月」＋當月總金額
+  （hero 綠字）＋三欄總工時/出車天數/平均時薪＋底部趟數·里程。重用截圖引擎的 canvas 工具＋預覽/分享基礎設施。
+  **數字必須＝歷史列表（血淚）**：v349 初版走 `MaptripFinance.revenueOfMonth`，但當下 `window.MaptripFinance` 偶為 falsy →
+  走 fallback（工時寫死 0、沒併手動趟）→ 使用者回報「工時 0、金額少 2 趟」。v350 改由 **`app.js captureMonthShot(ym)` 用與
+  歷史「每月」標題列逐字相同的算法**（同 merged 含手動趟 + `MaptripUtil._fareStats` 總計含小費 + 每日 `workMs` + `_workDaysCount`）
+  算好 stats 傳入，`captureMonthScreenshot(ym, stats)` 優先用 stats（沒帶才退回 revenueOfMonth 再退粗估）→ 月結＝列表，
+  時薪＝總計/工時。`_monthWorkDays` 純函式僅 fallback 用。
 - **台灣道路標誌**：gl-compat 內建（國道梅花、省道盾、縣道、快速道路），
   校準工具 `MaptripTwShields.sample`
 - **地圖朝車頭**：預設開；羅盤（靜止）＋GPS 方向（行駛）雙來源

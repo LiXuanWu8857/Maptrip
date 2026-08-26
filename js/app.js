@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.349';
+const APP_VERSION  = '1.1.350';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1778,7 +1778,26 @@ function exitDayPreview() {
 //    todayTrips 以 init 注入。 ──
 MaptripShot.init({ todayTrips: () => todayTrips });
 function captureTripsScreenshot(dayKey, includeOther) { return MaptripShot.captureTripsScreenshot(dayKey, includeOther); }
-function captureMonthShot(ym) { return MaptripShot.captureMonthScreenshot(ym); }
+function captureMonthShot(ym) {
+  // 與歷史「每月」標題列同一套算法（同 merged 含手動趟 + _fareStats + workMs + _workDaysCount），
+  // 算好統計再傳進截圖，確保「月結數字＝列表數字」（不再走 screenshot.js 內的 fallback）。
+  ym = String(ym || '').slice(0, 7);
+  const raw = loadTrips();
+  const daySet = {};
+  Object.keys(raw).forEach(d => { if (d.slice(0, 7) === ym && raw[d] && raw[d].length) daySet[d] = 1; });
+  if (window.MaptripManual) MaptripManual.days().forEach(d => { if (d.slice(0, 7) === ym) daySet[d] = 1; });
+  const mDays = Object.keys(daySet);
+  const mergedByDay = {};
+  mDays.forEach(d => { mergedByDay[d] = window.MaptripManual ? MaptripManual.mergeDay(raw[d] || [], d) : (raw[d] || []); });
+  const mTrips = mDays.flatMap(d => mergedByDay[d]);
+  const fs = MaptripUtil._fareStats(mTrips);          // {card, cash, total}（含小費、含手動趟；與列表總計一致）
+  const mWork = mDays.reduce((s, d) => s + workMs(mergedByDay[d], getRestMin(d)), 0);
+  return MaptripShot.captureMonthScreenshot(ym, {
+    fare: fs.total, cash: fs.cash, card: fs.card,
+    workMs: mWork, workDays: _workDaysCount(mDays.map(d => mergedByDay[d])),
+    trips: mTrips.length, dist: mTrips.reduce((s, t) => s + (t.totalDist || 0), 0)
+  });
+}
 function captureSingleTripScreenshot(trip) { return MaptripShot.captureSingleTripScreenshot(trip); }
 function captureTodayTripShot(e, i) { return MaptripShot.captureTodayTripShot(e, i); }
 function captureHistoryTripShot(e, dayKey, i) { return MaptripShot.captureHistoryTripShot(e, dayKey, i); }

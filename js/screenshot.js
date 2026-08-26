@@ -201,22 +201,24 @@ function _showOtherToggle(hasOther, includeOther) {
 // 當月月結截圖（歷史「每月」標題的截圖鈕）：畫當月所有行程路線 + 總金額/總工時/出車天數/平均時薪，
 // 右上角顯示「XXXX年X月」。統計走 MaptripFinance.revenueOfMonth（與收支報表同一份真相：排除「其他」、
 // 含記帳者手動趟車資、工時內建排除手動）；路線只畫有 GPS 的載客趟（手動趟無座標）。
-async function captureMonthScreenshot(ym) {
+async function captureMonthScreenshot(ym, stats) {
   ym = String(ym || '').slice(0, 7);
   if (!/^\d{4}-\d{2}$/.test(ym)) { toast('月份格式錯誤'); return; }
   const raw = loadTrips();
-  const monthTrips = [];
+  const monthTrips = [];   // 只畫有 GPS 的載客路線（手動趟無座標；「其他」不畫）
   Object.keys(raw).forEach(d => {
     if (d.slice(0, 7) !== ym) return;
     (raw[d] || []).forEach(t => { if (t.paymentMethod !== 'other') monthTrips.push(t); });
   });
 
-  // 統計（單一真相來源：與收支報表一致）
-  const rev = (global.MaptripFinance && MaptripFinance.revenueOfMonth)
+  // 統計優先用呼叫端（app.js captureMonthShot）算好的 stats：與歷史「每月」列表逐一相同
+  // （同一份 merged 資料 + _fareStats + workMs + _workDaysCount）→ 月結數字＝列表數字。
+  // 沒帶 stats 才退回 revenueOfMonth，再退回粗估（確保任何情況都出得了圖）。
+  const rev = stats || (global.MaptripFinance && MaptripFinance.revenueOfMonth
     ? MaptripFinance.revenueOfMonth(ym)
     : { fare: monthTrips.reduce((s, t) => s + (t.fare || 0), 0), workMs: 0,
-        trips: monthTrips.length, dist: monthTrips.reduce((s, t) => s + (t.totalDist || 0), 0) };
-  const workDays = _monthWorkDays(raw, ym);
+        trips: monthTrips.length, dist: monthTrips.reduce((s, t) => s + (t.totalDist || 0), 0) });
+  const workDays = (rev.workDays != null) ? rev.workDays : _monthWorkDays(raw, ym);
   if (!(rev.trips || monthTrips.length)) { toast('當月無行程可截圖'); return; }
   const workH = rev.workMs / 3600000;
   const perHour = workH > 0.05 ? rev.fare / workH : 0;
