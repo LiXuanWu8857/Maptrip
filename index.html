@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<!-- 冷啟動自動 reload 一次：確保 WKWebView viewport 穩定在 reload 狀態，
+     讓 reload-fix CSS（top:0）正確消除動態島下方多餘間距。
+     sessionStorage 旗標確保每個 session 只 reload 一次，不會無限迴圈。 -->
+<script>
+// 開機事件環狀記錄（最近 40 筆，localStorage）：白屏/卡住/重載的黑盒子，
+// 事後可從 mt_bootlog 還原「哪一次開機走到哪裡、為什麼重載」
+window.__mtLog = function (ev) {
+  try {
+    var a = JSON.parse(localStorage.getItem('mt_bootlog') || '[]');
+    a.push(new Date().toISOString().slice(5, 19) + ' ' + ev);
+    if (a.length > 80) a = a.slice(-80);
+    localStorage.setItem('mt_bootlog', JSON.stringify(a));
+  } catch (e) {}
+};
+// 前景/背景切換也記錄：被砍後的 page navigate 若緊跟在 bg 之後＝背景被砍（正常病程）、
+// 若在 fg 期間＝前景直接白屏（需要進一步瘦身）
+document.addEventListener('visibilitychange', function () {
+  window.__mtLog(document.hidden ? 'bg' : 'fg');
+});
+// 自動重載防迴圈：3 分鐘內自動重載超過 4 次 → 判定為迴圈，停止重載並強制走標準地圖
+// （窗要夠長：~30 秒一輪的迴圈在 30 秒窗內永遠攔不到；旗標用 localStorage，reload 後必定保留）
+window.__mtSafeReload = function () {
+  try {
+    var now = Date.now(), g = null;
+    try { g = JSON.parse(localStorage.getItem('mt_rl') || 'null'); } catch (e) {}
+    if (!g || (now - g.t0) > 180000) g = { n: 0, t0: now };
+    g.n++; localStorage.setItem('mt_rl', JSON.stringify(g));
+    window.__mtLog('safeReload n=' + g.n);
+    if (g.n > 4) {
+      try { localStorage.setItem('mt_glfail', String(now)); localStorage.setItem('mt_glfail_reason', 'reloadloop'); } catch (e) {}
+      return;
+    }
+  } catch (e) {}
+  location.reload();
+};
+// 開機看門狗：頁面已載入但 25 秒還沒完成開機（CDN 卡住 / 資源半載 / 引擎卡死）
+// → 防迴圈重載。把「卡住的白畫面」變成自動恢復。
+setTimeout(function () {
+  if (!window.__mtBooted) { window.__mtLog('watchdog: not booted in 25s'); window.__mtSafeReload(); }
+}, 25000);
+// 崩潰偵測 v3：v2 靠「sessionStorage 消失＝全新開場」判斷，但實測 WKWebView
+// 行程被砍重啟後 sessionStorage 常常還在（由 UI 行程保管），25 次被砍只抓到 3 次。
+// 改判準：「這次載入是全新導覽（navigate，不是程式自己 location.reload）
+// 且上個行程 45 秒內心跳（mt_alive，App 每 5 秒寫）還活著」＝跑到一半被系統砍掉。
+// 30 分鐘內累積 4 次 → 判定記憶體崩潰迴圈，向量模式切回標準地圖 3 小時。
+try {
+  var _p0 = localStorage.getItem('maptrip_gl');
+  var _app0 = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  if (_app0 ? _p0 !== '0' : _p0 === '1') {
+    var _now = Date.now();
+    var _alive = +localStorage.getItem('mt_alive') || 0;
+    var _nt0 = '';
+    try { _nt0 = (performance.getEntriesByType('navigation')[0] || {}).type || ''; } catch (e) {}
+    if (_nt0 !== 'reload' && _alive && (_now - _alive) < 45000) {
+      var _c = null;
+      try { _c = JSON.parse(localStorage.getItem('mt_crash') || 'null'); } catch (e) {}
+      if (!_c || (_now - _c.t0) > 1800000) _c = { n: 0, t0: _now };
+      _c.n++; localStorage.setItem('mt_crash', JSON.stringify(_c));
+      window.__mtLog('crash-restart n=' + _c.n);
+      if (_c.n >= 4) {
+        localStorage.setItem('mt_glfail', String(_now));
+        localStorage.setItem('mt_glfail_reason', 'crashloop');
+        localStorage.removeItem('mt_crash');
+      }
+    }
+  }
+} catch (e) {}
+// 冷啟動自動 reload 一次（恢復 v226 移除的行為）：reload 狀態下 WKWebView viewport
+// 穩定、頂列 safe-area 修正必定生效（量測式修正偶有漏網 → 版面跑掉）。
+// 現在 index 與資源都有 SW 快取，第二次載入幾乎即時，不再有當年的雙倍啟動成本。
+// 只在 App 殼內做；sessionStorage 旗標保證每個 session 只 reload 一次；
+// 放在崩潰偵測「之後」，被砍重啟的計數不受影響。
+try {
+  var _fresh0 = !sessionStorage.getItem('booted');
+  sessionStorage.setItem('booted', '1');
+  var _nt1 = '';
+  try { _nt1 = (performance.getEntriesByType('navigation')[0] || {}).type || ''; } catch (e) {}
+  if (_app0 && _fresh0 && _nt1 === 'navigate') {
+    window.__mtReloadPending = true;   // app.js 看到此旗標就不啟動這個「即將被丟棄」的頁面
+    window.__mtLog('cold-start reload');
+    location.reload();
+  }
+} catch (e) { try { sessionStorage.setItem('booted', '1'); } catch (e2) {} }
+// 記錄本次開場型態：navigate＝全新載入（含 WKWebView 行程被系統砍掉後的自動重啟）、
+// reload＝程式自己重載。連續多筆 navigate 就是「一直被砍」的鐵證。
+try {
+  var _nav = (performance.getEntriesByType('navigation')[0] || {}).type || '?';
+  window.__mtLog('page ' + _nav + (sessionStorage.getItem('seeded') ? ' (test)' : ''));
+} catch (e) {}
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Maptrip">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<title>Maptrip 行程紀錄</title>
+<!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
+<script>window.INDEX_VERSION = '1.1.353';</script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
+<!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
+<!-- 自家資源用「版本號」當快取鍵：平常直接用快取（省下每次重抓 ~280KB），升版時 URL 改變即更新 -->
+<script>document.write('<link rel="stylesheet" href="css/style.css?v=' + window.INDEX_VERSION + '">');</script>
+<!-- Inline critical CSS: overrides external CSS so it works even when style.css is stale-cached -->
+<style>
+/* 頂部安全區 + 頂列 + 地圖：style.css 靠網路才載入，但這裡是 inline 立即生效，
+   避免 location.reload() 後 style.css 尚未取回時出現頂部大片空白。 */
+/* iOS 原生點擊高亮（-webkit-tap-highlight-color）在變形/動畫/堆疊元素上會把深色畫到相鄰元素
+   （按停車場→加油站變深色、按行程列→下一列變深色）。全域關掉，改用各自 :active 回饋。 */
+* { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+#top-safe { display: none !important; }
+#top-bar {
+  position: fixed !important;
+  top: env(safe-area-inset-top, 0px) !important;
+  left: 0 !important; right: 0 !important;
+  height: 48px !important;
+  background: rgba(255,255,255,0.9) !important;
+  display: flex !important; align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 16px !important;   /* padding-top:0 防止舊快取 padding-top 疊加 */
+  z-index: 21 !important;
+}
+#map { position: fixed !important; inset: 0 !important; z-index: 0 !important; background: #e8e4de !important; }
+#bottom-bar {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important; right: 0 !important;
+  background: rgba(255,255,255,0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-top: 1px solid rgba(0,0,0,0.08) !important;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.06) !important;
+  z-index: 20 !important;
+}
+#bottom-buttons {
+  height: 58px;
+  display: flex; align-items: flex-end; justify-content: space-around;
+  padding: 0 12px 4px;
+}
+.ctrl-btn  { padding: 2px 14px !important; gap: 2px !important; }
+.ctrl-icon { line-height: 1 !important; }
+@media (prefers-color-scheme: dark) {
+  #top-bar   { background: rgba(18,18,18,0.9) !important; }
+  #map       { background: #1a1a1a !important; }
+  #bottom-bar { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
+}
+</style>
+<!-- WKWebView safe-area fix：某些狀態（重新整理、App 被系統回收後復原）viewport 會整個
+     下移 safe-area-inset-top px，但 env(safe-area-inset-top) 仍回傳原值，
+     造成固定元素雙重下移（頂列上方露出一條地圖）。
+     不再只靠「是不是 reload」猜測：直接量測 viewport 是否已不滿版來決定要不要套 top:0，
+     並在載入、回前景、轉向、視窗改變時重新判斷。 -->
+<script>
+(function () {
+  function setFix(on) {
+    var s = document.getElementById('reload-fix');
+    if (on && !s) {
+      s = document.createElement('style');
+      s.id = 'reload-fix';
+      s.textContent =
+        '#top-bar{top:0!important}' +
+        '#top-menu{top:52px!important}' +
+        '#gps-badge{top:56px!important}' +
+        '#tile-toggle{top:56px!important}';
+      document.head.appendChild(s);
+    } else if (!on && s) {
+      s.remove();
+    }
+  }
+  var isReload = false;
+  try {
+    var nav = performance.getEntriesByType('navigation');
+    var t = nav.length ? nav[0].type :
+      (performance.navigation && performance.navigation.type === 1 ? 'reload' : '');
+    isReload = (t === 'reload');
+  } catch (e) {}
+  if (isReload) setFix(true);   // 冷啟動自動 reload 的主路徑：維持既有已驗證行為
+  function evaluate() {
+    if (isReload) return;   // reload 場次固定套用，不做量測（避免誤判動到已正常的狀態）
+    try {
+      // 鍵盤開啟時 innerHeight 會縮小，量出來不準 → 略過，等鍵盤收起後的 resize 再判斷
+      var ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+      var el = document.createElement('div');
+      el.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none';
+      (document.body || document.documentElement).appendChild(el);
+      var inset = el.getBoundingClientRect().height;
+      el.parentNode.removeChild(el);
+      if (!(inset > 0)) { setFix(false); return; }   // 無瀏海/安卓 → 不需處理
+      // 直向且「螢幕高 - 視窗高 ≥ 瀏海高」= viewport 已整體下移但 env 仍回報原值
+      // （App 被系統回收後復原就會這樣，navigation type 卻是 navigate，舊邏輯套不到修正）
+      var shifted = window.innerHeight > window.innerWidth &&
+                    (window.screen.height - window.innerHeight) >= inset - 2;
+      setFix(shifted);
+    } catch (e) {}
+  }
+  if (document.readyState !== 'loading') evaluate();
+  else document.addEventListener('DOMContentLoaded', evaluate);
+  window.addEventListener('pageshow', evaluate);
+  window.addEventListener('resize', evaluate);
+  window.addEventListener('orientationchange', evaluate);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) evaluate(); });
+  // 行程被砍後由系統自動重載時，viewport 位移可能發生在載入量測「之後」且不觸發
+  // resize（版面跑掉、頂列滑到畫面中間的元兇）→ 開頭 8 秒內多複檢幾次
+  setTimeout(evaluate, 800);
+  setTimeout(evaluate, 2500);
+  setTimeout(evaluate, 8000);
+})();
+</script>
+</head>
+<body>
+
+<!-- Safe-area fill behind Dynamic Island -->
+<div id="top-safe"></div>
+
+<!-- Top Bar -->
+<div id="top-bar">
+  <div id="top-left">
+    <div id="top-date"></div>
+    <div id="top-tripcount"><span id="trip-count">0</span> 趟</div>
+  </div>
+  <div id="top-actions">
+    <button class="icon-btn" onclick="hardReload()" title="重新整理">🔄</button>
+    <button class="icon-btn" onclick="toggleTopMenu()" title="選單">☰</button>
+  </div>
+</div>
+
+<!-- Top Menu Dropdown -->
+<div id="top-menu" style="display:none">
+  <button data-menu="today">📋 今日行程</button>
+  <button data-menu="finance">💰 收支報表</button>
+  <button data-menu="history">📅 歷史行程</button>
+  <button data-menu="bookkeeper">🧾 記帳者</button>
+  <button data-menu="sync">☁️ 雲端同步</button>
+  <!-- 找客熱區／加油站／停車場／便利商店／搜尋地址 已整合到右下角 🔍 搜尋，這裡不再重複 -->
+  <button data-menu="train">🚆 火車到站提醒</button>
+  <button data-menu="metro">🚇 捷運到站提醒</button>
+  <button data-menu="restrict">🚫 標注禁轉路口</button>
+  <button data-menu="restrict-osm">🛰 自動抓禁轉路口</button>
+  <button data-menu="glmap" id="glmap-menu-btn">🧪 新地圖引擎（Beta）</button>
+</div>
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- GPS Badge -->
+<div id="gps-badge" class="badge-off">📍 等待 GPS</div>
+
+<!-- Tile Toggle -->
+<button id="tile-toggle">🛰 衛星</button>
+
+<!-- Solo Trip Bar：左右滑或按箭頭切換趟次 -->
+<div id="solo-bar" style="display:none">
+  <button id="solo-prev" class="solo-arrow" onclick="soloPrev()">‹</button>
+  <span id="solo-info"></span>
+  <button id="solo-next" class="solo-arrow" onclick="soloNext()">›</button>
+  <button id="solo-exit" onclick="captureSoloShot()">📷 截圖</button>
+</div>
+
+<!-- Day Preview Bar：預覽某日全部行程時的底部資訊列 -->
+<div id="day-preview-bar" style="display:none">
+  <div id="dp-info"></div>
+  <button id="dp-screenshot" onclick="captureTripsScreenshot(dayPreviewKey)">截圖</button>
+  <button id="dp-close" onclick="exitDayPreview()">✕ 關閉</button>
+</div>
+
+<!-- Recording Banner -->
+<div id="rec-banner" style="display:none">
+  <div id="rec-dot"></div>
+  <span id="rec-time">00:00</span>
+  <span id="rec-dist">0 m</span>
+  <button id="arrive-btn" onclick="endTrip()">已抵達 ✓</button>
+</div>
+
+<!-- Bottom Controls -->
+<div id="bottom-bar">
+  <div id="bottom-buttons">
+    <button class="ctrl-btn" id="start-btn" onclick="startTrip()">
+      <span class="ctrl-icon">▶</span>
+      <span class="ctrl-label">開始</span>
+    </button>
+    <button class="ctrl-btn" id="cancelfee-btn" onclick="MaptripCancelFee&&MaptripCancelFee.record()" title="乘客取消 $40 刷卡">
+      <span class="ctrl-icon">🚫</span>
+      <span class="ctrl-label">取消費用</span>
+    </button>
+    <button class="ctrl-btn" onclick="toggleTripList()">
+      <span class="ctrl-icon">📋</span>
+      <span class="ctrl-label">今日行程</span>
+    </button>
+  </div>
+</div>
+
+<!-- 搜尋 FAB：展開「找客熱區／加油站／停車場」；id 沿用 hotspot-btn（保留載入轉圈與檢視台版隱藏） -->
+<button id="hotspot-btn" onclick="MaptripSearchMenu&&MaptripSearchMenu.toggle()" title="搜尋">
+  <span class="hs-flame">🔍</span>
+  <span class="hs-spin"></span>
+</button>
+
+<!-- My Location FAB（Google Maps 風格，右下角浮動） -->
+<button id="locate-btn" onclick="centerOnMe()" title="我的位置">
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+  </svg>
+</button>
+
+<!-- 指北針：朝車頭模式時亮起；按下鎖定指北 -->
+<button id="compass-btn" onclick="toggleCompass()" title="指北針" style="display:none">
+  <span id="compass-needle">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+      <polygon points="12,3 8,13 12,11 16,13" fill="#EA4335"/>
+      <polygon points="12,21 8,11 12,13 16,11" fill="#9aa0a6"/>
+    </svg>
+  </span>
+</button>
+
+<!-- Trip List Sheet -->
+<div id="sheet-overlay" onclick="closeActiveSheet()" style="display:none"></div>
+<div id="trip-sheet" style="display:none">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span id="sheet-title">今日行程</span>
+    <button class="replay-btn" onclick="openReplay()">▶ 回放</button>
+    <button class="sheet-close" onclick="closeSheet()">✕</button>
+  </div>
+  <div id="sheet-body"></div>
+</div>
+
+<!-- History Sheet -->
+<div id="history-sheet" style="display:none">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span>歷史紀錄</span>
+    <button class="sheet-close" onclick="closeHistory()">✕</button>
+  </div>
+  <div id="history-body"></div>
+  <div id="version-label" onclick="onVersionTap()" style="text-align:center;padding:8px 0 14px;font-size:0.72rem;color:#9aa0a6;user-select:none;cursor:default;flex-shrink:0">v—</div>
+</div>
+
+<!-- Login Gate：未登入時全螢幕擋住，登入後自動消失 -->
+<div id="login-gate" style="display:none">
+  <div class="gate-inner">
+    <img id="gate-logo-img" class="gate-banner" alt="Maptrip" src="icons/logo.svg">
+    <div class="gate-sub">請先登入以同步並備份你的行程</div>
+    <input id="gate-email" class="sync-input" type="email" inputmode="email"
+           autocomplete="username" placeholder="電子郵件">
+    <input id="gate-pw" class="sync-input" type="password"
+           autocomplete="current-password" placeholder="密碼（至少 6 碼）">
+    <button id="gate-btn" class="sync-google" onclick="submitGateLogin()">登入 / 註冊</button>
+    <div class="gate-hint">第一次輸入即自動建立帳號</div>
+  </div>
+  <div id="gate-version"></div>
+</div>
+
+<!-- Fare Dialog -->
+<div id="fare-overlay"></div>
+<div id="fare-dialog">
+  <div class="sheet-handle"></div>
+  <div id="fare-header">行程完成</div>
+  <div id="fare-summary">
+    <div class="fare-row">
+      <span class="fare-label">開始</span><span id="fs-start"></span>
+    </div>
+    <div class="fare-row">
+      <span class="fare-label">結束</span><span id="fs-end"></span>
+    </div>
+    <div class="fare-row">
+      <span class="fare-label">時間</span><span id="fs-dur"></span>
+    </div>
+    <div class="fare-row">
+      <span class="fare-label">里程</span><span id="fs-dist"></span>
+    </div>
+  </div>
+  <div id="fare-input-row">
+    <span id="fare-currency">NT$</span>
+    <input id="fare-input" type="number" inputmode="numeric" placeholder="輸入金額" min="0">
+  </div>
+  <div id="fare-extra-row">
+    <label class="fare-extra" id="fare-commission-wrap"><span>抽成</span>
+      <input id="fare-commission" type="number" inputmode="numeric" placeholder="0" min="0"></label>
+    <button type="button" id="fare-dispatch-toggle" class="fare-toggle" onclick="toggleDispatch()">
+      <span class="fare-toggle-lbl">叫車費</span><span class="fare-toggle-val">無</span></button>
+  </div>
+  <!-- 小費/加收：同一筆可另收一筆（付款方式可與主車資不同，例：刷卡車資＋現金小費） -->
+  <div id="fare-tip-row">
+    <label class="fare-extra" id="fare-tip-wrap"><span>小費/加收</span>
+      <input id="fare-tip" type="number" inputmode="numeric" placeholder="0" min="0"></label>
+    <button type="button" id="fare-tip-method" class="fare-toggle" onclick="MaptripFareDialog&&MaptripFareDialog.toggleTipMethod()">
+      <span class="fare-toggle-lbl">付款</span><span class="fare-toggle-val">現金</span></button>
+  </div>
+  <div id="fare-btns">
+    <button id="fare-skip">其他</button>
+    <button id="fare-cash">現金</button>
+    <button id="fare-card">刷卡</button>
+  </div>
+</div>
+
+<!-- Replay Panel -->
+<div id="replay-panel">
+  <div class="sheet-handle"></div>
+  <div id="replay-header">
+    <div id="replay-trip-label">第 1 趟 / 共 1 趟</div>
+    <button id="replay-close-btn" onclick="closeReplay()">✕</button>
+  </div>
+  <div id="replay-trip-info"></div>
+  <div id="replay-controls">
+    <div id="replay-speed">
+      <span class="speed-end">1x</span>
+      <div id="speed-track">
+        <div id="speed-track-bg"></div>
+        <div id="speed-fill"></div>
+        <div id="speed-thumb"></div>
+        <div id="speed-scroll-hitarea"><div id="speed-scroll-content"></div></div>
+      </div>
+      <span class="speed-end">20x</span>
+      <span id="speed-value">5x</span>
+    </div>
+    <div id="replay-action-btns">
+      <button id="replay-restart-btn" onclick="startReplay()" title="重播">↺</button>
+      <button id="replay-play-btn" onclick="toggleReplayPause()">⏸</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Firebase（雲端同步）：compat 版本可直接用全域 firebase，不需打包工具 -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<!-- 通用工具函式（距離/格式化/費用/休息時間）：無依賴，最先載，app.js 薄包裝在載入時即引用 -->
+<script>document.write('<scr' + 'ipt src="js/util.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/store.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 記帳者補登紀錄的顯示層合併（不進 days）：sync.js/app.js/finance.js 都會用到，排在它們之前 -->
+<script>document.write('<scr' + 'ipt src="js/manual-trips.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/sync.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/finance.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/export-excel.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/sheet-sync.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/bookkeeper.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/hotspot-share.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/hotspots.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/train-alert.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/metro-alert.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- GPS 記錄純函式模組（品質閘門、飄移清理、OSRM 貼路）：務必在 app.js 之前載入；
+     snap 依賴 geo-clean（cleanTrace），故排在其後 -->
+<script>document.write('<scr' + 'ipt src="js/geo-gate.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/geo-clean.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/snap.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 行程截圖（Canvas，自成一體）：app.js 的 MaptripShot.init 在載入時即引用，故排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/screenshot.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 行程回放（動畫+鏡頭，依賴注入 map）：app.js 的 MaptripReplay.init 在載入時即引用，故排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/replay.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 錄製狀態機（生命週期/復原/鎖屏方塊/GPS 監看，依賴注入 map 與共用活狀態）：排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/recorder.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 地圖標記圖示工廠（純函式，只用 L）：排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/icons.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 車資對話框（只碰 DOM+全域工具，無需注入）：app.js 頂層引用 DISPATCH_FEE，故排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/fare-dialog.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 序列化/合併存檔/壓實/墓碑/營業日（store.js 之上的高階持久化）：app.js 頂層 init，排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/storage.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 雲端登入閘門/同步面板 UI（sync.js 之上的 UI 層）：app.js 頂層 init，排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/sync-ui.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 地圖朝向/羅盤/方向光束（依賴注入 map 與 heading 狀態）：app.js 頂層 init，排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/orient.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- GPS 高度黑盒子（橋上/橋下量測，獨立 ring，不動記錄/貼路/同步）：排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/altlog.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 電腦版檢視台模式（記帳者+回放；瀏覽器手動切換，原生 App 不受影響）：排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/desktop-mode.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 底部 sheet 可拖曳展開（把手/標題列往上拉到全螢幕）：無依賴，app.js init 時 wire -->
+<script>document.write('<scr' + 'ipt src="js/sheet-drag.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 一鍵導航選單（純 UI）＋ 向量地圖車站/機場/加油站/停車場圖層（gl-compat 樣式載入後安裝） -->
+<script>document.write('<scr' + 'ipt src="js/nav.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/transit.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 找附近（加油站／停車場）：Overpass 依直線距離排序、點一下用 MaptripNav 開車導航 -->
+<script>document.write('<scr' + 'ipt src="js/nearby.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 搜尋地址：Nominatim 地理編碼 → 跳轉地圖並放可導航標記 -->
+<script>document.write('<scr' + 'ipt src="js/addr-search.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 搜尋 FAB 彈出選單（找客熱區／加油站／停車場／便利商店／醫院／搜尋地址） -->
+<script>document.write('<scr' + 'ipt src="js/search-menu.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 手動標注限時禁轉路口（禁左/右/迴轉/禁行）＋地圖標記＋接近時段提醒 -->
+<script>document.write('<scr' + 'ipt src="js/restrictions.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 客人取消快速收款：一鍵記一筆 $40 刷卡 -->
+<script>document.write('<scr' + 'ipt src="js/cancel-fee.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 行程列點按錯位修正（iOS）：點按改由「起手那一列」直接觸發，擋掉被位移的原生 click -->
+<script>document.write('<scr' + 'ipt src="js/row-tap.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+
+<!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，
+     全部失敗才自動重載一次（避免「第一次開地圖掛掉、要按重置」）。 -->
+<script>
+(function () {
+  var LEAFLET_CDNS = [
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+    'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js'
+  ];
+  function loadScript(src, onload, onerror) {
+    var s = document.createElement('script');
+    s.src = src; s.async = false;
+    s.onload = onload; s.onerror = onerror;
+    document.body.appendChild(s);
+  }
+  function loadApp() {
+    sessionStorage.removeItem('lfRetry');
+    // 先載地圖旋轉外掛（朝車頭功能）；載入失敗也照常啟動 App
+    var startApp = function () { loadScript('js/app.js?v=' + window.INDEX_VERSION); };
+    loadScript('https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js', startApp, startApp);
+  }
+  function tryLeaflet(i) {
+    if (typeof L !== 'undefined') { loadApp(); return; }
+    if (i >= LEAFLET_CDNS.length) {
+      // 所有 CDN 都失敗（多半是冷開機網路還沒就緒）→ 自動重載一次（走防迴圈）
+      if (!sessionStorage.getItem('lfRetry')) {
+        sessionStorage.setItem('lfRetry', '1');
+        setTimeout(function () { (window.__mtSafeReload || location.reload.bind(location))(); }, 1500);
+      }
+      return;
+    }
+    loadScript(LEAFLET_CDNS[i], loadApp, function () { tryLeaflet(i + 1); });
+  }
+
+  // 向量地圖引擎：現在是「預設引擎」，除非使用者明確切回標準（maptrip_gl='0'），
+  // 或最近載入失敗過（mt_glfail 時間戳，3 小時內先走標準，之後再試 GL）。
+  // 用 localStorage（reload 後必定保留），避免 sessionStorage 不保留造成無限重載。
+  var useGL = true;
+  try {
+    var _glf = +localStorage.getItem('mt_glfail') || 0;
+    var _recentFail = _glf && (Date.now() - _glf) < 3 * 3600 * 1000;
+    var _pref = localStorage.getItem('maptrip_gl');
+    // App（Capacitor 殼）：預設向量，'0' 才關。
+    // 瀏覽器（Safari 後備）：預設標準，'1' 才開 —— Safari 分頁的記憶體上限比 App 嚴格，
+    // 向量地圖容易觸頂讓網頁行程反覆崩潰（"A problem repeatedly occurred"）。
+    var _isApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    useGL = (_isApp ? _pref !== '0' : _pref === '1') && !_recentFail;
+  } catch (e) {}
+  if (useGL) {
+    // CSS：unpkg 失敗自動換 jsdelivr（關鍵規則另有內建保險，見 gl-compat.js）
+    var css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css';
+    css.onerror = function () {
+      css.onerror = null;
+      css.href = 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css';
+    };
+    document.head.appendChild(css);
+    var glFail = function () {
+      // 記下失敗時間（localStorage，reload 後保留）；接下來 3 小時走標準地圖，之後再試 GL
+      try { localStorage.setItem('mt_glfail', String(Date.now())); localStorage.setItem('mt_glfail_reason', 'loadfail'); } catch (e) {}
+      // 相容層若跑到一半，window.L 可能是半套 GL shim —— 清掉才不會騙過 tryLeaflet 的 typeof L 檢查
+      try { window.L = undefined; window.MAPTRIP_GL = undefined; } catch (e) {}
+      tryLeaflet(0);
+    };
+    var startGlApp = function () {
+      // 腳本 onload 有觸發但 maplibregl 不存在＝載到壞檔（快取毀損 / CDN 回錯誤頁）→ 走標準地圖
+      if (typeof maplibregl === 'undefined') { glFail(); return; }
+      loadScript('js/gl-compat.js?v=' + window.INDEX_VERSION, function () {
+        // 相容層沒跑完（無 WebGL / maplibre 執行失敗）就載 app.js 的話，
+        // app.js 會因 L 不存在整支掛掉、所有按鈕全死 → 必須先驗證再放行
+        if (!window.MAPTRIP_GL) { glFail(); return; }
+        sessionStorage.removeItem('lfRetry');
+        loadScript('js/app.js?v=' + window.INDEX_VERSION);
+      }, glFail);
+    };
+    var GL_CDN2 = 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+    loadScript('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', function () {
+      if (typeof maplibregl !== 'undefined') { startGlApp(); return; }
+      // 載到壞檔：換 CDN 並帶時戳繞過壞快取，再不行才退回標準地圖
+      loadScript(GL_CDN2 + '?r=' + Date.now(), startGlApp, glFail);
+    }, function () {
+      loadScript(GL_CDN2, startGlApp, glFail);
+    });
+  } else {
+    tryLeaflet(0);
+  }
+})();
+</script>
+<!-- Cloud Sync Dialog -->
+<div id="sync-overlay" onclick="closeSyncDialog()" style="display:none"></div>
+<div id="sync-dialog" style="display:none">
+  <div class="sync-title">☁️ 雲端同步</div>
+  <div id="sync-status"></div>
+  <div id="sync-actions"></div>
+  <button class="sync-close" onclick="closeSyncDialog()">關閉</button>
+</div>
+
+<!-- Screenshot Preview Modal -->
+<div id="screenshot-preview" style="display:none">
+  <div id="screenshot-backdrop" onclick="closeScreenshotPreview()"></div>
+  <div id="screenshot-modal">
+    <img id="screenshot-img" />
+    <label id="shot-other-wrap" style="display:none"><input type="checkbox" id="shot-other-cb"><span>包含「其他」紀錄</span></label>
+    <div id="screenshot-actions">
+      <button id="screenshot-share-btn" onclick="shareScreenshot()">分享／儲存</button>
+      <button id="screenshot-close-btn" onclick="closeScreenshotPreview()">✕</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
