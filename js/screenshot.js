@@ -233,14 +233,15 @@ async function captureMonthScreenshot(ym, stats) {
   c.fillStyle = '#141414'; _rrect(c, 0, 0, W, H, 24); c.fill();
   _drawBrand(c, 20, 26, 40);
 
-  // 右上角：月份（大）＋「月報表」小字放在月份右手邊、同一行（整組右對齊到 W-20）
+  // 右上角：月份（大）＋「月報表」小字放在月份右手邊、同一行（整組右對齊到 W-20）；
+  // 整排下移，讓字底與左邊 Logo 下緣（y=26+40=66）貼齊。
   c.save();
   c.textAlign = 'right'; c.textBaseline = 'alphabetic';
   c.font = '10px system-ui, sans-serif'; c.fillStyle = '#9aa0a6';
-  c.fillText('月報表', W - 20, 44);                      // 最右：小字，略上移對齊月份視覺中線
+  c.fillText('月報表', W - 20, 60);                      // 最右：小字，略上移對齊月份視覺中線
   const _tagW = c.measureText('月報表').width;
   c.font = 'bold 18px system-ui, sans-serif'; c.fillStyle = '#e8eaed';
-  c.fillText(monthLabel, W - 20 - _tagW - 6, 48);        // 月份大字接在小字左邊（留 6px 間距）
+  c.fillText(monthLabel, W - 20 - _tagW - 6, 64);        // 月份大字接在小字左邊（留 6px 間距）；字底≈66＝Logo 下緣
   c.restore();
 
   // 路線區
