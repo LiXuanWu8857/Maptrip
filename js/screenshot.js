@@ -233,10 +233,15 @@ async function captureMonthScreenshot(ym, stats) {
   c.fillStyle = '#141414'; _rrect(c, 0, 0, W, H, 24); c.fill();
   _drawBrand(c, 20, 26, 40);
 
-  // 右上角：月份 + 「月報表」小字（字級同每日截圖的日期/時長＝13px / 12px，同一個 _drawRightTwoLines）
-  _drawRightTwoLines(c, W - 20,
-    monthLabel, '13px system-ui, sans-serif', '#e8eaed', 46,
-    '月報表', '12px system-ui, sans-serif', '#9aa0a6', 66);
+  // 右上角：月份（大）＋「月報表」小字放在月份右手邊、同一行（整組右對齊到 W-20）
+  c.save();
+  c.textAlign = 'right'; c.textBaseline = 'alphabetic';
+  c.font = '10px system-ui, sans-serif'; c.fillStyle = '#9aa0a6';
+  c.fillText('月報表', W - 20, 44);                      // 最右：小字，略上移對齊月份視覺中線
+  const _tagW = c.measureText('月報表').width;
+  c.font = 'bold 18px system-ui, sans-serif'; c.fillStyle = '#e8eaed';
+  c.fillText(monthLabel, W - 20 - _tagW - 6, 48);        // 月份大字接在小字左邊（留 6px 間距）
+  c.restore();
 
   // 路線區
   const rX = 16, rY = 88, rW = W - 32, rH = 286;
