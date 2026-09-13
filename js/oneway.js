@@ -19,10 +19,17 @@
   var MINZOOM = 16;                    // 低於此縮放不顯示（避免整城市塞爆＋Overpass 過大）
   var RADIUS = 650;                    // 抓取半徑（公尺，中心＝地圖中心）
   var REFETCH_MOVE = 300;             // 中心移動超過這距離才重抓（省流量/Overpass）
-  var CAP_WAYS = 200;                  // 單次最多畫幾條（防爆）
-  var BARB_M = 11;                     // 箭頭 chevron 兩翼長度（公尺）
-  var COLOR = '#7C4DFF';               // 紫（與行程藍/青、禁轉紅橘、金額綠都區隔）
-  var WEIGHT = 4, OPACITY = 0.85;
+  var CAP_WAYS = 250;                  // 單次最多處理幾條（防爆）
+  var CAP_ARROWS = 400;                // 單次最多畫幾個箭頭（防爆）
+  var ARROW_SPACING = 85;              // 同一條路上箭頭間距（公尺）
+  var CAP_PER_WAY = 3;                 // 每條路最多幾個箭頭
+  var ARROW_PX = 15;                   // 箭頭目標螢幕大小（像素，依縮放換算成公尺→接近 Google 定尺寸）
+  var WEIGHT = 3.5, OPACITY = 0.95;
+  // Google 風格：低調灰箭頭；深色地圖換淺灰（畫布折線無法用 CSS 主題，故依 prefers-color-scheme 選色）
+  function _arrowColor() {
+    try { return (window.matchMedia && matchMedia('(prefers-color-scheme:dark)').matches) ? '#c7ccd1' : '#5f6368'; }
+    catch (_) { return '#5f6368'; }
+  }
   // 只取「可行駛」道路（排除人行道/自行車道/階梯等，計程車無關）
   var HW = '^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|road|' +
            'motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$';
@@ -55,16 +62,43 @@
     var lo2 = lo1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
     return { lat: la2 / D, lng: ((lo2 / D + 540) % 360) - 180 };
   }
-  // pts＝行駛順序的 {lat,lng}[]（…→終點）。回傳「整條路＋終點 chevron 箭頭」的點陣列（同一條折線）。
-  // chevron＝從終點 E 往回張開兩翼（θ±150°），畫成 …→E→翼L→E→翼R（回描一段，視覺上就是箭頭 V）。
-  function _arrowPath(pts, barbM) {
-    barbM = barbM || BARB_M;
-    var n = pts.length;
-    if (n < 2) return pts.slice();
-    var E = pts[n - 1], P = pts[n - 2];
-    var th = _bearing(P, E);
-    var bL = _dest(E, th + 150, barbM), bR = _dest(E, th - 150, barbM);
-    return pts.concat([bL, E, bR]);
+  // 單一「›」箭頭（頂點朝行駛方向 brg）：頂點 T 在 M 前方，兩翼往後張開 → 3 點折線。
+  function _chevron(M, brg, sizeM) {
+    var T = _dest(M, brg, sizeM * 0.55);            // 頂點（前方）
+    var wingL = _dest(T, brg + 180 + 38, sizeM);
+    var wingR = _dest(T, brg + 180 - 38, sizeM);
+    return [wingL, T, wingR];
+  }
+  // 沿行駛順序折線 pts，找「距起點 d 公尺」的點與當地方位角 → {pt, brg}（走到底就用終點段）。
+  function _pointAt(pts, d) {
+    var acc = 0;
+    for (var i = 1; i < pts.length; i++) {
+      var seg = _haversine(pts[i - 1], pts[i]);
+      if (acc + seg >= d || i === pts.length - 1) {
+        var f = seg > 0 ? Math.max(0, Math.min(1, (d - acc) / seg)) : 0;
+        var a = pts[i - 1], b = pts[i];
+        return { pt: { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f }, brg: _bearing(a, b) };
+      }
+      acc += seg;
+    }
+    return null;
+  }
+  // 一條路上要放的箭頭位置（每 spacingM 一個、置中分布、上限 cap）→ [{pt,brg}]
+  function _arrowsAlong(pts, spacingM, cap) {
+    if (!pts || pts.length < 2) return [];
+    var L = 0; for (var i = 1; i < pts.length; i++) L += _haversine(pts[i - 1], pts[i]);
+    if (L <= 0) return [];
+    var n = Math.max(1, Math.min(cap || CAP_PER_WAY, Math.floor(L / (spacingM || ARROW_SPACING)) + 1));
+    var out = [];
+    for (var k = 0; k < n; k++) {
+      var a = _pointAt(pts, L * (k + 0.5) / n);   // 置中分布：1 個→中點、2 個→¼,¾…
+      if (a) out.push(a);
+    }
+    return out;
+  }
+  // 縮放→每像素公尺（gl-compat getZoom 兩引擎皆回 Leaflet 256-tile 編號，故直接 2^zoom；緯度校正）
+  function _metersPerPx(leafletZoom, lat) {
+    return 156543.03392 * Math.cos((lat || 0) * D) / Math.pow(2, (leafletZoom || 16));
   }
   // Overpass elements → [{id, pts}]（pts 已轉成行駛順序：oneway=-1 反轉節點順序）
   function _parseWays(els) {
@@ -97,13 +131,23 @@
   function _draw(ways) {
     var m = gmap(); if (!m || !window.L) return;
     clearDraw();
+    var lat = 25, zoom = 16;
+    try { var c = m.getCenter(); lat = c.lat; } catch (_) {}
+    try { zoom = m.getZoom(); } catch (_) {}
+    var sizeM = Math.max(6, Math.min(40, ARROW_PX * _metersPerPx(zoom, lat)));   // 箭頭約定尺寸（像 Google）
+    var color = _arrowColor();
+    var total = 0;
     ways.slice(0, CAP_WAYS).forEach(function (w) {
-      try {
-        var path = _arrowPath(w.pts, BARB_M).map(function (p) { return [p.lat, p.lng]; });
-        var pl = L.polyline(path, { color: COLOR, weight: WEIGHT, opacity: OPACITY });
-        pl.addTo(m);
-        _lines.push(pl);
-      } catch (_) {}
+      if (total >= CAP_ARROWS) return;
+      _arrowsAlong(w.pts, ARROW_SPACING, CAP_PER_WAY).forEach(function (a) {
+        if (total >= CAP_ARROWS) return;
+        try {
+          var pts = _chevron(a.pt, a.brg, sizeM).map(function (p) { return [p.lat, p.lng]; });
+          var pl = L.polyline(pts, { color: color, weight: WEIGHT, opacity: OPACITY });
+          pl.addTo(m);
+          _lines.push(pl); total++;
+        } catch (_) {}
+      });
     });
   }
 
@@ -182,7 +226,8 @@
   global.MaptripOneway = {
     init: init, toggle: toggle, enable: enable, disable: disable, isOn: isOn,
     // 純函式（測試）
-    _bearing: _bearing, _dest: _dest, _arrowPath: _arrowPath, _parseWays: _parseWays,
+    _bearing: _bearing, _dest: _dest, _chevron: _chevron, _pointAt: _pointAt,
+    _arrowsAlong: _arrowsAlong, _metersPerPx: _metersPerPx, _parseWays: _parseWays,
     _overpassBody: _overpassBody, _haversine: _haversine
   };
 })(typeof window !== 'undefined' ? window : globalThis);
