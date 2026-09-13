@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.354';
+const APP_VERSION  = '1.1.355';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -921,6 +921,7 @@ function _dispatchMenu(action) {
   else if (action === 'metro') { closeSheet(); if (window.openMetroSettings) window.openMetroSettings(); }
   else if (action === 'restrict') { closeSheet(); if (window.MaptripRestrict) MaptripRestrict.startAdd(); }
   else if (action === 'restrict-osm') { closeSheet(); if (window.MaptripRestrict) MaptripRestrict.fetchOSM(); }
+  else if (action === 'oneway') { closeSheet(); if (window.MaptripOneway) MaptripOneway.toggle(); }
   else if (action === 'glmap') toggleGlEngine();
   else if (action === 'reviewtoggle') { if (window.MaptripDesktop) MaptripDesktop.toggle(); }
 }
@@ -2348,6 +2349,8 @@ function boot() {
   setTimeout(() => { if (!activeTrip) retrySnapBacklog(); }, 10000);
   // 限時禁轉路口：地圖穩定後畫出既有標注＋啟動接近提醒
   setTimeout(() => { try { if (window.MaptripRestrict) MaptripRestrict.init(); } catch (_) {} }, 1500);
+  // 單行道方向：上次開著就自動還原顯示（地圖穩定後）
+  setTimeout(() => { try { if (window.MaptripOneway) MaptripOneway.init(); } catch (_) {} }, 1800);
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');

@@ -188,6 +188,14 @@
     資訊不進表單），地圖上**橘色**（手動紅色）＋「OSM」小標。`_allRecs`＝手動∪OSM，drawAll/接近提醒都用它。測試 `restrictosm.js`
     23（conditional 解析/relation→rec/查詢字串/合併/fetchOSM 端到端 route-mock）。**注意台灣 OSM 這類資料稀疏，多數路口抓不到→仍需手動補**。
     **待辦**：未來手動標注可上雲同步。
+- **單行道方向顯示（v1.1.355）** `js/oneway.js`（MaptripOneway）：選單「➡️ 單行道方向」開關，地圖上把單行道畫紫線＋
+  末端方向箭頭。**血淚重點**：本 App 地圖會朝車頭旋轉，故**箭頭用地理座標的折線 chevron**（與 OSM 幾何同一條 polyline，
+  隨投影旋轉→任何朝向都正確），不用會被螢幕固定的 divIcon 圖示；且整條路含箭頭是**同一條 polyline**（GL 只吃 1 個 layer 控效能）。
+  資料＝Overpass 抓「地圖中心半徑 650m 內、`oneway=yes/-1` 的可行駛道路（HW 白名單）」`out geom`（gl-compat 無 getBounds→
+  用 around: 中心＋半徑，比照 restrictions.js 多鏡像競速）；`oneway=-1` 反轉節點順序＝行駛方向。只在 **zoom≥16** 顯示、
+  移動超過 **300m** 去抖 600ms 重抓、上限 **200 條**。開關狀態存 `maptrip_oneway_on`，boot 後 1.8s `init()` 還原。
+  純函式 `_bearing/_dest/_arrowPath/_parseWays/_overpassBody/_haversine` 供測試（node 13 項純函式＋10 項 wire：
+  enable→抓取→畫線/方向反轉/縮放門檻/關閉清除，全過）。**待辦**：箭頭密度/顏色可依回饋調；未來可考慮沿長路加中段箭頭。
 - **記帳者模式** `js/bookkeeper.js`：邀請碼授權；記帳者唯讀行程、可編抽成；
   雙向即時同步（司機端訂閱 commissions → applyCommission 合併）。
   **v263 修 4 個自檢問題**：①**撤銷持久化**——`removeBookkeeper` 撤銷時把該記帳者兌換過的邀請碼標
