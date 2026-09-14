@@ -23,7 +23,7 @@
   var CAP_ARROWS = 400;                // 單次最多畫幾個箭頭（防爆）
   var ARROW_SPACING = 85;              // 同一條路上箭頭間距（公尺）
   var CAP_PER_WAY = 3;                 // 每條路最多幾個箭頭
-  var ARROW_M = 6;                     // 箭頭固定公尺尺寸（≈道路寬）：隨道路一起縮放→縮小看不到、放大剛好貼路
+  var ARROW_M = 5;                     // 箭頭總長（公尺，含尾柄）：固定公尺→隨道路縮放，縮小看不到、放大剛好貼路
   var WEIGHT = 3.5, OPACITY = 0.95;
   // Google 風格：低調灰箭頭；深色地圖換淺灰（畫布折線無法用 CSS 主題，故依 prefers-color-scheme 選色）
   function _arrowColor() {
@@ -62,12 +62,15 @@
     var lo2 = lo1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
     return { lat: la2 / D, lng: ((lo2 / D + 540) % 360) - 180 };
   }
-  // 單一「›」箭頭（頂點朝行駛方向 brg）：頂點 T 在 M 前方，兩翼往後張開 → 3 點折線。
+  // 完整箭頭「↑」（朝行駛方向 brg），以 M 為中心：尾端→箭尖（尾柄）＋兩翼（箭頭），單一折線。
+  // 回 5 點 [尾端, 箭尖, 左翼, 箭尖(回描), 右翼]：畫成尾柄＋V 型箭頭（回描段重疊、不留痕）。
   function _chevron(M, brg, sizeM) {
-    var T = _dest(M, brg, sizeM * 0.55);            // 頂點（前方）
-    var wingL = _dest(T, brg + 180 + 38, sizeM);
-    var wingR = _dest(T, brg + 180 - 38, sizeM);
-    return [wingL, T, wingR];
+    var half = sizeM / 2;
+    var T = _dest(M, brg, half);                    // 箭尖（前）
+    var tail = _dest(M, brg, -half);                // 尾端（後）
+    var wingL = _dest(T, brg + 180 + 34, sizeM * 0.5);   // 左翼（自箭尖往後張）
+    var wingR = _dest(T, brg + 180 - 34, sizeM * 0.5);   // 右翼
+    return [tail, T, wingL, T, wingR];
   }
   // 沿行駛順序折線 pts，找「距起點 d 公尺」的點與當地方位角 → {pt, brg}（走到底就用終點段）。
   function _pointAt(pts, d) {
