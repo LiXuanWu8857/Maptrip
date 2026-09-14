@@ -42,6 +42,18 @@ window.__mtSafeReload = function () {
 setTimeout(function () {
   if (!window.__mtBooted) { window.__mtLog('watchdog: not booted in 25s'); window.__mtSafeReload(); }
 }, 25000);
+// 前景看門狗（v1.1.359）：冷啟動「還沒開完就切到背景」時，iOS 常把 JS 暫停 / 把 location.reload()
+// 丟掉 → 回前景卻卡在沒開機完成的頁（GPS 從未啟動＝永遠不動）。回前景 3 秒後仍未 __mtBooted，
+// 就防迴圈重載一次（比 25 秒看門狗快，且 setTimeout 在背景會被暫停、只算前景時間）。
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState !== 'visible' || window.__mtBooted) return;
+  setTimeout(function () {
+    if (!window.__mtBooted && document.visibilityState === 'visible') {
+      window.__mtLog && window.__mtLog('fg-watchdog: not booted 3s after resume');
+      window.__mtSafeReload();
+    }
+  }, 3000);
+});
 // 崩潰偵測 v3：v2 靠「sessionStorage 消失＝全新開場」判斷，但實測 WKWebView
 // 行程被砍重啟後 sessionStorage 常常還在（由 UI 行程保管），25 次被砍只抓到 3 次。
 // 改判準：「這次載入是全新導覽（navigate，不是程式自己 location.reload）
@@ -100,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.358';</script>
+<script>window.INDEX_VERSION = '1.1.359';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->

@@ -395,6 +395,12 @@
      boot ok、watchdog、safeReload）。**檢視器：歷史行程底部版本號連點 3 下**；5 下＝診斷模式
   2. `__mtSafeReload` 防迴圈重載（180 秒窗 >4 次 → reloadloop → 停止＋轉標準）
   3. 開機看門狗：25 秒未 `__mtBooted` → safeReload
+     - **前景看門狗（v1.1.359）**：冷啟動「還沒開完就切到背景」時，iOS 常暫停 JS／丟掉 `location.reload()`
+       → 回前景卻卡在沒開機完成的頁（`startGpsWatch` 沒跑到＝GPS 從未啟動、永遠不動）。修法兩層：
+       ①index.html `visibilitychange`→visible 後 **3 秒**仍未 `__mtBooted` 就 `__mtSafeReload`（比 25 秒快；
+       背景時 setTimeout 暫停故只算前景時間）；②app.js `visibilitychange`（已開機時）呼叫
+       `MaptripRecorder.ensureGpsWatch()`（冪等：`_watching` 已 true 就跳過，不疊加 watcher）。
+       `startGpsWatch` 加 `_watching` 冪等旗標（web/native/sim 三路都設）。測試：native addWatcher 冪等 4 項。
   4. **崩潰偵測 v3（心跳式）**：app.js 每 5 秒寫 `mt_alive`；載入時「導覽型態=navigate
      且 mt_alive <45 秒」＝被系統砍掉 → `mt_crash` 30 分鐘窗累積 4 次 → crashloop → 標準 3 小時。
      （v2 靠 sessionStorage 消失判斷 → 被砍後 sessionStorage 常還在，25 次只抓到 3 次，勿走回頭路）

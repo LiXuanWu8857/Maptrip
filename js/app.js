@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.358';
+const APP_VERSION  = '1.1.359';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -586,6 +586,17 @@ async function requestWakeLock() { return MaptripRecorder.requestWakeLock(); }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && activeTrip && wakeLock === null) {
     requestWakeLock();
+  }
+});
+
+// 回前景補救 GPS（v1.1.359）：冷啟動途中被切到背景，boot 若沒跑到 startGpsWatch → GPS 從未啟動、
+// 永遠不動。回前景且已開機完成時，確保 GPS 監看有在跑（ensureGpsWatch 冪等，已在監看則跳過）。
+// （還沒開機完成的情況由 index.html 的「前景看門狗」負責重載。）
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !window.__mtBooted) return;
+  const _review = !!(window.MaptripDesktop && MaptripDesktop.isReview());
+  if (!_review && window.MaptripRecorder && MaptripRecorder.ensureGpsWatch) {
+    try { MaptripRecorder.ensureGpsWatch(); } catch (_) {}
   }
 });
 

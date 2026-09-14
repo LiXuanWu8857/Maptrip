@@ -27,6 +27,7 @@
   // ---- 模組私有狀態（原 app.js 私有，只有錄製函式用到，整組搬入）----
   var simTick = 0, simTimer = null;   // 測試模式模擬 GPS
   var nativeWatcherId = null;         // 原生背景定位 watcher id
+  var _watching = false;              // GPS 監看是否已啟動（冪等＋回前景補救用）
   var lastHeartbeat = 0;              // 上次替鎖屏方塊續命的時間戳
   var _lastActiveSave = 0;            // 進行中行程復原暫存的節流時戳
   var pendingFareTrip = null;         // 由浮窗結束、等待數字鍵盤輸入車資的那趟
@@ -35,12 +36,22 @@
 
   // ===== GPS 監看啟動 =====
   function startGpsWatch() {
+    if (_watching) return;              // 冪等：已在監看就不重複註冊（避免疊加多個 watcher／double callback）
     if (ctx.testMode) { startSimulation(); return; }
     if (isNative()) { startNativeGpsWatch(); return; }
     if (!navigator.geolocation) { setGpsBadge('err', '⚠ 不支援定位'); return; }
     navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 });
+    _watching = true;
   }
+
+  // 回前景補救（v1.1.359）：冷啟動途中被切到背景，boot 可能沒跑到 startGpsWatch＝GPS 從未啟動、
+  // 且永遠不會動。回前景時若「還沒在監看」就補啟動一次（冪等，_watching 為 true 直接跳過，不疊加）。
+  function ensureGpsWatch() {
+    if (_watching || ctx.testMode) return;
+    try { startGpsWatch(); } catch (_) {}
+  }
+  function isWatching() { return _watching; }
 
   // 原生 iOS：用背景定位外掛，鎖屏 / 切到 55688 時仍持續記錄
   function startNativeGpsWatch() {
@@ -68,7 +79,7 @@
     });
     // addWatcher 在不同版本可能回傳 Promise<id> 或直接回傳 id 字串，兩者皆相容
     Promise.resolve(result)
-      .then(id => { nativeWatcherId = id; })
+      .then(id => { nativeWatcherId = id; _watching = true; })
       .catch(() => setGpsBadge('err', '⚠ 背景定位啟動失敗'));
   }
 
@@ -76,6 +87,7 @@
   // 流程：靜止 5 秒 → 行駛 25 秒（約 12 m/s）→ 停車（觸發到站偵測）
   // 起點優先使用裝置真實位置，抓不到才退回台北 101
   function startSimulation() {
+    _watching = true;
     toast('🧪 測試模式：模擬 GPS 已啟用');
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -437,6 +449,8 @@
   global.MaptripRecorder = {
     init: init,
     startGpsWatch: startGpsWatch,
+    ensureGpsWatch: ensureGpsWatch,
+    isWatching: isWatching,
     startNativeGpsWatch: startNativeGpsWatch,
     startSimulation: startSimulation,
     runSimulation: runSimulation,
