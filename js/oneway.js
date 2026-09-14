@@ -23,7 +23,7 @@
   var CAP_ARROWS = 400;                // 單次最多畫幾個箭頭（防爆）
   var ARROW_SPACING = 85;              // 同一條路上箭頭間距（公尺）
   var CAP_PER_WAY = 3;                 // 每條路最多幾個箭頭
-  var ARROW_PX = 15;                   // 箭頭目標螢幕大小（像素，依縮放換算成公尺→接近 Google 定尺寸）
+  var ARROW_M = 6;                     // 箭頭固定公尺尺寸（≈道路寬）：隨道路一起縮放→縮小看不到、放大剛好貼路
   var WEIGHT = 3.5, OPACITY = 0.95;
   // Google 風格：低調灰箭頭；深色地圖換淺灰（畫布折線無法用 CSS 主題，故依 prefers-color-scheme 選色）
   function _arrowColor() {
@@ -131,10 +131,9 @@
   function _draw(ways) {
     var m = gmap(); if (!m || !window.L) return;
     clearDraw();
-    var lat = 25, zoom = 16;
-    try { var c = m.getCenter(); lat = c.lat; } catch (_) {}
-    try { zoom = m.getZoom(); } catch (_) {}
-    var sizeM = Math.max(6, Math.min(40, ARROW_PX * _metersPerPx(zoom, lat)));   // 箭頭約定尺寸（像 Google）
+    // 箭頭固定公尺尺寸（≈道路寬）：地理座標本來就隨地圖縮放，故縮小時變小（幾乎看不到）、
+    // 放大時剛好貼合路寬。不再依螢幕像素換算（那會在放大時爆大、蓋過整條路）。
+    var sizeM = ARROW_M;
     var color = _arrowColor();
     var total = 0;
     ways.slice(0, CAP_WAYS).forEach(function (w) {

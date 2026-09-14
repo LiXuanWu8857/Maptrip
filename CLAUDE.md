@@ -191,7 +191,9 @@
 - **單行道方向顯示（v1.1.355；v1.1.356 改 Google 風格箭頭）** `js/oneway.js`（MaptripOneway）：選單「➡️ 單行道方向」開關。
   **v356 依使用者提供的 Google Maps 截圖改版**：不再畫整條紫線，改成**沿每條單行道每隔約 85m 放一個灰色小箭頭 chevron**
   （每條上限 3 個、全畫面上限 400 個），低調灰（`_arrowColor` 依 prefers-color-scheme：淺色 #5f6368／深色 #c7ccd1），
-  箭頭大小依縮放換算成接近固定螢幕尺寸（`_metersPerPx`×`ARROW_PX`15，clamp 6–40m）。**血淚重點**：本 App 地圖朝車頭旋轉，
+  箭頭**固定公尺尺寸 `ARROW_M`＝6m（≈道路寬）**：地理座標本來就隨地圖縮放，故縮小時變小（幾乎看不到）、放大時剛好貼合路寬
+  ——使用者要的「符合路的大小、放大才看得到」。（v356 曾用螢幕像素定尺寸 `_metersPerPx`×15，但放大時爆大蓋過整條路、被打回。）
+  **血淚重點**：本 App 地圖朝車頭旋轉，
   故**箭頭用地理座標的折線 chevron**（3 點小折線、隨投影旋轉→任何朝向都正確），不用會被螢幕固定的 divIcon 圖示。
   資料＝Overpass 抓「地圖中心半徑 650m 內、`oneway=yes/-1` 的可行駛道路（HW 白名單）」`out geom`（gl-compat 無 getBounds→
   用 around: 中心＋半徑，比照 restrictions.js 多鏡像競速）；`oneway=-1` 反轉節點順序＝行駛方向。只在 **zoom≥16** 顯示、
