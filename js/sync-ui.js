@@ -43,6 +43,9 @@
         btn.disabled = !!busy;
         btn.textContent = busy ? '登入中…' : '登入 / 註冊';
       }
+      // 記住的帳號清單（免密碼快速切換）
+      const accEl = document.getElementById('gate-accounts');
+      if (accEl && window.MaptripAccounts) accEl.innerHTML = MaptripAccounts.accountsHtml(true);
     } else {
       gate.style.display = 'none';
     }
@@ -51,6 +54,9 @@
   function submitGateLogin() {
     const email = (document.getElementById('gate-email') || {}).value || '';
     const pw = (document.getElementById('gate-pw') || {}).value || '';
+    // 先暫存憑證＋是否勾同意 → 登入成功後（sync onAuth）依同意決定要不要存密碼
+    const consent = !!(document.getElementById('gate-remember') || {}).checked;
+    try { if (window.MaptripAccounts) MaptripAccounts.notePending(email, pw, consent); } catch (_) {}
     MaptripSync.signIn(email, pw);
   }
 
@@ -84,11 +90,14 @@
       const prevEmail = (document.getElementById('sync-email') || {}).value || '';
       const prevPw = (document.getElementById('sync-pw') || {}).value || '';
       statusEl.innerHTML = '登入後行程會自動備份到雲端。<br>換手機或重裝 App，登入同一帳號即可還原。<br><span class="sync-hint">第一次輸入即自動建立帳號。</span>';
-      actEl.innerHTML =
+      const accHtml = (window.MaptripAccounts) ? MaptripAccounts.accountsHtml(true) : '';
+      const consentHtml = (window.MaptripAccounts) ? MaptripAccounts.consentHtml('sync-remember') : '';
+      actEl.innerHTML = accHtml +
         '<input id="sync-email" class="sync-input" type="email" inputmode="email" ' +
         'autocomplete="username" placeholder="電子郵件" value="' + prevEmail + '">' +
         '<input id="sync-pw" class="sync-input" type="password" ' +
         'autocomplete="current-password" placeholder="密碼（至少 6 碼）" value="' + prevPw + '">' +
+        consentHtml +
         '<button class="sync-google" ' + (busy ? 'disabled' : '') + ' onclick="submitSyncLogin()">' +
         (busy ? '登入中…' : '登入 / 註冊') + '</button>';
     } else {
@@ -97,7 +106,10 @@
         + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟'
         + '　本機：' + (TripStore.bytes() / 1048576).toFixed(1) + ' MB（' + TripStore.mode() + '）</span>';
       // 「允許記帳者修改車資」開關已移到「記帳者」面板的『授權我的記帳者』區（語意相符處），此處不再放。
-      actEl.innerHTML = '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
+      // 已記住的其他帳號 → 一鍵切換（免密碼，若有存密碼）
+      const accHtml = (window.MaptripAccounts) ? MaptripAccounts.accountsHtml(true) : '';
+      actEl.innerHTML = accHtml +
+        '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
         '<button class="sync-out" style="margin-top:6px" ' +
         'onclick="if(confirm(\'清除這台裝置的本機行程，改從雲端重新下載？（用於：換帳號後仍看到別帳號的行程）\'))MaptripSync.resetLocal()">' +
         '🧹 清除本機並重抓雲端</button>';
@@ -107,6 +119,8 @@
   function submitSyncLogin() {
     const email = (document.getElementById('sync-email') || {}).value || '';
     const pw = (document.getElementById('sync-pw') || {}).value || '';
+    const consent = !!(document.getElementById('sync-remember') || {}).checked;
+    try { if (window.MaptripAccounts) MaptripAccounts.notePending(email, pw, consent); } catch (_) {}
     MaptripSync.signIn(email, pw);
   }
 

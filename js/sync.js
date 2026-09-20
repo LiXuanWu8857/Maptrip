@@ -47,6 +47,8 @@
       _pushLocalOK = dec.pushLocalOK;          // 只有「延續同帳號」才可回推本機獨有日子
       if (dec.clear) _clearLocalForSwitch();   // 換帳號 → 先清本機
       _setDataUid(u.uid);
+      // 記住登入過的帳號（給「免密碼快速切換」用；是否存密碼由同意欄決定，見 account-switch.js）
+      try { if (window.MaptripAccounts) MaptripAccounts.onLogin(u.uid, u.email || '', u.displayName || ''); } catch (_) {}
       pullAndListen(); loadProfile(); loadPrefs(); setTimeout(processInviteClaims, 1500);
     }
     else {
@@ -593,6 +595,15 @@
 
   function signOut() { if (auth) auth.signOut().then(updateUI); }
 
+  // 帳號快速切換（記住的帳號一鍵切換）：登出目前帳號 → 用另一組登入。
+  // 資料面沿用帳號隔離：onAuth → _switchDecision（prev!==uid＝換帳號）→ _clearLocalForSwitch
+  // 自動清本機、重抓新帳號雲端。本方法只負責「換 auth 身分」，不手動搬資料。
+  function switchTo(email, password) {
+    if (!ready) { toastMsg('雲端尚未設定'); return Promise.resolve(false); }
+    var p = auth.currentUser ? auth.signOut() : Promise.resolve();
+    return p.catch(function () {}).then(function () { signIn(email, password); return true; });
+  }
+
   function daysCol() {
     return db.collection('users').doc(user.uid).collection('days');
   }
@@ -804,7 +815,7 @@
 
   function updateUI() { if (window.renderSyncPanel) window.renderSyncPanel(); }
 
-  window.MaptripSync = { init, signIn, signOut, syncDays, status, isBusy, deleteTripFromCloud, pushDeleted, setName: setName,
+  window.MaptripSync = { init, signIn, signOut, switchTo: switchTo, syncDays, status, isBusy, deleteTripFromCloud, pushDeleted, setName: setName,
     myUid: myUid, myName: myName,
     createInvite: createInvite, redeemInvite: redeemInvite, processInviteClaims: processInviteClaims,
     listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,

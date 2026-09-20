@@ -1210,6 +1210,40 @@ html, body {
   font-family: inherit; cursor: pointer;
 }
 
+/* 記住的帳號快速切換（account-switch.js） */
+.acc-list { margin: 4px 0 10px; }
+.acc-list-t { font-size: 0.76rem; color: #9aa0a6; margin: 2px 0 6px; }
+.acc-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px; margin-bottom: 6px; border-radius: 10px;
+  background: #f1f3f4; border: 1px solid rgba(0,0,0,0.06);
+}
+.acc-name { flex: 1 1 auto; min-width: 0; font-size: 0.86rem; color: #202124;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-cur { margin-left: 6px; font-size: 0.72rem; color: #1a73e8; }
+.acc-nopw { margin-left: 6px; font-size: 0.72rem; color: #9aa0a6; }
+.acc-switch {
+  flex: 0 0 auto; padding: 6px 12px; border-radius: 8px; border: none;
+  background: #1a73e8; color: #fff; font-size: 0.82rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+}
+.acc-del {
+  flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px;
+  border: none; background: rgba(234,67,53,0.08); color: #d93025;
+  font-size: 0.9rem; cursor: pointer;
+}
+.acc-consent {
+  display: flex; align-items: flex-start; gap: 8px; margin: 8px 0 2px;
+  font-size: 0.82rem; color: #5f6368; cursor: pointer;
+}
+.acc-consent input { margin-top: 2px; }
+.acc-disc {
+  font-size: 0.72rem; line-height: 1.5; color: #9aa0a6;
+  margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px;
+  background: rgba(234,67,53,0.05); border: 1px solid rgba(234,67,53,0.12);
+}
+.acc-disc b { color: #d93025; }
+
 @media (prefers-color-scheme: dark) {
   #sync-dialog { background: #1f1f1f; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
   .sync-title { color: #e8eaed; }
@@ -1217,6 +1251,9 @@ html, body {
   #sync-status b { color: #e8eaed; }
   .sync-close { background: #2d2d2d; color: #9aa0a6; }
   .sync-input { background: #2a2a2a; color: #e8eaed; border-color: rgba(255,255,255,0.15); }
+  .acc-row { background: #2a2a2a; border-color: rgba(255,255,255,0.08); }
+  .acc-name { color: #e8eaed; }
+  .acc-cur { color: #8ab4f8; }
 }
 
 /* 🚆 火車到站提醒彈出視窗（頂部置中，醒目） */

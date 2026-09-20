@@ -364,8 +364,12 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
            autocomplete="username" placeholder="電子郵件">
     <input id="gate-pw" class="sync-input" type="password"
            autocomplete="current-password" placeholder="密碼（至少 6 碼）">
+    <label class="acc-consent"><input type="checkbox" id="gate-remember"
+           onchange="if(window.MaptripAccounts)MaptripAccounts.onConsentToggle(this)"> 記住這個帳號（免密碼快速切換）</label>
+    <div class="acc-disc">⚠️ 勾選後，此帳號的密碼會以<b>未加密</b>方式儲存在這台裝置上，方便免密碼快速切換。請<b>只在你個人、不會給別人使用的裝置</b>上開啟。裝置遺失、借人或被他人取得，對方可能直接登入此帳號。可隨時「移除此帳號」清除。因此功能導致的帳號外洩，本 App 不負責。</div>
     <button id="gate-btn" class="sync-google" onclick="submitGateLogin()">登入 / 註冊</button>
     <div class="gate-hint">第一次輸入即自動建立帳號</div>
+    <div id="gate-accounts"></div>
   </div>
   <div id="gate-version"></div>
 </div>
@@ -454,6 +458,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <!-- 記帳者補登紀錄的顯示層合併（不進 days）：sync.js/app.js/finance.js 都會用到，排在它們之前 -->
 <script>document.write('<scr' + 'ipt src="js/manual-trips.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/sync.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/account-switch.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/finance.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/export-excel.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/sheet-sync.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
