@@ -588,6 +588,20 @@ html, body {
 .trip-shot:active { opacity: 1; }
 .trip-edit  { color: #1a73e8; opacity: 0.7; padding: 4px 4px; font-size: 0.9rem; }
 .trip-edit:active { opacity: 1; }
+/* 換日：分新日/併回切換鈕（範圍 A，只改顯示分段） */
+.trip-newday { color: #e8710a; opacity: 0.85; padding: 4px 5px; font-size: 0.72rem; white-space: nowrap; border-radius: 6px; }
+.trip-newday:active { opacity: 1; background: rgba(232,113,10,0.12); }
+/* 換日分隔線：一日桶內間隔 6h 以上（或手動起新日）的段界 */
+.day-split-sep {
+  font-size: 0.72rem; color: #e8710a; text-align: center;
+  padding: 5px 8px; margin: 3px 8px;
+  border-top: 1px dashed rgba(232,113,10,0.5);
+  background: rgba(232,113,10,0.05);
+}
+@media (prefers-color-scheme: dark) {
+  .day-split-sep { color: #f0a868; border-top-color: rgba(240,168,104,0.4); background: rgba(240,168,104,0.06); }
+  .trip-newday { color: #f0a868; }
+}
 
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 
