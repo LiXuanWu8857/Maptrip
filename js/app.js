@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.359';
+const APP_VERSION  = '1.1.360';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -796,9 +796,11 @@ function drawTripLine(trip, idx) {
 function _isDark() {
   return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
 }
-// 無標示底圖（淺/深）
-const NOLABEL_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png';
-const NOLABEL_DARK  = 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png';
+// 無標示底圖（淺/深）— v1.1.360 由 CartoDB 換成 Esri 灰底圖：Carto 免費底圖 2026 起改成需付費 API key，
+// 舊 URL 會回傳「API KEY REQUIRED」浮水印圖磚。Esri Light/Dark Gray Base 免 key、無街名標示、風格一致。
+// 注意：Esri 圖磚 URL 是 {z}/{y}/{x}（y 在前）、無 {s} 子網域、原生只到 z16 → 用 maxNativeZoom:16 放大高倍。
+const NOLABEL_LIGHT = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+const NOLABEL_DARK  = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
 
 // 地圖標記圖示工廠已抽成模組 js/icons.js（MaptripIcons，純函式，body 逐字不變）。
 // 以下為同名薄包裝轉呼叫，呼叫端零改動。
@@ -1344,7 +1346,7 @@ function openSoloTrip(set, idx, labelFn) {
   // 單趟預覽一律換成無標示白底圖（今日與歷史一致，突顯路線），退出時還原
   map.removeLayer(TILE_LAYERS[currentTile]);
   soloHistoryTile = L.tileLayer(_isDark() ? NOLABEL_DARK : NOLABEL_LIGHT,
-    { subdomains: 'abcd', maxZoom: 20 }
+    { maxZoom: 20, maxNativeZoom: 16 }   // Esri 灰底圖原生到 z16，超過用 z16 放大不留白
   ).addTo(map);
   soloHistoryTile.bringToBack();
   soloSet = set;
@@ -1759,7 +1761,7 @@ function previewDay(dayKey) {
   // 換成無標示底圖（深色模式用 Dark No Labels）
   map.removeLayer(TILE_LAYERS[currentTile]);
   dayPreviewTile = L.tileLayer(dark ? NOLABEL_DARK : NOLABEL_LIGHT,
-    { subdomains: 'abcd', maxZoom: 20 }).addTo(map);
+    { maxZoom: 20, maxNativeZoom: 16 }).addTo(map);   // Esri 灰底圖原生到 z16
   dayPreviewTile.bringToBack();
 
   // 隱藏當日行程圖層（整組 pane，不漏任何標記/線）

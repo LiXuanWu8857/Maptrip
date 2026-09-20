@@ -100,7 +100,7 @@ async function captureTripsScreenshot(dayKey, includeOther) {
     const subs = ['a', 'b', 'c', 'd'], jobs = [];
     for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) {
       if (tx < 0 || ty < 0 || tx > maxT || ty > maxT) continue;
-      jobs.push(_loadTile(`https://${subs[(tx + ty) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}.png`).then(img => ({ img, tx, ty })));
+      jobs.push(_loadTile(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${ty}/${tx}`).then(img => ({ img, tx, ty })));
     }
     const tiles = await Promise.all(jobs);
 
@@ -272,7 +272,7 @@ async function captureMonthScreenshot(ym, stats) {
     const subs = ['a', 'b', 'c', 'd'], jobs = [];
     for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) {
       if (tx < 0 || ty < 0 || tx > maxT || ty > maxT) continue;
-      jobs.push(_loadTile(`https://${subs[(tx + ty) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}.png`).then(img => ({ img, tx, ty })));
+      jobs.push(_loadTile(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${ty}/${tx}`).then(img => ({ img, tx, ty })));
     }
     const tiles = await Promise.all(jobs);
 
@@ -415,7 +415,7 @@ async function captureSingleTripScreenshot(trip) {
     const subs = ['a','b','c','d'], jobs = [];
     for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) {
       if (tx < 0 || ty < 0 || tx > maxT || ty > maxT) continue;
-      jobs.push(_loadTile(`https://${subs[(tx+ty)%4]}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}.png`).then(img => ({ img, tx, ty })));
+      jobs.push(_loadTile(`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${ty}/${tx}`).then(img => ({ img, tx, ty })));
     }
     const tiles = await Promise.all(jobs);
 

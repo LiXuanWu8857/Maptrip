@@ -68,8 +68,13 @@
     collapseStalls 再跑 dropSpikes，且 collapseStalls 的收斂**不納入 40% 安全閥**（否則長紅燈的合理
     收斂會被誤判還原）。`maptrip_zigfix` 旗標 v246→v275 重跑一次修既有趟。測試 `geoclean.js` 8 項
     （直線/真街廓/正常轉彎不誤傷、紅燈圈收掉、頭尾保留、dropSpikes 舊行為不變）全過
-- **單趟預覽（今日與歷史）**：一律切白色無標示底圖（CartoDB nolabels，深色模式深色版），
-  退出還原。今日路線藍色、歷史黑色。左右滑切趟。截圖鈕
+- **單趟預覽（今日與歷史）**：一律切白色無標示底圖，退出還原。今日路線藍色、歷史黑色。左右滑切趟。截圖鈕
+  - **底圖來源 v1.1.360（血淚）**：原用 CartoDB `light/dark_nolabels`，但 **Carto 2026 起免費底圖改成需付費 API key**
+    → 舊 URL 回傳「API KEY REQUIRED」浮水印圖磚（使用者回報）。改成 **Esri Light/Dark Gray Base**（`server.arcgisonline.com`，
+    免 key、無街名）。注意 Esri URL＝`{z}/{y}/{x}`（**y 在前**）、無 `{s}` 子網域、原生只到 **z16** → tileLayer 加
+    `maxNativeZoom:16`（高倍預覽用 z16 放大不留白）。**主地圖仍是 Google 圖磚**（`mt.google.com/vt/lyrs=m`，免 key、正常）。
+    截圖底圖（screenshot.js 3 處）同步由 Carto `dark_all` 換 **Esri Dark Gray Base**（截圖縮放本就 ≤z16；`crossOrigin='anonymous'`
+    下若無 CORS 會是「載入失敗→跳過該磚→深色底」而非污染畫布崩潰，安全）。沒 CSP、SW 不攔此 host。
 - **今日圖層三態 `_todayMode`**：normal／hidden（歷史檢視整組隱藏）／solo（今日單趟：
   線 0.12 淡化、**點整組隱藏**）。任何狀態下的重畫（drawTripLine/drawGapLine）都套用當前狀態。
   **GL 陷阱**：MapLibre 每次 render 重寫 marker 元素 style.opacity → 隱藏 marker 必須用
