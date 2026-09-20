@@ -137,11 +137,12 @@
     var rows = arr.map(function (a) {
       var label = _esc(a.name ? (a.name + '（' + a.email + '）') : a.email);
       var e = encodeURIComponent(a.email);
+      // 徽章放在會截斷的名字 span「之外」，才不會被 ellipsis 裁掉
       var badge = a.current ? '<span class="acc-cur">使用中</span>'
         : (a.hasPw ? '' : '<span class="acc-nopw">需密碼</span>');
       var sw = a.current ? ''
         : '<button class="acc-switch" onclick="MaptripAccounts.uiSwitch(decodeURIComponent(\'' + e + '\'))">切換</button>';
-      return '<div class="acc-row"><span class="acc-name">' + label + badge + '</span>' +
+      return '<div class="acc-row"><span class="acc-name">' + label + '</span>' + badge +
         sw + '<button class="acc-del" title="移除此帳號" ' +
         'onclick="MaptripAccounts.uiRemove(decodeURIComponent(\'' + e + '\'))">✕</button></div>';
     }).join('');

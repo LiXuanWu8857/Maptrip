@@ -1220,8 +1220,8 @@ html, body {
 }
 .acc-name { flex: 1 1 auto; min-width: 0; font-size: 0.86rem; color: #202124;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.acc-cur { margin-left: 6px; font-size: 0.72rem; color: #1a73e8; }
-.acc-nopw { margin-left: 6px; font-size: 0.72rem; color: #9aa0a6; }
+.acc-cur { flex: 0 0 auto; margin-left: 2px; font-size: 0.72rem; color: #1a73e8; }
+.acc-nopw { flex: 0 0 auto; margin-left: 2px; font-size: 0.72rem; color: #9aa0a6; white-space: nowrap; }
 .acc-switch {
   flex: 0 0 auto; padding: 6px 12px; border-radius: 8px; border: none;
   background: #1a73e8; color: #fff; font-size: 0.82rem; font-weight: 600;
