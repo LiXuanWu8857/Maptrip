@@ -162,6 +162,30 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
   #map       { background: #1a1a1a !important; }
   #bottom-bar { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
 }
+/* 開機讀取遮罩：取代 boot 完成前的白畫面。純 CSS、inline 立即生效，
+   不依賴 style.css/app.js。背景與 #map 同色（淺 #e8e4de / 深 #1a1a1a）避免色差閃爍。
+   隱藏只在 app.js window.__mtBooted 之後（唯一一處），冷啟動 reload/GL 失敗重載/看門狗天然無白閃。 */
+#boot-splash {
+  position: fixed !important; inset: 0 !important;
+  z-index: 9999 !important;                 /* 蓋在所有 UI 之上（頂列 21、底列 20、地圖 0） */
+  display: flex !important;
+  align-items: center !important; justify-content: center !important;
+  background: #e8e4de !important;            /* 同 #map 淺色底 */
+  transition: opacity .3s ease;
+}
+#boot-splash.hide { opacity: 0 !important; pointer-events: none !important; }
+#boot-splash .spin {
+  width: 40px; height: 40px;
+  border: 4px solid rgba(0,0,0,0.15);
+  border-top-color: rgba(0,0,0,0.55);
+  border-radius: 50%;
+  animation: bootspin 0.8s linear infinite;
+}
+@keyframes bootspin { to { transform: rotate(360deg); } }
+@media (prefers-color-scheme: dark) {
+  #boot-splash { background: #1a1a1a !important; }              /* 同 #map 深色底 */
+  #boot-splash .spin { border-color: rgba(255,255,255,0.18); border-top-color: rgba(255,255,255,0.7); }
+}
 </style>
 <!-- WKWebView safe-area fix：某些狀態（重新整理、App 被系統回收後復原）viewport 會整個
      下移 safe-area-inset-top px，但 env(safe-area-inset-top) 仍回傳原值，
@@ -227,6 +251,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 </script>
 </head>
 <body>
+<!-- 開機讀取遮罩（取代白畫面）：boot 完成即淡出，見 app.js window.__mtBooted -->
+<div id="boot-splash"><div class="spin"></div></div>
 
 <!-- Safe-area fill behind Dynamic Island -->
 <div id="top-safe"></div>

@@ -2381,6 +2381,14 @@ function boot() {
 
   // 開機完成：解除 index.html 的 25 秒看門狗，並寫入黑盒子
   window.__mtBooted = true;
+  // 開機完成 → 淡出讀取遮罩（元素不存在也安全）。這是隱藏 spinner 的唯一一處：
+  // 冷啟動 reload / GL 失敗重載 / 看門狗 因為都到不了這裡，spinner 天然持續蓋著、無白閃。
+  try {
+    var _bs = document.getElementById('boot-splash');
+    // 淡出（.hide 設 opacity:0）→ 350ms 後徹底 display:none。用 setProperty 帶 important，
+    // 才蓋得過基底規則的 display:flex !important（否則只淡成透明、仍留一層全螢幕元素＝忌諱）。
+    if (_bs) { _bs.classList.add('hide'); setTimeout(function () { if (_bs) _bs.style.setProperty('display', 'none', 'important'); }, 350); }
+  } catch (_) {}
   try {
     window.__mtLog && window.__mtLog('boot ok v' + APP_VERSION + ' ' + (window.MAPTRIP_GL ? 'gl' : 'lf')
       + (activeTrip ? ' rec' : ''));
