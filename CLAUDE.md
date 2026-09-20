@@ -69,12 +69,15 @@
     收斂會被誤判還原）。`maptrip_zigfix` 旗標 v246→v275 重跑一次修既有趟。測試 `geoclean.js` 8 項
     （直線/真街廓/正常轉彎不誤傷、紅燈圈收掉、頭尾保留、dropSpikes 舊行為不變）全過
 - **單趟預覽（今日與歷史）**：一律切白色無標示底圖，退出還原。今日路線藍色、歷史黑色。左右滑切趟。截圖鈕
-  - **底圖來源 v1.1.360（血淚）**：原用 CartoDB `light/dark_nolabels`，但 **Carto 2026 起免費底圖改成需付費 API key**
-    → 舊 URL 回傳「API KEY REQUIRED」浮水印圖磚（使用者回報）。改成 **Esri Light/Dark Gray Base**（`server.arcgisonline.com`，
-    免 key、無街名）。注意 Esri URL＝`{z}/{y}/{x}`（**y 在前**）、無 `{s}` 子網域、原生只到 **z16** → tileLayer 加
-    `maxNativeZoom:16`（高倍預覽用 z16 放大不留白）。**主地圖仍是 Google 圖磚**（`mt.google.com/vt/lyrs=m`，免 key、正常）。
-    截圖底圖（screenshot.js 3 處）同步由 Carto `dark_all` 換 **Esri Dark Gray Base**（截圖縮放本就 ≤z16；`crossOrigin='anonymous'`
-    下若無 CORS 會是「載入失敗→跳過該磚→深色底」而非污染畫布崩潰，安全）。沒 CSP、SW 不攔此 host。
+  - **底圖來源（血淚，換過三次）**：①原用 CartoDB `light/dark_nolabels`，但 **Carto 2026 起免費底圖需付費 API key** →
+    「API KEY REQUIRED」浮水印（使用者回報）。②v1.1.360 換 **Esri Light/Dark Gray Base**（免 key），但實測**其實內建街名＝有字**、
+    且**無 retina（@2x）圖磚**→ 高解析手機螢幕上街名字糊（使用者回報）。③**v1.1.362 改用主地圖同一套 Google 圖磚
+    ＋ `apistyle=s.e:l|p.v:off`（隱藏所有標示：街名/地名/POI 圖示/路標全關）＝只有道路的乾淨無字地圖**——使用者要「只有地圖、
+    完全無字無圖示」，且無字＝無「字糊」問題。`NOLABEL_LIGHT=NOLABEL_DARK`（Google 道路圖淺色，淺/深共用；tileLayer 用
+    `subdomains:'0123', maxZoom:20`，同主地圖，各縮放皆有原生圖磚→不放大不糊）。**主地圖仍是 Google `lyrs=m`（有字）。**
+    截圖底圖（screenshot.js 3 處）**仍是 Esri Dark Gray Base**（深色卡片需深底；使用者未反映截圖問題，暫不動；
+    `crossOrigin='anonymous'` 下無 CORS＝跳過該磚→深底，不崩）。沒 CSP、SW 不攔這些 host。
+    **注意 apistyle 是 mt.google.com 非官方參數**：若某天失效＝顯示回有街名（不會浮水印/破圖）。
 - **今日圖層三態 `_todayMode`**：normal／hidden（歷史檢視整組隱藏）／solo（今日單趟：
   線 0.12 淡化、**點整組隱藏**）。任何狀態下的重畫（drawTripLine/drawGapLine）都套用當前狀態。
   **GL 陷阱**：MapLibre 每次 render 重寫 marker 元素 style.opacity → 隱藏 marker 必須用

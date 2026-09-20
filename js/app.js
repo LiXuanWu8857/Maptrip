@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.361';
+const APP_VERSION  = '1.1.362';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -796,11 +796,13 @@ function drawTripLine(trip, idx) {
 function _isDark() {
   return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
 }
-// 無標示底圖（淺/深）— v1.1.360 由 CartoDB 換成 Esri 灰底圖：Carto 免費底圖 2026 起改成需付費 API key，
-// 舊 URL 會回傳「API KEY REQUIRED」浮水印圖磚。Esri Light/Dark Gray Base 免 key、無街名標示、風格一致。
-// 注意：Esri 圖磚 URL 是 {z}/{y}/{x}（y 在前）、無 {s} 子網域、原生只到 z16 → 用 maxNativeZoom:16 放大高倍。
-const NOLABEL_LIGHT = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-const NOLABEL_DARK  = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+// 無標示底圖 — v1.1.362：改用主地圖同一套 Google 圖磚，加 apistyle 隱藏「所有」標示（街名/地名/
+// POI 圖示/路標全關）＝只有道路的乾淨無字地圖。使用者要「只有地圖、完全無字無圖示」，且無字＝無「字糊」問題。
+// 沿革：Carto nolabels（2026 起需付費 key→浮水印）→ v1.1.360 Esri 灰底圖（免 key，但其實內建街名＝有字、
+// 且無 retina 圖磚→高解析螢幕上字糊）→ 本版 Google apistyle 無標示。
+// apistyle=s.e:l|p.v:off ＝ 對所有地物：元素 labels、可見性 off（文字與圖示一起關）。淺/深模式共用（Google 道路圖為淺色）。
+const NOLABEL_LIGHT = 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.e:l|p.v:off';
+const NOLABEL_DARK  = NOLABEL_LIGHT;
 
 // 地圖標記圖示工廠已抽成模組 js/icons.js（MaptripIcons，純函式，body 逐字不變）。
 // 以下為同名薄包裝轉呼叫，呼叫端零改動。
@@ -1346,7 +1348,7 @@ function openSoloTrip(set, idx, labelFn) {
   // 單趟預覽一律換成無標示白底圖（今日與歷史一致，突顯路線），退出時還原
   map.removeLayer(TILE_LAYERS[currentTile]);
   soloHistoryTile = L.tileLayer(_isDark() ? NOLABEL_DARK : NOLABEL_LIGHT,
-    { maxZoom: 20, maxNativeZoom: 16 }   // Esri 灰底圖原生到 z16，超過用 z16 放大不留白
+    { subdomains: '0123', maxZoom: 20 }   // Google 圖磚（同主地圖）：各縮放都有原生圖磚、字已關
   ).addTo(map);
   soloHistoryTile.bringToBack();
   soloSet = set;
@@ -1761,7 +1763,7 @@ function previewDay(dayKey) {
   // 換成無標示底圖（深色模式用 Dark No Labels）
   map.removeLayer(TILE_LAYERS[currentTile]);
   dayPreviewTile = L.tileLayer(dark ? NOLABEL_DARK : NOLABEL_LIGHT,
-    { maxZoom: 20, maxNativeZoom: 16 }).addTo(map);   // Esri 灰底圖原生到 z16
+    { subdomains: '0123', maxZoom: 20 }).addTo(map);   // Google 圖磚（同主地圖）、字已關
   dayPreviewTile.bringToBack();
 
   // 隱藏當日行程圖層（整組 pane，不漏任何標記/線）
