@@ -1677,7 +1677,7 @@ function renderHistorySheet(keepState) {
       _segs.forEach((s, si) => { if (s[0]) { _segStart.add(s[0]); if (si > 0) _segStartAfter.add(s[0]); } });
       const _firstTrip = _segs[0] && _segs[0][0];
       const rows = restRow + trips.map((t, i) => {
-        const sep = _segStartAfter.has(t) ? '<div class="day-split-sep">↡ 間隔 6 小時以上，新的一天</div>' : '';
+        const sep = _segStartAfter.has(t) ? '<div class="day-split-sep">↡ 凌晨隔超過 6 小時，新的一天</div>' : '';
         if (t._manual) return sep + _manualRowHtml(t, i + 1);
         const oi = (raw[day] || []).indexOf(t);        // GPS 趟：用真實索引呼叫既有 handler
         const isStart = _segStart.has(t);

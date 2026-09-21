@@ -108,7 +108,12 @@
       // 「允許記帳者修改車資」開關已移到「記帳者」面板的『授權我的記帳者』區（語意相符處），此處不再放。
       // 已記住的其他帳號 → 一鍵切換（免密碼，若有存密碼）
       const accHtml = (window.MaptripAccounts) ? MaptripAccounts.accountsHtml(true) : '';
+      const backupBtn = (window.MaptripBackup)
+        ? '<button class="sync-out" style="border-color:rgba(26,115,232,0.3);background:rgba(26,115,232,0.06);color:#1a73e8" ' +
+          'onclick="MaptripBackup.exportFile()">⬇️ 匯出備份（存成 JSON 檔）</button>'
+        : '';
       actEl.innerHTML = accHtml +
+        backupBtn +
         '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
         '<button class="sync-out" style="margin-top:6px" ' +
         'onclick="if(confirm(\'清除這台裝置的本機行程，改從雲端重新下載？（用於：換帳號後仍看到別帳號的行程）\'))MaptripSync.resetLocal()">' +

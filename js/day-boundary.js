@@ -18,6 +18,9 @@
 
   var GAP_HOURS = 6;
   var DAY_SPLIT_HOUR = 7;   // 與 storage.js businessDayKey 一致（後綴 fallback 用）
+  // 觸發條件收窄（使用者定案）：只有「這趟在 07:00 前開始（＝凌晨、跨日）且距前一趟結束
+  // 超過 6 小時」才自動切新的一天。白天的長休息（兩趟都在 07:00 後）不再被切成兩天。
+  var SPLIT_BEFORE_HOUR = DAY_SPLIT_HOUR;   // 07:00
 
   function _endOf(t) {
     // gap 用「本趟 startTime − 前一趟 endTime」；缺 endTime 用 startTime 保底
@@ -40,7 +43,11 @@
       if (i === 0) open = true;
       else if (t.newDay === true) open = true;
       else if (t.newDay === false) open = false;
-      else open = (t.startTime - prevEnd) >= gapMs;
+      else {
+        // 自動：只在「凌晨（07:00 前開始）＋距前一趟結束超過 6 小時」才切新的一天
+        var hr = new Date(t.startTime).getHours();
+        open = (hr < SPLIT_BEFORE_HOUR) && ((t.startTime - prevEnd) > gapMs);
+      }
       if (open) { cur = []; segs.push(cur); }
       cur.push(t);
       prevEnd = _endOf(t);

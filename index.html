@@ -512,6 +512,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/storage.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 換日分段（間隔 ≥6h 算隔天，範圍 A 只影響天數/顯示）：app.js/finance 用到，排在它們之前 -->
 <script>document.write('<scr' + 'ipt src="js/day-boundary.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 資料備份/還原（遷移前先匯出保存）：讀 loadTrips/MaptripSync -->
+<script>document.write('<scr' + 'ipt src="js/backup.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 雲端登入閘門/同步面板 UI（sync.js 之上的 UI 層）：app.js 頂層 init，排在 app.js 之前 -->
 <script>document.write('<scr' + 'ipt src="js/sync-ui.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 地圖朝向/羅盤/方向光束（依賴注入 map 與 heading 狀態）：app.js 頂層 init，排在 app.js 之前 -->
