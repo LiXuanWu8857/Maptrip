@@ -592,7 +592,9 @@
         disp += (c && c.dispatch != null) ? c.dispatch : (t.dispatch || 0);
         trips++;
       });
-      var timed = arr.filter(function (t) { return t.endTime && t.paymentMethod !== 'other'; })
+      // 放寬成「有 startTime 即可」（手動補登趟無 endTime 也計入端點，與 util.workMs 一致）；
+      // workMs 內部會自行排除「其他」與缺 startTime、並以 end||start 取端點。
+      var timed = arr.filter(function (t) { return t.startTime && t.paymentMethod !== 'other'; })
         .sort(function (a, b) { return a.startTime - b.startTime; });
       if (U && U.workMs && timed.length) work += U.workMs(timed, 0);
     });

@@ -96,15 +96,21 @@
   }
   function workMs(trips, restMin) {
     if (!trips || !trips.length) return 0;
-    // 排除「其他」付款（自用/非載客）與沒有完整起訖時間的趟（如手動補登）：不列入工作時間。
-    const t = [];
+    // 工時＝當日最早開始 → 最晚結束。排除「其他」付款（自用/非載客）與完全無時間的趟；
+    // 但「只有 startTime、無 endTime」的手動補登趟改為計入端點（缺 endTime 用 startTime 補），
+    // 讓排在當天最早/最晚的手動趟能撐開工時起點/終點（排中間則天然不影響）。
+    // 用 min(start)/max(end||start) 而非陣列頭尾位置：手動趟排最後時位置取 endTime 會是 undefined。
+    let minStart = Infinity, maxEnd = -Infinity, has = false;
     for (let i = 0; i < trips.length; i++) {
       const x = trips[i];
-      if (x && x.paymentMethod !== 'other' && x.startTime && x.endTime) t.push(x);
+      if (!x || x.paymentMethod === 'other' || !x.startTime) continue;
+      const end = x.endTime || x.startTime;
+      if (x.startTime < minStart) minStart = x.startTime;
+      if (end > maxEnd) maxEnd = end;
+      has = true;
     }
-    if (!t.length) return 0;
-    const span = t[t.length - 1].endTime - t[0].startTime;
-    return Math.max(0, span - (restMin || 0) * 60000);
+    if (!has) return 0;
+    return Math.max(0, (maxEnd - minStart) - (restMin || 0) * 60000);
   }
 
   // 初始化：對齊 app.js 的 TEST_MODE_ON，決定 REST_KEY
