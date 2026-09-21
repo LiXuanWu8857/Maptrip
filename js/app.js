@@ -184,6 +184,22 @@ function initMap() {
          .setView([25.033, 121.565], 15);
   TILE_LAYERS.road.addTo(map);
 
+  // 單趟預覽「以畫面中心縮放、不平移」facade（Leaflet 標準引擎；GL 引擎已在 gl-compat 內建同名）。
+  // Leaflet 原生支援 touchZoom:'center'／scrollWheelZoom:'center'＝繞地圖中心而非手指/游標點。
+  if (!map.centerZoom) {
+    map.centerZoom = {
+      enable: function () {
+        try { map.touchZoom.disable(); map.options.touchZoom = 'center'; map.touchZoom.enable(); } catch (_) {}
+        try { map.scrollWheelZoom.disable(); map.options.scrollWheelZoom = 'center'; map.scrollWheelZoom.enable(); } catch (_) {}
+      },
+      disable: function () {   // 還原成主地圖預設（繞游標/手指）
+        try { map.touchZoom.disable(); map.options.touchZoom = true; map.touchZoom.enable(); } catch (_) {}
+        try { map.scrollWheelZoom.disable(); map.options.scrollWheelZoom = true; map.scrollWheelZoom.enable(); } catch (_) {}
+      },
+      setCenter: function () {}   // Leaflet 'center' 模式原生繞中心，不需鎖中心
+    };
+  }
+
   // 今日行程專用 pane：歷史檢視（單趟/日預覽/回放）時整組隱藏，
   // 不再依賴逐一追蹤 allMapLayers（漏追蹤就會像使用者遇到的「今日點外漏」）
   try {
@@ -1354,9 +1370,9 @@ function openSoloTrip(set, idx, labelFn) {
   soloSet = set;
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
-  // 禁止地圖拖曳，改由整個地圖面左右滑切換趟次
+  // 禁止地圖拖曳（不能平移），但保留縮放並鎖成「以畫面中心縮放」（centerZoom）。
   map.dragging.disable();
-  map.touchZoom.disable();
+  if (map.centerZoom) map.centerZoom.enable(); else map.touchZoom.disable();
   document.getElementById('map').addEventListener('touchstart', _soloTouchStart, { passive: true });
   document.getElementById('map').addEventListener('touchend',   _soloTouchEnd,   { passive: true });
   // 先顯示 solo-bar，讓瀏覽器先算好 layout，fitBounds 才能量到正確高度
@@ -1408,6 +1424,8 @@ function renderSoloTrip() {
     );
   }
   fitMapToRoute(coords, 'solo-bar');
+  // 切趟/重新置中後更新「以中心縮放」的鎖定中心（GL 引擎用；Leaflet 為 no-op）
+  if (map.centerZoom && map.centerZoom.setCenter) map.centerZoom.setCenter();
 
   const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
   const info  = `${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
@@ -1465,9 +1483,9 @@ function exitSoloMode() {
   }
   soloSet = []; soloIdx = 0; soloLabelFn = null; soloFromHistory = false;
   showTodayLayers(true);   // 還原今日行程圖層（pane 顯示 + 不透明度）
-  // 恢復地圖拖曳
+  // 恢復地圖拖曳 + 還原縮放（centerZoom 對稱關閉，回到主地圖預設）
   map.dragging.enable();
-  map.touchZoom.enable();
+  if (map.centerZoom) map.centerZoom.disable(); else map.touchZoom.enable();
   document.getElementById('map').removeEventListener('touchstart', _soloTouchStart);
   document.getElementById('map').removeEventListener('touchend',   _soloTouchEnd);
   document.getElementById('solo-bar').style.display = 'none';
@@ -1481,11 +1499,15 @@ function backToMainMap() {
 }
 
 // 地圖層級的水平滑動 → 切換單趟（solo mode 時才掛上）
-let _soloSwX = null, _soloSwY = null, _soloLastTap = 0;
+let _soloSwX = null, _soloSwY = null, _soloLastTap = 0, _soloMulti = false;
 function _soloTouchStart(e) {
+  // 多指（縮放）手勢不當作滑動/連點：避免雙指縮放放開時被誤判成切趟或退出
+  if (e.touches.length > 1) { _soloMulti = true; _soloSwX = _soloSwY = null; return; }
   const t = e.touches[0]; _soloSwX = t.clientX; _soloSwY = t.clientY;
 }
 function _soloTouchEnd(e) {
+  // 這段手勢期間曾有多指（縮放）→ 略過切趟/連點；等所有手指離開才解除旗標
+  if (_soloMulti) { if (!e.touches || e.touches.length === 0) _soloMulti = false; _soloSwX = _soloSwY = null; return; }
   if (_soloSwX === null) return;
   const t = e.changedTouches[0];
   const dx = t.clientX - _soloSwX, dy = t.clientY - _soloSwY;

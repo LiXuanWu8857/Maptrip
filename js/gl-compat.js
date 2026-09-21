@@ -617,6 +617,32 @@
       enable: function () { self.gl.doubleClickZoom.enable(); },
       disable: function () { self.gl.doubleClickZoom.disable(); }
     };
+    // 單趟預覽「以畫面中心縮放、不平移」：MapLibre GL 縮放預設繞手指中點、沒有繞中心選項，
+    // 故監聽 move 把中心 snap 回鎖定中心（達成不平移＋以中心縮放）。切趟重新 fit 時先 suspend
+    // 讓 fit 動畫跑完再抓新中心（否則守衛會把 fit 拉回舊中心）。與 Leaflet 的 centerZoom 同名介面，
+    // app.js 呼叫端不分引擎。
+    this.centerZoom = {
+      _c: null, _guard: null, _snap: false, _suspend: false,
+      enable: function () {
+        var cz = this;
+        cz._c = self.gl.getCenter();
+        cz._guard = function () {
+          if (cz._snap || cz._suspend || !cz._c) return;
+          cz._snap = true; try { self.gl.setCenter(cz._c); } catch (e) {} cz._snap = false;
+        };
+        self.gl.on('move', cz._guard);
+        try { self.gl.touchZoomRotate.enable(); } catch (e) {}
+      },
+      disable: function () {
+        if (this._guard) { try { self.gl.off('move', this._guard); } catch (e) {} this._guard = null; }
+        this._c = null;
+      },
+      // 切趟/重新 fit 後更新鎖定中心：暫停守衛讓 fitBounds 動畫（~600ms）跑完，再抓新中心
+      setCenter: function () {
+        var cz = this; cz._suspend = true;
+        setTimeout(function () { try { cz._c = self.gl.getCenter(); } catch (e) {} cz._suspend = false; }, 700);
+      }
+    };
   }
   GlMap.prototype._exec = function (fn) {
     if (this._ready) { try { fn(); } catch (e) {} }
