@@ -115,7 +115,7 @@
       actEl.innerHTML = accHtml +
         backupBtn +
         '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
-        '<button class="sync-out" style="margin-top:6px" ' +
+        '<button class="sync-out" ' +
         'onclick="if(confirm(\'清除這台裝置的本機行程，改從雲端重新下載？（用於：換帳號後仍看到別帳號的行程）\'))MaptripSync.resetLocal()">' +
         '🧹 清除本機並重抓雲端</button>';
     }
