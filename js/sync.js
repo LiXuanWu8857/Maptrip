@@ -660,6 +660,16 @@
     } catch (e) { log('pushDel fail ' + (e && e.code)); }
   }
 
+  // 復原用：把某趟 id 從墓碑移除（本機 maptrip_deleted ＋ 更新雲端墓碑），
+  // 否則 _deletedIdSet()/雲端 deletedIdSet() 會在下次合併/同步把剛還原的趟再濾掉／再刪。
+  function undeleteId(id) {
+    try {
+      const arr = localTombstones().filter(d => d && d.id !== id);
+      localStorage.setItem('maptrip_deleted', JSON.stringify(arr));
+      pushDeleted();   // 讀更新後的本機墓碑推上雲端（去掉這個 id）
+    } catch (_) {}
+  }
+
   // 監聽雲端（首次也會收到一次完整快照 → 等同初次下載）
   function pullAndListen() {
     if (unsub) unsub();
@@ -845,7 +855,7 @@
     getAccess: getAccess, setAllowFareEdit: setAllowFareEdit,
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
-    resetLocal: resetLocal, overwriteDays: overwriteDays,
+    resetLocal: resetLocal, overwriteDays: overwriteDays, undeleteId: undeleteId,
     // 共享熱點/車隊（Phase 1）＋全體池（Phase 2）
     myTeam: myTeam, setShareHotspots: setShareHotspots,
     shareGlobalOn: shareGlobalOn, setShareGlobal: setShareGlobal,

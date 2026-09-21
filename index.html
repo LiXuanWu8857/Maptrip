@@ -516,6 +516,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/backup.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 換日一次性遷移（範圍 B，把主鍵改真實日曆日）：依賴 day-boundary/backup/sync -->
 <script>document.write('<scr' + 'ipt src="js/migrate-day.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 刪除回收桶（24h 可復原）：storage.removeTripFromStorage 會呼叫 push；還原用 sync.undeleteId -->
+<script>document.write('<scr' + 'ipt src="js/trash.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 雲端登入閘門/同步面板 UI（sync.js 之上的 UI 層）：app.js 頂層 init，排在 app.js 之前 -->
 <script>document.write('<scr' + 'ipt src="js/sync-ui.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 地圖朝向/羅盤/方向光束（依賴注入 map 與 heading 狀態）：app.js 頂層 init，排在 app.js 之前 -->
@@ -634,6 +636,14 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 })();
 </script>
 <!-- Cloud Sync Dialog -->
+<!-- 回收桶（最近刪除，24h 可復原） -->
+<div id="trash-overlay" onclick="MaptripTrash.closePanel()" style="display:none"></div>
+<div id="trash-dialog" style="display:none">
+  <div class="sync-title">🗑 最近刪除（24 小時可復原）</div>
+  <div id="trash-body"></div>
+  <button class="sync-close" onclick="MaptripTrash.closePanel()">關閉</button>
+</div>
+
 <div id="sync-overlay" onclick="closeSyncDialog()" style="display:none"></div>
 <div id="sync-dialog" style="display:none">
   <div class="sync-title">☁️ 雲端同步</div>

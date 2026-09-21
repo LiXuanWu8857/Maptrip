@@ -1618,7 +1618,7 @@ function renderHistorySheet(keepState) {
   const mergedByDay = {};
   Object.keys(daySet).forEach(d => { mergedByDay[d] = window.MaptripManual ? MaptripManual.mergeDay(raw[d] || [], d) : (raw[d] || []); });
   const days = Object.keys(daySet).filter(d => mergedByDay[d].length).sort().reverse();
-  if (!days.length) { body.innerHTML = '<div class="empty-state">尚無歷史紀錄</div>'; return; }
+  if (!days.length) { body.innerHTML = '<div id="trash-entry"></div><div class="empty-state">尚無歷史紀錄</div>'; _renderTrashEntry(); return; }
 
   // 依月份（YYYY-MM）分組，月份由近到遠
   const months = [], monthMap = {};
@@ -1629,7 +1629,7 @@ function renderHistorySheet(keepState) {
   });
 
   let globalDayIdx = 0;
-  body.innerHTML = months.map((mk, monthIdx) => {
+  body.innerHTML = '<div id="trash-entry"></div>' + months.map((mk, monthIdx) => {
     const mDays = monthMap[mk];
     const mTrips = mDays.flatMap(d => mergedByDay[d]);
     const mDist = mTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
@@ -1697,6 +1697,20 @@ function renderHistorySheet(keepState) {
   }).join('');
 
   if (_snap) _historyRestore(_snap);   // 還原展開狀態＋捲動位置（編輯/刪除/補抽成後）
+  _renderTrashEntry();
+}
+
+// 歷史清單頂端「🗑 最近刪除」入口：有可復原的趟才顯示（count 非同步）。
+function _renderTrashEntry() {
+  const el = document.getElementById('trash-entry');
+  if (!el || !window.MaptripTrash || !MaptripTrash.count) return;
+  MaptripTrash.count().then(n => {
+    const cur = document.getElementById('trash-entry');
+    if (!cur) return;
+    cur.innerHTML = n > 0
+      ? '<button class="trash-entry-btn" onclick="MaptripTrash.openPanel()">🗑 最近刪除（' + n + '）· 24 小時內可復原</button>'
+      : '';
+  }).catch(() => {});
 }
 
 // 設定歷史某日休息時間（小時）— 只就地更新該日/該月工作時長，避免整頁重繪收折
@@ -1901,6 +1915,7 @@ function clearReplayTempLayers() { return MaptripReplay.clearReplayTempLayers();
 // body 逐字不變）。以下為同名薄包裝轉呼叫，呼叫端（含 recorder.js、finance.js window.* 存取）零改動。
 // slimTripForStorage 由模組直接掛 window。DAY_SPLIT_HOUR/DELETED_KEY 隨模組搬入。
 MaptripStorage.init({ testMode: TEST_MODE_ON, getTodayTrips: () => todayTrips });
+if (window.MaptripTrash) { try { MaptripTrash.init({ testMode: TEST_MODE_ON }); } catch (_) {} }   // 回收桶（開機懶清逾時）
 const DAY_SPLIT_HOUR = 7;   // updateTopBar 顯示營業日仍直接用（模組內另有同值，各自 scope）
 function businessDayKey(ts = Date.now()) { return MaptripStorage.businessDayKey(ts); }
 function todayKey() { return MaptripStorage.todayKey(); }

@@ -228,6 +228,8 @@
     const affected = [];
     Object.keys(raw).forEach(day => {
       if (!Array.isArray(raw[day])) return;
+      const hit = raw[day].find(t => t && t.id === id);
+      if (hit && window.MaptripTrash) { try { MaptripTrash.push(hit, day); } catch (_) {} }   // ★ 先進回收桶（24h 可復原）再刪
       const before = raw[day].length;
       raw[day] = raw[day].filter(t => t.id !== id);
       if (raw[day].length !== before) affected.push(day);
