@@ -129,6 +129,42 @@
     return { newDays: newDays, moves: moves, changedKeys: Object.keys(changed) };
   }
 
+  // ===== 存檔時的 gap-aware 分桶（讓「新行程」也存到正確日曆日，與遷移後一致）=====
+  // 對 (daysObj ∪ extra，依 id 去重、extra 優先) 依時間排序走一遍，回 id→新日 key 的對照。
+  function assignKeys(daysObj, extra, gapHours) {
+    var seen = {}, all = [];
+    (extra || []).forEach(function (t) { if (t && typeof t.startTime === 'number') { all.push(t); if (t.id != null) seen[t.id] = 1; } });
+    Object.keys(daysObj || {}).forEach(function (k) {
+      (daysObj[k] || []).forEach(function (t) { if (t && typeof t.startTime === 'number' && !(t.id != null && seen[t.id])) all.push(t); });
+    });
+    all.sort(function (a, b) { return a.startTime - b.startTime; });
+    var map = {}, pe = null, pk = null;
+    all.forEach(function (t) { var k = dayKeyFor(t, pe, pk, gapHours); if (t.id != null) map[t.id] = k; pe = _endOf(t); pk = k; });
+    return map;
+  }
+  // 單趟的新日 key（供 recorder 中斷補存等單筆情境）。
+  function keyFor(trip, daysObj, gapHours) {
+    var m = assignKeys(daysObj, [trip], gapHours);
+    return (trip && trip.id != null && m[trip.id]) || ((trip && _bdk(trip.startTime)) || _bdk(Date.now()));
+  }
+  // 「現在」屬於哪個營業/session 日（gap-aware 版 todayKey）。只掃「最後一趟」＝O(n) 無排序，
+  // 不做整份 sort，避免頻繁呼叫（updateTopBar）造成負擔/發燙。
+  //   規則：now 為凌晨(07:00 前)且距最後一趟結束 ≤6h → 沿用最後一趟所在的桶（延續當前 session）；
+  //         否則新的一天：凌晨用真實日曆日、白天用 businessDayKey（＝當日）。
+  function currentKey(daysObj, nowTs, gapHours) {
+    nowTs = nowTs || Date.now();
+    var gapMs = (gapHours == null ? GAP_HOURS : gapHours) * 3600 * 1000;
+    var lastT = null, lastKey = null;
+    Object.keys(daysObj || {}).forEach(function (k) {
+      (daysObj[k] || []).forEach(function (t) {
+        if (t && typeof t.startTime === 'number' && (!lastT || t.startTime > lastT.startTime)) { lastT = t; lastKey = k; }
+      });
+    });
+    var hr = new Date(nowTs).getHours();
+    if (lastT && hr < SPLIT_BEFORE_HOUR && (nowTs - _endOf(lastT)) <= gapMs) return lastKey;   // 延續當前 session
+    return (hr < SPLIT_BEFORE_HOUR) ? _calDate(nowTs) : _bdk(nowTs);
+  }
+
   global.MaptripDayBoundary = {
     GAP_HOURS: GAP_HOURS,
     sessionize: sessionize,
@@ -137,6 +173,9 @@
     countWorkDays: countWorkDays,
     dayKeyFor: dayKeyFor,
     remap: remap,
+    assignKeys: assignKeys,
+    keyFor: keyFor,
+    currentKey: currentKey,
     _calDate: _calDate,
     _isWorkSeg: _isWorkSeg
   };

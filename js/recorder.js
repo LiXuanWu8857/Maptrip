@@ -391,8 +391,10 @@
         const last = s.coords[s.coords.length - 1];
         const trip = { id: s.id, startTime: s.startTime, endTime: (last && last.t) || s.savedAt,
                        coords: s.coords, totalDist: calcTotalDist(s.coords), fare: 0 };
-        const day = businessDayKey(trip.startTime);
         const raw = loadTrips();
+        // gap-aware 分桶（與存檔/遷移一致）；未載入 day-boundary 時退回舊 businessDayKey
+        const day = (window.MaptripDayBoundary && MaptripDayBoundary.keyFor)
+          ? MaptripDayBoundary.keyFor(trip, raw) : businessDayKey(trip.startTime);
         (raw[day] = raw[day] || []).push(serializeTrip(trip));
         raw[day].sort((a, b) => a.startTime - b.startTime);
         saveTrips(raw);

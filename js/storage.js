@@ -26,7 +26,15 @@
     return `${y}-${m}-${day}`;
   }
 
-  function todayKey() { return businessDayKey(); }
+  // 「今日」桶：gap-aware（凌晨隔 >6h 起算新的一天＝真實日曆日），與存檔/遷移一致。
+  // 只掃最後一趟（O(n) 無排序），未載入 day-boundary 時退回舊 07:00 businessDayKey。
+  function todayKey() {
+    try {
+      if (window.MaptripDayBoundary && MaptripDayBoundary.currentKey && window.loadTrips)
+        return MaptripDayBoundary.currentKey(loadTrips(), Date.now());
+    } catch (_) {}
+    return businessDayKey();
+  }
 
   // 座標 5 位小數 ≈ 1.1m 精度：對顯示/統計無感，但 JSON 體積省一半以上
   function _r5(v) { return Math.round(v * 1e5) / 1e5; }
@@ -98,7 +106,7 @@
         delete slim.roadCoords;
       }
       const day = businessDayKey(slim.startTime);
-      if (day !== todayKey()) {
+      if (day !== businessDayKey()) {   // 舊規則自我一致的「非今日」判斷（僅決定是否壓座標，與 gap-aware todayKey 無關）
         if (slim.roadCoords && slim.coords && slim.coords.length > 2) {
           slim.coords = [slim.coords[0], slim.coords[slim.coords.length - 1]]
             .map(c => ({ lat: c.lat, lng: c.lng }));
@@ -121,10 +129,15 @@
   function saveTodayToStorage() {
     const raw = loadTrips();
     const dead = _deletedIdSet();
+    const today = ctx.getTodayTrips();
+    // gap-aware 分桶：以「全時間線（raw ∪ 今日趟）」重算每趟的日 key，讓新錄的凌晨行程也
+    // 存到正確日曆日（與遷移後的舊資料一致）；未載入 day-boundary 時退回舊 businessDayKey。
+    const keyMap = (window.MaptripDayBoundary && MaptripDayBoundary.assignKeys)
+      ? MaptripDayBoundary.assignKeys(raw, today) : null;
     const affected = new Set([todayKey()]);
     const grouped = {};
-    for (const t of ctx.getTodayTrips()) {
-      const key = businessDayKey(t.startTime);
+    for (const t of today) {
+      const key = (keyMap && t.id != null && keyMap[t.id]) || businessDayKey(t.startTime);
       affected.add(key);
       (grouped[key] = grouped[key] || []).push(serializeTrip(t));
     }
