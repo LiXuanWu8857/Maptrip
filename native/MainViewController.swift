@@ -10,6 +10,11 @@ class MainViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(LiveActivityPlugin())
     }
 
+    // 鎖定直向保險（belt-and-suspenders）：某些 iOS 版本只認 VC 層的方向設定，
+    // 與 AppDelegate 的全域鎖一起，確保 WebView 這個 VC 也只允許直向。
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+    override var shouldAutorotate: Bool { true }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         // WKWebView 在 reload 後會重複套用安全區內距，導致頂端出現空白、

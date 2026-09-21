@@ -13,6 +13,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
+    // MARK: - 鎖定直向（禁止橫置）
+    // iOS WKWebView 不支援網頁 orientation lock，只能在原生殼鎖。手機主 App 一律直向；
+    // CarPlay 場景（車機）不鎖，讓車機自行決定，否則會弄壞車機顯示。
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        if window?.windowScene?.session.role == .carTemplateApplication {
+            return .all
+        }
+        return .portrait
+    }
+
     func applicationWillResignActive(_ application: UIApplication) {}
     func applicationDidEnterBackground(_ application: UIApplication) {}
     func applicationWillEnterForeground(_ application: UIApplication) {}
