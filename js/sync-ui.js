@@ -112,16 +112,19 @@
         ? '<button class="sync-out" style="border-color:rgba(26,115,232,0.3);background:rgba(26,115,232,0.06);color:#1a73e8" ' +
           'onclick="MaptripBackup.exportFile()">⬇️ 匯出備份（存成 JSON 檔）</button>'
         : '';
-      // 換日遷移：未跑過 → 顯示執行鈕；跑過且有快照 → 顯示還原鈕（逃生用）
+      // 換日整理（可重複、自動偵測）：只要還有凌晨趟卡在前一天就顯示按鈕（含待搬趟數）；
+      // 整理乾淨(0 趟)才隱藏。做過(有快照)則另給還原逃生鈕。
       let migrateBtn = '';
       if (window.MaptripMigrateDay) {
-        if (!MaptripMigrateDay.isDone()) {
+        let mc = 0;
+        try { mc = (MaptripMigrateDay.preview() || {}).moveCount || 0; } catch (_) {}
+        if (mc > 0) {
           migrateBtn = '<button class="sync-out" style="border-color:rgba(232,113,10,0.35);background:rgba(232,113,10,0.07);color:#e8710a" ' +
-            'onclick="MaptripMigrateDay.confirmAndRun()">🔄 換日遷移（一次性，先備份）</button>';
-        } else if (MaptripMigrateDay.hasSnapshot()) {
+            'onclick="MaptripMigrateDay.confirmAndRun()">🔄 換日整理（' + mc + ' 趟凌晨行程移到隔天）</button>';
+        } else if (MaptripMigrateDay.hasSnapshot && MaptripMigrateDay.hasSnapshot()) {
           migrateBtn = '<button class="sync-out" ' +
-            'onclick="if(confirm(\'還原到換日遷移「之前」的資料？（會覆寫雲端變動的日子）\'))MaptripMigrateDay.restorePremigrate().then(function(){renderSyncPanel()})">' +
-            '↩︎ 還原換日遷移前</button>';
+            'onclick="if(confirm(\'還原到換日整理「之前」的資料？（會覆寫雲端變動的日子）\'))MaptripMigrateDay.restorePremigrate().then(function(){renderSyncPanel()})">' +
+            '↩︎ 還原換日整理前</button>';
         }
       }
       actEl.innerHTML = accHtml +

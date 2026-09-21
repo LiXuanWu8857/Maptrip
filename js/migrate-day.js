@@ -41,40 +41,46 @@
   }
 
   // 執行遷移（async）。回 { moved } / { skipped } / { error }。
+  // 累積「動過的桶」union（可重複執行 → 還原要能覆蓋歷次動過的所有桶）。
+  function _mergeChanged(keys) {
+    var set = {};
+    try { (JSON.parse(localStorage.getItem(CHANGED_KEY) || '[]') || []).forEach(function (k) { set[k] = 1; }); } catch (_) {}
+    (keys || []).forEach(function (k) { set[k] = 1; });
+    return Object.keys(set);
+  }
+  // 可重複執行、自動修復：把「凌晨隔 >6h」還卡在前一天的趟搬到隔天。無論舊資料殘留、
+  // 或遷移後~gap-aware 存檔上線前的過渡趟，都能再按一次整理乾淨（idempotent，沒東西可搬＝no-op）。
   async function run() {
-    if (isDone()) { _toast('換日遷移已完成過'); return { skipped: true }; }
-    if (!_loggedIn()) { _toast('請先登入雲端再遷移'); return { error: 'no-user' }; }
-    try { if (global.MaptripBackup) MaptripBackup.snapshot('premigrate'); } catch (_) {}   // 雙保險快照
+    if (!_loggedIn()) { _toast('請先登入雲端再整理'); return { error: 'no-user' }; }
     var r = _compute();
-    if (!r.moves.length) { _markDone(); _toast('無需遷移（沒有跨日行程）'); return { moved: 0 }; }
-    try { localStorage.setItem(CHANGED_KEY, JSON.stringify(r.changedKeys)); } catch (_) {}
-    // 本機先換桶
-    try { if (global.TripStore && TripStore.setAll) TripStore.setAll(r.newDays); } catch (_) {}
-    // 雲端覆寫變動的日子
+    if (!r.moves.length) { _markDone(); _toast('沒有需要搬到隔天的凌晨行程'); return { moved: 0 }; }
+    // 只在「第一次」存快照，保留最初（未整理前）的原始資料，供還原
+    try { if (global.MaptripBackup && !hasSnapshot()) MaptripBackup.snapshot('premigrate'); } catch (_) {}
+    try { localStorage.setItem(CHANGED_KEY, JSON.stringify(_mergeChanged(r.changedKeys))); } catch (_) {}
+    try { if (global.TripStore && TripStore.setAll) TripStore.setAll(r.newDays); } catch (_) {}   // 本機先換桶
     try {
-      await MaptripSync.overwriteDays(r.changedKeys, r.newDays);
+      await MaptripSync.overwriteDays(r.changedKeys, r.newDays);                                   // 雲端覆寫變動的日子
     } catch (e) {
       try { if (global.MaptripBackup) MaptripBackup.restoreSnapshot('premigrate'); } catch (_) {}
-      _toast('遷移失敗，已還原本機：' + ((e && e.message) || '雲端寫入錯誤'));
+      _toast('整理失敗，已還原本機：' + ((e && e.message) || '雲端寫入錯誤'));
       return { error: (e && e.message) || 'overwrite-failed' };
     }
     _markDone();
     try { if (global.refreshAfterSync) refreshAfterSync(); } catch (_) {}
-    _toast('換日遷移完成：搬移 ' + r.moves.length + ' 趟到正確日期');
+    _toast('已把 ' + r.moves.length + ' 趟凌晨行程搬到隔天');
     return { moved: r.moves.length };
   }
 
   // UI：預覽 + 確認才執行。
   function confirmAndRun() {
-    if (isDone()) { _toast('換日遷移已完成過'); return; }
-    if (!_loggedIn()) { _toast('請先登入雲端再遷移'); return; }
+    if (!_loggedIn()) { _toast('請先登入雲端再整理'); return; }
     var p = preview();
-    if (!p.moveCount) { _markDone(); _toast('目前沒有需要搬移的跨日行程'); if (global.renderSyncPanel) renderSyncPanel(); return; }
+    if (!p.moveCount) { _markDone(); _toast('目前沒有需要搬到隔天的凌晨行程'); if (global.renderSyncPanel) renderSyncPanel(); return; }
     var lines = Object.keys(p.byPair).slice(0, 8).map(function (k) { return '　' + k + '：' + p.byPair[k] + ' 趟'; }).join('\n');
     var extra = Object.keys(p.byPair).length > 8 ? '\n　…' : '';
     var cross = p.crossMonth ? ('\n（其中 ' + p.crossMonth + ' 趟跨月，該月報表數字會變動）') : '';
-    var msg = '換日遷移（一次性、不可逆）\n\n將把 ' + p.moveCount + ' 趟凌晨行程搬到正確的日曆日期：\n' + lines + extra + cross +
-      '\n\n你已匯出備份了嗎？確定執行？';
+    var msg = '換日整理\n\n將把 ' + p.moveCount + ' 趟凌晨(隔超過 6h)的行程從「前一天」搬到「隔天」，' +
+      '前後兩天的工時才正確：\n' + lines + extra + cross + '\n\n確定執行？';
     var okGo = true; try { okGo = confirm(msg); } catch (_) {}
     if (okGo) run().then(function () { if (global.renderSyncPanel) renderSyncPanel(); });
   }
@@ -92,7 +98,7 @@
     }
     try { localStorage.removeItem(FLAG); } catch (_) {}
     try { if (global.refreshAfterSync) refreshAfterSync(); } catch (_) {}
-    _toast('已還原遷移前資料');
+    _toast('已還原整理前資料');
     return { restored: true };
   }
 
