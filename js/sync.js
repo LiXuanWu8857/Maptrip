@@ -807,6 +807,27 @@
 
   function syncDays(keys) { if (ready && user && keys) keys.forEach(syncDay); }
 
+  // 換日遷移專用：把指定日子的雲端文件「覆寫」成本機給定內容（不 merge、不 union）。
+  // 一般 syncDay 是聯集合併（永不移除），遷移要「把某趟從舊桶搬到新桶」必須能移除舊桶那筆，
+  // 故用 set 覆寫；daysObj[key] 為空/未定義 → 刪掉該日文件。遷移期間先停 days 監聽，
+  // 避免每次 set 觸發快照又把舊資料 merge 回本機（競態）。完成後重新掛回監聽。
+  async function overwriteDays(keys, daysObj) {
+    if (!ready || !user) throw new Error('尚未登入');
+    if (unsub) { unsub(); unsub = null; }        // 暫停 days 監聽
+    try {
+      for (var i = 0; i < (keys || []).length; i++) {
+        var day = keys[i];
+        var trips = (daysObj && daysObj[day]) || [];
+        var ref = daysCol().doc(day);
+        var clean = JSON.parse(JSON.stringify(trips));   // 去掉 undefined，Firestore 才收
+        if (clean.length) await ref.set({ trips: clean, updatedAt: Date.now() });
+        else await ref.delete();
+      }
+    } finally {
+      pullAndListen();                             // 重新掛回監聽（首快照本機＝雲端，無變動）
+    }
+  }
+
   function status() {
     if (!cfgValid(window.FIREBASE_CONFIG) || typeof firebase === 'undefined') return { state: 'unconfigured' };
     if (!user) return { state: 'signedout' };
@@ -824,7 +845,7 @@
     getAccess: getAccess, setAllowFareEdit: setAllowFareEdit,
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
-    resetLocal: resetLocal,
+    resetLocal: resetLocal, overwriteDays: overwriteDays,
     // 共享熱點/車隊（Phase 1）＋全體池（Phase 2）
     myTeam: myTeam, setShareHotspots: setShareHotspots,
     shareGlobalOn: shareGlobalOn, setShareGlobal: setShareGlobal,

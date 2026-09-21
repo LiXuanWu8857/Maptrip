@@ -112,8 +112,21 @@
         ? '<button class="sync-out" style="border-color:rgba(26,115,232,0.3);background:rgba(26,115,232,0.06);color:#1a73e8" ' +
           'onclick="MaptripBackup.exportFile()">⬇️ 匯出備份（存成 JSON 檔）</button>'
         : '';
+      // 換日遷移：未跑過 → 顯示執行鈕；跑過且有快照 → 顯示還原鈕（逃生用）
+      let migrateBtn = '';
+      if (window.MaptripMigrateDay) {
+        if (!MaptripMigrateDay.isDone()) {
+          migrateBtn = '<button class="sync-out" style="border-color:rgba(232,113,10,0.35);background:rgba(232,113,10,0.07);color:#e8710a" ' +
+            'onclick="MaptripMigrateDay.confirmAndRun()">🔄 換日遷移（一次性，先備份）</button>';
+        } else if (MaptripMigrateDay.hasSnapshot()) {
+          migrateBtn = '<button class="sync-out" ' +
+            'onclick="if(confirm(\'還原到換日遷移「之前」的資料？（會覆寫雲端變動的日子）\'))MaptripMigrateDay.restorePremigrate().then(function(){renderSyncPanel()})">' +
+            '↩︎ 還原換日遷移前</button>';
+        }
+      }
       actEl.innerHTML = accHtml +
         backupBtn +
+        migrateBtn +
         '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
         '<button class="sync-out" ' +
         'onclick="if(confirm(\'清除這台裝置的本機行程，改從雲端重新下載？（用於：換帳號後仍看到別帳號的行程）\'))MaptripSync.resetLocal()">' +

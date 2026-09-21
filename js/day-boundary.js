@@ -85,12 +85,59 @@
     return countSessions(Object.keys(daysObj || {}).map(function (d) { return daysObj[d]; }), gapHours);
   }
 
+  // ===== 換日「遷移」重算（範圍 B）：把 07:00 主鍵改成 gap-aware 真實日曆日 =====
+  // 真實日曆日（不做 07:00 位移）。
+  function _calDate(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  // 單趟的「新日 key」（gap-aware）：prevEnd/prevKey＝時間排序後前一趟的結束時間與其新 key。
+  //   規則：凌晨（07:00 前）延續前一段（gap≤6h，或 newDay===false）→ 沿用前一段的 key；
+  //         否則為新的一天：07:00 前用真實日曆日（隔天）、07:00 後用 businessDayKey（＝當日）。
+  function dayKeyFor(t, prevEnd, prevKey, gapHours) {
+    var gapMs = (gapHours == null ? GAP_HOURS : gapHours) * 3600 * 1000;
+    var hr = new Date(t.startTime).getHours();
+    var cont;
+    if (t.newDay === true) cont = false;                       // 手動強制起新日
+    else if (t.newDay === false) cont = (prevKey != null);     // 手動強制併回前一段
+    else cont = (prevKey != null) && (hr < SPLIT_BEFORE_HOUR) && ((t.startTime - prevEnd) <= gapMs);
+    if (cont) return prevKey;
+    return (hr < SPLIT_BEFORE_HOUR) ? _calDate(t.startTime) : _bdk(t.startTime);
+  }
+  // 純函式：把整份 days（07:00 主鍵）依新規則重算分桶。
+  //   回 { newDays, moves:[{id,from,to}], changedKeys:[受影響的舊/新桶] }。
+  //   無 startTime 的趟原桶保留（不丟資料、不移動）。
+  function remap(daysObj, gapHours) {
+    var valid = [], newDays = {};
+    Object.keys(daysObj || {}).forEach(function (k) {
+      (daysObj[k] || []).forEach(function (t) {
+        if (t && typeof t.startTime === 'number') valid.push({ t: t, from: k });
+        else { (newDays[k] = newDays[k] || []).push(t); }   // 無時間戳：留原桶
+      });
+    });
+    valid.sort(function (a, b) { return a.t.startTime - b.t.startTime; });
+    var prevEnd = null, prevKey = null, moves = [], changed = {};
+    valid.forEach(function (x) {
+      var to = dayKeyFor(x.t, prevEnd, prevKey, gapHours);
+      (newDays[to] = newDays[to] || []).push(x.t);
+      if (to !== x.from) { moves.push({ id: x.t.id, from: x.from, to: to }); changed[x.from] = 1; changed[to] = 1; }
+      prevEnd = _endOf(x.t); prevKey = to;
+    });
+    Object.keys(newDays).forEach(function (k) {
+      newDays[k].sort(function (a, b) { return (a && a.startTime || 0) - (b && b.startTime || 0); });
+    });
+    return { newDays: newDays, moves: moves, changedKeys: Object.keys(changed) };
+  }
+
   global.MaptripDayBoundary = {
     GAP_HOURS: GAP_HOURS,
     sessionize: sessionize,
     sessionKey: sessionKey,
     countSessions: countSessions,
     countWorkDays: countWorkDays,
+    dayKeyFor: dayKeyFor,
+    remap: remap,
+    _calDate: _calDate,
     _isWorkSeg: _isWorkSeg
   };
 
