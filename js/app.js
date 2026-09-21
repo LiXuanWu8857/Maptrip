@@ -1605,23 +1605,6 @@ function _workDaysCount(dayTripArrays) {
 }
 if (typeof window !== 'undefined') window._workDaysCount = _workDaysCount;
 
-// 換日手動覆蓋：切換某趟 t.newDay（true=從這趟起新的一天 / false=併回前一天），
-// 影響 sessionize 的分段（跑車天數/月報表天數/歷史顯示），不動 07:00 儲存主鍵（範圍 A）。
-function toggleTripNewDay(e, day, oi, makeNew) {
-  if (e) e.stopPropagation();
-  if (oi == null || oi < 0) return;
-  const cur = loadTrips();
-  const t = (cur[day] || [])[oi];
-  if (!t) return;
-  t.newDay = !!makeNew;
-  saveTrips(cur);
-  if (window.MaptripSync) MaptripSync.syncDays([day]);
-  // 若改的是今日的趟，記憶體 todayTrips 也要同步（否則 saveTodayToStorage 會用舊值蓋回）
-  const mem = todayTrips.find(x => x.id === t.id);
-  if (mem) mem.newDay = !!makeNew;
-  renderHistorySheet(true);
-}
-if (typeof window !== 'undefined') window.toggleTripNewDay = toggleTripNewDay;
 
 function renderHistorySheet(keepState) {
   // keepState：保留目前展開的月/日與捲動位置（編輯/刪除/補抽成後用），避免跳回最新那天
@@ -1670,19 +1653,14 @@ function renderHistorySheet(keepState) {
       const restRow = `<div class="dr-rest">工作 <b id="work-${day}">${fmtWork(dWork)}</b>　休息
         <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5"
                value="${dRestHr}" placeholder="0" onchange="setHistoryRest('${day}', this.value)"> 小時</div>`;
-      // 換日分段（範圍 A，只影響顯示）：一日桶內若有 6h+ gap 或手動 newDay 覆蓋 → 切多段。
-      // 段首（非當日第一段）前插一條分隔線；每趟給「分新日/併回」切換鈕改 t.newDay。
+      // 換日分段（全自動，不再有手動鈕）：一日桶內若凌晨隔超過 6h → 段首前插一條分隔線提示。
       const _segs = window.MaptripDayBoundary ? MaptripDayBoundary.sessionize(trips) : [trips];
-      const _segStart = new Set(), _segStartAfter = new Set();
-      _segs.forEach((s, si) => { if (s[0]) { _segStart.add(s[0]); if (si > 0) _segStartAfter.add(s[0]); } });
-      const _firstTrip = _segs[0] && _segs[0][0];
+      const _segStartAfter = new Set();
+      _segs.forEach((s, si) => { if (s[0] && si > 0) _segStartAfter.add(s[0]); });
       const rows = restRow + trips.map((t, i) => {
         const sep = _segStartAfter.has(t) ? '<div class="day-split-sep">↡ 凌晨隔超過 6 小時，新的一天</div>' : '';
         if (t._manual) return sep + _manualRowHtml(t, i + 1);
         const oi = (raw[day] || []).indexOf(t);        // GPS 趟：用真實索引呼叫既有 handler
-        const isStart = _segStart.has(t);
-        const ndBtn = (t === _firstTrip) ? '' :          // 當日第一趟無前一天可併，不給鈕
-          `<span class="trip-newday" title="換日" onclick="toggleTripNewDay(event,'${day}',${oi},${isStart ? 'false' : 'true'})">${isStart ? '↥併回' : '↡分日'}</span>`;
         return sep + `
         <div class="trip-row" data-row="h${i}" onclick="showHistoryTrip('${day}',${oi})">
 
@@ -1691,7 +1669,6 @@ function renderHistorySheet(keepState) {
             <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
             <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
           </div>
-          ${ndBtn}
           <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${oi})">✏</span>
           <span class="trip-del" onclick="deleteHistoryTrip(event,'${day}',${oi})">🗑</span>
           <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
