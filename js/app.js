@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.386';
+const APP_VERSION  = '1.1.387';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -963,6 +963,7 @@ function _dispatchMenu(action) {
   else if (action === 'address') { closeSheet(); if (window.MaptripAddr) MaptripAddr.open(); }
   else if (action === 'train') { closeSheet(); if (window.openTrainSettings) window.openTrainSettings(); }
   else if (action === 'metro') { closeSheet(); if (window.openMetroSettings) window.openMetroSettings(); }
+  else if (action === 'flight') { closeSheet(); if (window.MaptripFlight && MaptripFlight.openLookup) MaptripFlight.openLookup(); }
   else if (action === 'glmap') toggleGlEngine();
   else if (action === 'reviewtoggle') { if (window.MaptripDesktop) MaptripDesktop.toggle(); }
 }

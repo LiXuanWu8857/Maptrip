@@ -134,8 +134,48 @@
     return apiGet(path).then(function (list) { return _pick(list, flightNo, isArr ? 'arrival' : 'departure'); });
   }
 
+  // ---------- 獨立查詢視窗（選單捷徑用，沿用預約的滿版 .bk-overlay 樣式） ----------
+  function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function _ensureDom() {
+    if (document.getElementById('flight-lookup')) return;
+    var ov = document.createElement('div');
+    ov.id = 'flight-lookup'; ov.className = 'bk-overlay'; ov.style.display = 'none';
+    ov.innerHTML =
+      '<div class="bk-head"><span class="bk-title">✈ 航班查詢（桃園）</span>' +
+      '<button class="bk-x" onclick="MaptripFlight.closeLookup()">✕</button></div>' +
+      '<div class="bk-body">' +
+        '<div class="bk-flight"><div class="bk-flight-row">' +
+          '<input id="fl-flight" class="bk-in" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="航班編號 例 BR225">' +
+          '<select id="fl-dir" class="bk-in bk-flight-dir"><option value="departure">出發</option><option value="arrival">抵達</option></select>' +
+          '<button type="button" class="bk-flight-go" onclick="MaptripFlight._go()">查詢</button>' +
+        '</div><div id="fl-result" class="bk-flight-result"></div></div>' +
+        '<div class="bk-flight-msg">查桃園機場當天班機的航廈與時刻。航班資訊通常只有近 1–2 天。</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+  }
+  function openLookup() { _ensureDom(); var r = document.getElementById('fl-result'); if (r) r.innerHTML = ''; document.getElementById('flight-lookup').style.display = 'flex'; }
+  function closeLookup() { var el = document.getElementById('flight-lookup'); if (el) el.style.display = 'none'; }
+  function _go() {
+    var no = ((document.getElementById('fl-flight') || {}).value || '').trim();
+    var dir = (document.getElementById('fl-dir') || {}).value || 'departure';
+    var box = document.getElementById('fl-result'); if (!box) return;
+    if (!no) { box.innerHTML = '<div class="bk-flight-msg">請輸入航班編號</div>'; return; }
+    box.innerHTML = '<div class="bk-flight-msg">查詢中…</div>';
+    lookup(no, dir).then(function (f) {
+      if (!f) { box.innerHTML = '<div class="bk-flight-msg">查無此航班。航班資訊通常只有近 1–2 天；若一直查不到，可能是共用代理尚未放行航空資料。</div>'; return; }
+      var acts = (f.actual && f.actual !== f.sched) ? '（實際 ' + _esc(f.actual) + '）' : '';
+      var extra = [f.status ? _esc(f.status) : '', f.gate ? '登機門 ' + _esc(f.gate) : ''].filter(Boolean).join('　');
+      var cp = f.counterpart ? '　' + (dir === 'arrival' ? '來自 ' : '飛往 ') + _esc(f.counterpart) : '';
+      box.innerHTML = '<div class="bk-flight-card">' +
+        '<div class="bk-flight-l1">' + _esc(f.airline) + ' ' + _esc(f.flight) + '　<b>' + _esc(f.terminalText) + '</b></div>' +
+        '<div class="bk-flight-l2">' + (dir === 'arrival' ? '抵達' : '起飛') + ' ' + _esc(f.sched || '—') + acts + (extra ? '　' + extra : '') + cp + '</div>' +
+        '</div>';
+    }).catch(function (e) { box.innerHTML = '<div class="bk-flight-msg">查詢失敗（' + _esc(String((e && e.message) || e)) + '）</div>'; });
+  }
+
   global.MaptripFlight = {
     lookup: lookup, terminalText: terminalText, airlineName: airlineName,
+    openLookup: openLookup, closeLookup: closeLookup, _go: _go,
     // 純函式（測試）
     _norm: _norm, _key: _key, _match: _match, _pick: _pick, _statusZh: _statusZh, _hhmm: _hhmm, _fullNo: _fullNo
   };
