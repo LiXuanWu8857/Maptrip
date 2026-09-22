@@ -500,6 +500,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/snap.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 行程截圖（Canvas，自成一體）：app.js 的 MaptripShot.init 在載入時即引用，故排在 app.js 之前 -->
 <script>document.write('<scr' + 'ipt src="js/screenshot.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 截圖預覽雙指縮放/拖曳/雙擊還原（純檢視手勢，掛 #screenshot-img）：app.js 開機 initScreenshot -->
+<script>document.write('<scr' + 'ipt src="js/pinch-view.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 行程回放（動畫+鏡頭，依賴注入 map）：app.js 的 MaptripReplay.init 在載入時即引用，故排在 app.js 之前 -->
 <script>document.write('<scr' + 'ipt src="js/replay.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 錄製狀態機（生命週期/復原/鎖屏方塊/GPS 監看，依賴注入 map 與共用活狀態）：排在 app.js 之前 -->

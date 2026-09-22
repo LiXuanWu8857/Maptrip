@@ -539,6 +539,8 @@ function saveImageToPhotos() {
 
 function closeScreenshotPreview() {
   document.getElementById('screenshot-preview').style.display = 'none';
+  // 關閉時把預覽縮放/位移歸零（雙保險；換圖時 img load 事件也會 reset）
+  try { if (window.MaptripPinch) window.MaptripPinch.reset(); } catch (_) {}
 }
 
 function _rrect(ctx, x, y, w, h, r) {

@@ -1839,6 +1839,8 @@ function exitDayPreview() {
 // ── 截圖已抽到 js/screenshot.js（MaptripShot）；以下為相容薄包裝，呼叫端（HTML onclick 等）零改動。
 //    todayTrips 以 init 注入。 ──
 MaptripShot.init({ todayTrips: () => todayTrips });
+// 截圖預覽掛雙指縮放/拖曳/雙擊還原（元素固定，開機一次；img load 事件自動 reset）
+if (window.MaptripPinch) { try { MaptripPinch.initScreenshot(); } catch (_) {} }
 function captureTripsScreenshot(dayKey, includeOther) { return MaptripShot.captureTripsScreenshot(dayKey, includeOther); }
 function captureMonthShot(ym) {
   // 與歷史「每月」標題列同一套算法（同 merged 含手動趟 + _fareStats + workMs + _workDaysCount），
