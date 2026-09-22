@@ -19,6 +19,8 @@
   var _tickTimer = null;
   var _editId = null;    // 表單目前編輯中的 id（null=新增）
   var _formReminders = [];   // 表單暫存的提醒分鐘陣列
+  var _formDests = [''];      // 表單暫存的下車點文字（可多個，最多 4）
+  var MAX_DESTS = 4;
 
   // ---------- 純函式（供測試） ----------
   function _pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -66,23 +68,40 @@
     return out;
   }
 
-  // 多站 Google 導航 URL：目的地優先，出發地當途經點；只有出發地時退成單點。
+  function _has(pt) { return !!(pt && (pt.text || pt.lat != null)); }
+  // 下車點陣列（新 dests；相容舊 dest）
+  function _destsOf(b) {
+    if (b && b.dests && b.dests.length) return b.dests.filter(_has);
+    if (b && _has(b.dest)) return [b.dest];
+    return [];
+  }
+  // 多站 Google 導航 URL：目前位置 → 出發地 → 下車點1..N。最後一站當 destination、其餘當 waypoints。
   // 座標優先、否則地址文字。cur＝目前位置（可省，Google 會自動用目前位置當起點）。
   function _navUrl(b, cur) {
     function enc(pt) {
       if (pt && pt.lat != null && pt.lng != null) return encodeURIComponent(pt.lat + ',' + pt.lng);
       return encodeURIComponent((pt && pt.text) || '');
     }
-    function has(pt) { return !!(pt && (pt.text || pt.lat != null)); }
+    var stops = [];
+    if (_has(b.pickup)) stops.push(b.pickup);
+    _destsOf(b).forEach(function (d) { stops.push(d); });
     var url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving';
     if (cur && cur.lat != null && cur.lng != null) url += '&origin=' + encodeURIComponent(cur.lat + ',' + cur.lng);
-    if (has(b.dest)) {
-      url += '&destination=' + enc(b.dest);
-      if (has(b.pickup)) url += '&waypoints=' + enc(b.pickup);
-    } else {
-      url += '&destination=' + enc(b.pickup);
-    }
+    if (!stops.length) return url;
+    url += '&destination=' + enc(stops[stops.length - 1]);
+    var mids = stops.slice(0, -1);
+    if (mids.length) url += '&waypoints=' + mids.map(enc).join('%7C');   // %7C = |
     return url;
+  }
+
+  // 提前量分鐘 → 好讀文字
+  function _fmtLead(m) {
+    m = +m || 0;
+    if (m === 0) return '準時';
+    if (m < 60) return m + '分前';
+    if (m % 1440 === 0) return (m / 1440) + '天前';
+    if (m % 60 === 0) return (m / 60) + '小時前';
+    return Math.floor(m / 60) + '小時' + (m % 60) + '分前';
   }
 
   function _statusMeta(s) {
@@ -201,12 +220,19 @@
   function _cardHtml(b) {
     var sm = _statusMeta(b.status);
     var who = [b.name, b.lineName ? ('LINE:' + b.lineName) : ''].filter(Boolean).join('　');
-    var route = _esc((b.pickup && b.pickup.text) || '—') + (b.dest && b.dest.text ? ' → ' + _esc(b.dest.text) : '');
-    var reminders = (b.reminders && b.reminders.length) ? b.reminders.map(function (m) { return '<span class="bk-chip">⏰' + m + '分</span>'; }).join('') : '';
+    // 路線：出發 →（下車點 1..N），每站一列＋圓點
+    var stops = [];
+    if (b.pickup && b.pickup.text) stops.push({ lead: '出發', cls: 'a', text: b.pickup.text });
+    _destsOf(b).forEach(function (d, i) { stops.push({ lead: (i === _destsOf(b).length - 1 ? '目的' : '下車'), cls: 'b', text: d.text }); });
+    var route = stops.length ? '<div class="bk-route">' + stops.map(function (s) {
+      return '<div class="bk-stop"><span class="bk-dot ' + s.cls + '"></span><span class="bk-slead">' + s.lead + '</span><span class="bk-saddr">' + _esc(s.text) + '</span></div>';
+    }).join('') + '</div>' : '';
+    var noteBox = b.note ? '<div class="bk-note">📝 ' + _esc(b.note) + '</div>' : '';
+    var reminders = (b.reminders && b.reminders.length) ? '<div class="bk-chips">' + b.reminders.map(function (m) { return '<span class="bk-chip rem">🔔' + _fmtLead(m) + '</span>'; }).join('') + '</div>' : '';
     var confirmLine = (b.status === 'confirmed' && b.confirmedAt)
       ? '<div class="bk-confirmed">✓ 客戶已確認 ' + _fmtTime(b.confirmedAt) + '</div>' : '';
+    var navBtn = '<button class="bk-nav" onclick="MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航　<small>出發地 → 目的地</small></button>';
     var btns = '<div class="bk-acts">' +
-      '<button onclick="MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航</button>' +
       (b.phone ? '<button onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
       (b.status === 'pending' ? '<button onclick="MaptripBooking.shareConfirm(\'' + b.id + '\')">📤 傳確認</button>' : '') +
       '<button onclick="MaptripBooking.openForm(\'' + b.id + '\')">✏️ 編輯</button>' +
@@ -216,9 +242,7 @@
       '<div class="bk-crow"><span class="bk-time">' + _fmtTime(b.pickupTime) + '</span>' +
       '<span class="bk-pill ' + sm.cls + '">' + sm.label + '</span></div>' +
       (who ? '<div class="bk-who">' + _esc(who) + '</div>' : '') +
-      '<div class="bk-route">' + route + '</div>' +
-      (reminders ? '<div class="bk-chips">' + reminders + '</div>' : '') +
-      confirmLine + btns + '</div>';
+      route + noteBox + reminders + confirmLine + navBtn + btns + '</div>';
   }
 
   function _renderList() {
@@ -252,26 +276,33 @@
     _editId = id || null;
     var b = id ? get(id) : null;
     _formReminders = b && b.reminders ? b.reminders.slice() : [30];
+    var ds = b ? _destsOf(b).map(function (d) { return d.text || ''; }) : [];
+    _formDests = ds.length ? ds : [''];
     document.getElementById('bk-form-title').textContent = id ? '編輯預約' : '新增預約';
     _renderForm(b);
     document.getElementById('bk-form').style.display = 'flex';
   }
   function closeForm() { var el = document.getElementById('bk-form'); if (el) el.style.display = 'none'; _editId = null; }
 
-  function _dtLocalValue(ms) {
-    var d = ms ? new Date(ms) : new Date(Math.ceil(Date.now() / 900000) * 900000); // 預設取最近 15 分
+  function _dtStr(d) {
     return d.getFullYear() + '-' + _pad(d.getMonth() + 1) + '-' + _pad(d.getDate()) + 'T' + _pad(d.getHours()) + ':' + _pad(d.getMinutes());
   }
+  // 表單預設值：新的取「下一個 5 分整」；編輯取原值
+  function _dtLocalValue(ms) {
+    return _dtStr(ms ? new Date(ms) : new Date(Math.ceil(Date.now() / 300000) * 300000));
+  }
+  // datetime-local 的 min＝現在（不得早於現在）
+  function _dtLocalMin() { return _dtStr(new Date(Date.now() - 60000)); }   // 留 1 分鐘寬容
   function _renderForm(b) {
     b = b || {};
     var body = document.getElementById('bk-form-body');
     body.innerHTML =
       '<label class="bk-lbl">預約時間 <span class="bk-req">＊</span></label>' +
-      '<input id="bk-f-time" class="bk-in" type="datetime-local" value="' + _dtLocalValue(b.pickupTime) + '">' +
-      '<label class="bk-lbl">出發地 <span class="bk-req">＊</span></label>' +
+      '<input id="bk-f-time" class="bk-in bk-in-dt" type="datetime-local" step="300"' +
+      ' min="' + _dtLocalMin() + '" value="' + _dtLocalValue(b.pickupTime) + '">' +
+      '<label class="bk-lbl">出發地（上車） <span class="bk-req">＊</span></label>' +
       '<input id="bk-f-pickup" class="bk-in" type="text" placeholder="上車地點" value="' + _esc(b.pickup && b.pickup.text) + '">' +
-      '<label class="bk-lbl">目的地</label>' +
-      '<input id="bk-f-dest" class="bk-in" type="text" placeholder="下車地點（可留空）" value="' + _esc(b.dest && b.dest.text) + '">' +
+      '<label class="bk-lbl">下車點</label><div id="bk-f-dests"></div>' +
       '<label class="bk-lbl">客人稱呼</label>' +
       '<input id="bk-f-name" class="bk-in" type="text" placeholder="例：林小姐" value="' + _esc(b.name) + '">' +
       '<label class="bk-lbl">電話</label>' +
@@ -279,28 +310,64 @@
       '<label class="bk-lbl">LINE 名稱</label>' +
       '<input id="bk-f-line" class="bk-in" type="text" value="' + _esc(b.lineName) + '">' +
       '<label class="bk-lbl">備註</label>' +
-      '<textarea id="bk-f-note" class="bk-in" rows="2">' + _esc(b.note) + '</textarea>' +
-      '<label class="bk-lbl">提醒</label><div id="bk-f-reminders" class="bk-rem"></div>' +
+      '<textarea id="bk-f-note" class="bk-in" rows="2" placeholder="例：大件行李兩件、需協助搬運">' + _esc(b.note) + '</textarea>' +
+      '<label class="bk-lbl">提醒（可多個）</label><div id="bk-f-reminders" class="bk-rem"></div>' +
       '<div class="bk-form-acts">' +
       '<button class="bk-save" onclick="MaptripBooking._saveForm()">儲存</button>' +
       (b.id ? '<button class="bk-del" onclick="MaptripBooking._deleteForm(\'' + b.id + '\')">刪除這筆</button>' : '') +
       '</div>';
+    _renderDests();
     _renderReminderChips();
   }
+  // 下車點動態列（最多 MAX_DESTS，可＋可✕）
+  function _readDestInputs() {
+    var arr = [];
+    for (var i = 0; i < _formDests.length; i++) {
+      var el = document.getElementById('bk-f-dest-' + i);
+      arr.push(el ? el.value : _formDests[i]);
+    }
+    _formDests = arr;
+  }
+  function _renderDests() {
+    var el = document.getElementById('bk-f-dests'); if (!el) return;
+    if (!_formDests.length) _formDests = [''];
+    var rows = _formDests.map(function (t, i) {
+      var ph = (i === 0 ? '下車地點（可留空）' : '下車點 ' + (i + 1));
+      var rm = _formDests.length > 1 ? '<button class="bk-dest-x" onclick="MaptripBooking._rmDest(' + i + ')">✕</button>' : '';
+      return '<div class="bk-dest-row"><input id="bk-f-dest-' + i + '" class="bk-in" type="text" placeholder="' + ph + '" value="' + _esc(t) + '">' + rm + '</div>';
+    }).join('');
+    var addBtn = _formDests.length < MAX_DESTS
+      ? '<button class="bk-adddest" onclick="MaptripBooking._addDest()">＋ 新增下車點</button>' : '';
+    el.innerHTML = rows + addBtn;
+  }
+  function _addDest() { _readDestInputs(); if (_formDests.length < MAX_DESTS) _formDests.push(''); _renderDests(); }
+  function _rmDest(i) { _readDestInputs(); _formDests.splice(i, 1); if (!_formDests.length) _formDests = ['']; _renderDests(); }
   function _renderReminderChips() {
     var el = document.getElementById('bk-f-reminders'); if (!el) return;
     var chips = _formReminders.map(function (m, i) {
-      return '<span class="bk-chip on">' + (m === 0 ? '準時' : m + '分') +
+      return '<span class="bk-chip on">🔔' + _fmtLead(m) +
         '<button onclick="MaptripBooking._rmReminder(' + i + ')">✕</button></span>';
     }).join('');
     el.innerHTML = chips +
-      '<select id="bk-f-addrem" class="bk-addrem" onchange="MaptripBooking._addReminder(this.value)">' +
-      '<option value="">＋ 新增提醒</option><option value="0">準時</option><option value="15">15 分前</option>' +
-      '<option value="30">30 分前</option><option value="60">60 分前</option></select>';
+      '<select id="bk-f-addrem" class="bk-addrem" onchange="MaptripBooking._addReminder(this.value); this.value=\'\';">' +
+      '<option value="">＋ 新增提醒</option>' +
+      '<option value="0">準時</option><option value="15">15 分前</option>' +
+      '<option value="30">30 分前</option><option value="60">1 小時前</option>' +
+      '<option value="360">6 小時前</option><option value="720">12 小時前</option>' +
+      '<option value="1440">1 天前</option><option value="custom">自定義…</option></select>';
   }
   function _addReminder(v) {
-    v = parseInt(v, 10); if (isNaN(v)) return;
-    if (_formReminders.indexOf(v) < 0) { _formReminders.push(v); _formReminders.sort(function (a, b) { return a - b; }); }
+    var m;
+    if (v === 'custom') {
+      var ans = null; try { ans = prompt('自定義提醒：提前幾分鐘？（例：90＝1.5小時、180＝3小時）'); } catch (_) {}
+      if (ans == null) return;
+      m = parseInt(ans, 10);
+      if (isNaN(m) || m < 0) { _toast('請輸入 0 以上的分鐘數'); return; }
+    } else {
+      m = parseInt(v, 10);
+      if (isNaN(m)) return;
+    }
+    if (_formReminders.indexOf(m) < 0) { _formReminders.push(m); _formReminders.sort(function (a, b) { return a - b; }); }
     _renderReminderChips();
   }
   function _rmReminder(i) { _formReminders.splice(i, 1); _renderReminderChips(); }
@@ -312,12 +379,17 @@
     if (!pickup) { _toast('請填出發地'); return; }
     var ms = new Date(timeV).getTime();
     if (isNaN(ms)) { _toast('時間格式有誤'); return; }
+    ms = Math.round(ms / 300000) * 300000;                 // 分鐘 5 進位
+    if (ms < Date.now() - 60000) { _toast('預約時間不能早於現在'); return; }
     var b = _editId ? (get(_editId) || {}) : {};
+    var oldDests = _destsOf(b);                             // 保留原有座標（依序對應）
     b.id = _editId || undefined;
     b.pickupTime = ms;
     b.pickup = { text: pickup, lat: (b.pickup && b.pickup.lat), lng: (b.pickup && b.pickup.lng) };
-    var destT = ((document.getElementById('bk-f-dest') || {}).value || '').trim();
-    b.dest = destT ? { text: destT, lat: (b.dest && b.dest.lat), lng: (b.dest && b.dest.lng) } : null;
+    _readDestInputs();
+    b.dests = _formDests.map(function (t) { return (t || '').trim(); }).filter(Boolean)
+      .map(function (t, i) { var o = oldDests[i]; return { text: t, lat: (o && o.text === t ? o.lat : undefined), lng: (o && o.text === t ? o.lng : undefined) }; });
+    delete b.dest;                                         // 改用 dests 陣列
     b.name = ((document.getElementById('bk-f-name') || {}).value || '').trim();
     b.phone = ((document.getElementById('bk-f-phone') || {}).value || '').trim();
     b.lineName = ((document.getElementById('bk-f-line') || {}).value || '').trim();
@@ -342,7 +414,7 @@
     var txt = '【預約確認】\n' +
       '時間：' + (t.getMonth() + 1) + '/' + t.getDate() + ' ' + _fmtTime(b.pickupTime) + '\n' +
       '上車：' + ((b.pickup && b.pickup.text) || '') + '\n' +
-      (b.dest && b.dest.text ? '目的地：' + b.dest.text + '\n' : '') +
+      _destsOf(b).map(function (d, i) { return '下車' + (_destsOf(b).length > 1 ? (i + 1) : '') + '：' + d.text + '\n'; }).join('') +
       (b.name ? '稱呼：' + b.name + '\n' : '') +
       (b.note ? '備註：' + b.note + '\n' : '') +
       '請回覆確認，謝謝！';
@@ -370,10 +442,11 @@
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
     navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
+    _addDest: _addDest, _rmDest: _rmDest,
     _tickReminders: _tickReminders, _updateBadge: _updateBadge,
     // 純函式（測試）
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
-    _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey
+    _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
