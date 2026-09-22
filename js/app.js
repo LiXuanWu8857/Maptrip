@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.375';
+const APP_VERSION  = '1.1.376';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -928,7 +928,7 @@ function _menuTouchEnd(e) {
   e.preventDefault();
   const hit = _menuHitBtn(e);
   const action = hit ? hit.getAttribute('data-menu') : null;
-  closeTopMenu();
+  // 關選單的決策移進 _dispatchMenu（settings 是「展開」不關；其餘執行後關）
   _dispatchMenu(action);
 }
 // 選單派發（touch 與電腦版滑鼠點擊共用）。防重：400ms 內同一次點的 touch+click 只派一次。
@@ -938,6 +938,10 @@ function _dispatchMenu(action) {
   const now = Date.now();
   if (now - _lastMenuAt < 400) return;
   _lastMenuAt = now;
+  // 「設定」是就地展開 accordion，不關選單、不執行動作
+  if (action === 'settings') { toggleSettingsGroup(); return; }
+  // 其餘動作：先關選單再執行
+  closeTopMenu();
   if (action === 'today') toggleTripList();
   else if (action === 'finance') { closeSheet(); if (window.openFinance) window.openFinance(); }
   else if (action === 'bookkeeper') { closeSheet(); if (window.openBookkeeper) window.openBookkeeper(); }
@@ -950,13 +954,31 @@ function _dispatchMenu(action) {
   else if (action === 'address') { closeSheet(); if (window.MaptripAddr) MaptripAddr.open(); }
   else if (action === 'train') { closeSheet(); if (window.openTrainSettings) window.openTrainSettings(); }
   else if (action === 'metro') { closeSheet(); if (window.openMetroSettings) window.openMetroSettings(); }
-  else if (action === 'restrict') { closeSheet(); if (window.MaptripRestrict) MaptripRestrict.startAdd(); }
-  else if (action === 'restrict-osm') { closeSheet(); if (window.MaptripRestrict) MaptripRestrict.fetchOSM(); }
-  else if (action === 'oneway') { closeSheet(); if (window.MaptripOneway) MaptripOneway.toggle(); }
   else if (action === 'glmap') toggleGlEngine();
   else if (action === 'reviewtoggle') { if (window.MaptripDesktop) MaptripDesktop.toggle(); }
 }
 window._dispatchMenu = _dispatchMenu;
+
+// 「設定」就地展開/收合子群組（記帳者/雲端/火車/捷運/地圖引擎），並翻轉箭頭
+function toggleSettingsGroup() {
+  const g = document.getElementById('menu-settings-group');
+  const chev = document.getElementById('settings-chev');
+  if (!g) return;
+  const open = g.style.display !== 'none';
+  g.style.display = open ? 'none' : 'block';
+  if (chev) chev.textContent = open ? '▸' : '▾';
+}
+
+// 單行道常駐鈕：切換顯示並同步 .active 態
+function toggleOnewayBtn() {
+  if (window.MaptripOneway) MaptripOneway.toggle();
+  _syncOnewayBtn();
+}
+function _syncOnewayBtn() {
+  const b = document.getElementById('oneway-toggle');
+  if (b && window.MaptripOneway) b.classList.toggle('active', MaptripOneway.isOn());
+}
+window.toggleOnewayBtn = toggleOnewayBtn;
 
 // 切換地圖引擎：向量（MapLibre GL，旋轉時文字保持正立）↔ 標準（Leaflet）
 function toggleGlEngine() {
@@ -982,6 +1004,11 @@ function closeTopMenu() {
   const menu = document.getElementById('top-menu');
   menu.style.display = 'none';
   menu.querySelectorAll('button.pressed').forEach(b => b.classList.remove('pressed'));
+  // 收合「設定」子群組，下次開選單回到收合態
+  const g = document.getElementById('menu-settings-group');
+  if (g) g.style.display = 'none';
+  const chev = document.getElementById('settings-chev');
+  if (chev) chev.textContent = '▸';
   document.removeEventListener('touchstart', _menuTouchStart, { passive: true });
   document.removeEventListener('touchend', _menuTouchEnd, { passive: false });
 }
@@ -2411,10 +2438,8 @@ function boot() {
   setTimeout(() => { try { enableDeviceCompass(true); } catch (_) {} }, 800);
   // 開機 10 秒後補貼路（未在記錄中才跑），逐步把「直線趟」修成真實路線
   setTimeout(() => { if (!activeTrip) retrySnapBacklog(); }, 10000);
-  // 限時禁轉路口：地圖穩定後畫出既有標注＋啟動接近提醒
-  setTimeout(() => { try { if (window.MaptripRestrict) MaptripRestrict.init(); } catch (_) {} }, 1500);
-  // 單行道方向：上次開著就自動還原顯示（地圖穩定後）
-  setTimeout(() => { try { if (window.MaptripOneway) MaptripOneway.init(); } catch (_) {} }, 1800);
+  // 單行道方向：上次開著就自動還原顯示（地圖穩定後），並同步常駐鈕的 .active 態
+  setTimeout(() => { try { if (window.MaptripOneway) MaptripOneway.init(); _syncOnewayBtn(); } catch (_) {} }, 1800);
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');

@@ -88,9 +88,13 @@ html, body {
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.14);
-  z-index: 50; overflow: hidden; min-width: 148px;
+  z-index: 50; overflow-y: auto; min-width: 148px;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 72px);
   animation: menuFadeIn 0.15s ease;
 }
+/* 「設定」子群組：略縮排＋淺底，表示是展開的次級項目 */
+#menu-settings-group button { padding-left: 30px; background: rgba(0,0,0,0.025); }
+#top-menu button[data-menu="settings"] #settings-chev { margin-left: auto; color: #9aa0a6; font-size: 0.8rem; }
 @keyframes menuFadeIn {
   from { opacity: 0; transform: scale(0.95) translateY(-4px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
@@ -125,6 +129,20 @@ html, body {
   box-shadow: 0 1px 4px rgba(0,0,0,0.12);
 }
 #tile-toggle:active { opacity: 0.7; }
+
+/* 單行道方向常駐鈕：緊接衛星鈕右邊，同大小同樣式；開啟時 .active 藍底 */
+#oneway-toggle {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 56px); left: 92px;
+  background: rgba(255,255,255,0.9); backdrop-filter: blur(8px);
+  border: 1px solid rgba(0,0,0,0.12); color: #202124;
+  border-radius: 20px; padding: 4px 12px; font-size: 0.72rem;
+  cursor: pointer; z-index: 15; font-family: inherit;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+#oneway-toggle:active { opacity: 0.7; }
+#oneway-toggle.active {
+  background: rgba(26,115,232,0.92); color: #fff; border-color: rgba(26,115,232,0.9);
+}
 
 #solo-bar {
   position: fixed; bottom: 64px; left: 12px; right: 12px;
@@ -982,6 +1000,7 @@ html, body {
   #top-menu button { color: #e8eaed; }
   #top-menu button:not(:last-child) { border-bottom-color: rgba(255,255,255,0.07); }
   #top-menu button.pressed { background: rgba(255,255,255,0.07); }
+  #menu-settings-group button { background: rgba(255,255,255,0.04); }
 
   /* 地圖磚片反色（只反底圖，不影響標記和折線） */
   .leaflet-tile-pane { filter: invert(92%) hue-rotate(180deg) brightness(0.88) saturate(0.9); }
@@ -1006,6 +1025,8 @@ html, body {
   .badge-off { background: rgba(30,30,30,0.85); color: #9aa0a6; border-color: rgba(255,255,255,0.1); }
 
   #tile-toggle { background: rgba(30,30,30,0.9); border-color: rgba(255,255,255,0.12); color: #e8eaed; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+  #oneway-toggle { background: rgba(30,30,30,0.9); border-color: rgba(255,255,255,0.12); color: #e8eaed; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+  #oneway-toggle.active { background: rgba(138,180,248,0.92); color: #0b0b0b; border-color: rgba(138,180,248,0.9); }
 
   #trip-sheet, #history-sheet { background: #1a1a1a; border-top-color: rgba(255,255,255,0.07); box-shadow: 0 -4px 24px rgba(0,0,0,0.4); }
   .sheet-handle { background: rgba(255,255,255,0.12); }

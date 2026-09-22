@@ -68,7 +68,7 @@
       var btn = e.target.closest && e.target.closest('button[data-menu]');
       if (!btn) return;
       var action = btn.getAttribute('data-menu');
-      if (window.closeTopMenu) window.closeTopMenu();
+      // 關選單的決策交給 _dispatchMenu（settings 展開不關；其餘執行後自己關）
       if (window._dispatchMenu) window._dispatchMenu(action);
     });
   }
