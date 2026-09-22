@@ -31,6 +31,7 @@
   var CSS =
     'body.dm-review #start-btn,' +
     'body.dm-review #hotspot-btn,' +
+    'body.dm-review #booking-btn,' +
     'body.dm-review #locate-btn,' +
     'body.dm-review #compass-btn,' +
     'body.dm-review #gps-badge,' +

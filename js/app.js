@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.377';
+const APP_VERSION  = '1.1.378';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -2439,6 +2439,8 @@ function boot() {
   setTimeout(() => { if (!activeTrip) retrySnapBacklog(); }, 10000);
   // 單行道方向：上次開著就自動還原顯示（地圖穩定後），並同步常駐鈕的 .active 態
   setTimeout(() => { try { if (window.MaptripOneway) MaptripOneway.init(); _syncOnewayBtn(); } catch (_) {} }, 1800);
+  // 預約：載入本機快取、更新 12h 紅點、啟動 App 內提醒輪詢
+  try { if (window.MaptripBooking) MaptripBooking.init({ testMode: TEST_MODE_ON }); } catch (_) {}
   setTimeout(checkForUpdate, 2000);
   // 版本號顯示在「行程清單」底部；診斷模式開啟時標記
   const vl = document.getElementById('version-label');

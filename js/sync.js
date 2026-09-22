@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  let auth = null, db = null, user = null, unsub = null, unsubDel = null, unsubComm = null, unsubManual = null, ready = false;
+  let auth = null, db = null, user = null, unsub = null, unsubDel = null, unsubComm = null, unsubManual = null, unsubBooking = null, ready = false;
   let cloudInfo = { days: 0, trips: 0, at: 0 };   // 雲端資料摘要（診斷用）
   const warnedDays = new Set();                    // 已提示過備份失敗的日期（避免重複跳提示）
 
@@ -57,6 +57,7 @@
       if (unsubDel) { unsubDel(); unsubDel = null; }
       if (unsubComm) { unsubComm(); unsubComm = null; }
       if (unsubManual) { unsubManual(); unsubManual = null; }
+      if (unsubBooking) { unsubBooking(); unsubBooking = null; }
     }
   }
 
@@ -78,6 +79,7 @@
     // 否則會顯示上一個帳號的支出、舊訂閱還在跑（與 v265 行程隔離同一類坑）。
     try { if (window.MaptripFinance && MaptripFinance.resetExpenseSync) MaptripFinance.resetExpenseSync(); } catch (_) {}
     try { if (window.MaptripManual && MaptripManual.clear) MaptripManual.clear(); } catch (_) {}   // 換帳號清手動紀錄快取
+    try { localStorage.removeItem('maptrip_bookings'); if (window.MaptripBooking && MaptripBooking.clear) MaptripBooking.clear(); } catch (_) {}   // 換帳號清預約
     // 換帳號清共享熱點偏好快取（groupId 屬於帳號；貢獻計數/去重也重來）
     _prefs = null;
     try { localStorage.removeItem('mt_hs_prefs'); localStorage.removeItem('mt_hs_contrib'); localStorage.removeItem('mt_hs_done'); } catch (_) {}
@@ -93,6 +95,7 @@
     if (unsubDel) { unsubDel(); unsubDel = null; }
     if (unsubComm) { unsubComm(); unsubComm = null; }
     if (unsubManual) { unsubManual(); unsubManual = null; }
+    if (unsubBooking) { unsubBooking(); unsubBooking = null; }
     pullAndListen();
     toastMsg('已清除本機並重新從雲端下載');
   }
@@ -337,6 +340,18 @@
   async function deleteManualTrip(driverUid, id) {
     if (!ready || !user) throw new Error('尚未登入');
     await db.collection('users').doc(driverUid).collection('manualTrips').doc(String(id)).delete();
+  }
+
+  // ── 預約（bookings）：司機本人的預約，users/{uid}/bookings/{id} 每筆一份 ──
+  async function writeBooking(b) {
+    if (!ready || !user || !b || !b.id) return;
+    try { await db.collection('users').doc(user.uid).collection('bookings').doc(String(b.id)).set(b, { merge: true }); }
+    catch (e) { log('booking write fail ' + (e && e.code)); }
+  }
+  async function deleteBooking(id) {
+    if (!ready || !user || id == null) return;
+    try { await db.collection('users').doc(user.uid).collection('bookings').doc(String(id)).delete(); }
+    catch (e) { log('booking del fail ' + (e && e.code)); }
   }
 
   // 訂閱某司機支出的即時變動（司機端本機用，記帳者改的支出即時回讀）。
@@ -676,6 +691,7 @@
     if (unsubDel) unsubDel();
     if (unsubComm) unsubComm();
     if (unsubManual) unsubManual();
+    if (unsubBooking) unsubBooking();
     try {
       // 監聽自己的「抽成」集合：記帳者改的抽成/車資覆蓋會即時同步回司機本機
       unsubComm = db.collection('users').doc(user.uid).collection('commissions').onSnapshot(snap => {
@@ -693,6 +709,13 @@
         var list = []; snap.forEach(doc => { var m = doc.data() || {}; m.id = doc.id; list.push(m); });
         if (window.MaptripManual) { MaptripManual.set(list); if (window.refreshAfterSync) window.refreshAfterSync(); }
       }, err => log('manual snapshot err ' + (err && err.code)));
+    } catch (_) {}
+    try {
+      // 監聽自己的「預約」集合：多裝置即時同步（Phase 1）
+      unsubBooking = db.collection('users').doc(user.uid).collection('bookings').onSnapshot(snap => {
+        var list = []; snap.forEach(doc => { var b = doc.data() || {}; b.id = doc.id; list.push(b); });
+        if (window.MaptripBooking) MaptripBooking.set(list);
+      }, err => log('booking snapshot err ' + (err && err.code)));
     } catch (_) {}
     try {
       // 先訂閱刪除名單（墓碑），確保天資料抵達前就知道哪些趟已刪除
@@ -855,6 +878,7 @@
     getAccess: getAccess, setAllowFareEdit: setAllowFareEdit,
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
+    writeBooking: writeBooking, deleteBooking: deleteBooking,
     resetLocal: resetLocal, overwriteDays: overwriteDays, undeleteId: undeleteId,
     // 共享熱點/車隊（Phase 1）＋全體池（Phase 2）
     myTeam: myTeam, setShareHotspots: setShareHotspots,
