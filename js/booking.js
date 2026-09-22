@@ -21,6 +21,7 @@
   var _formReminders = [];   // 表單暫存的提醒分鐘陣列
   var _formDests = [''];      // 表單暫存的下車點文字（可多個，最多 4）
   var MAX_DESTS = 4;
+  var _flightRes = null;      // 最近一次航班查詢結果
 
   // ---------- 純函式（供測試） ----------
   function _pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -330,6 +331,15 @@
       '<label class="bk-lbl">出發地（上車） <span class="bk-req">＊</span></label>' +
       '<input id="bk-f-pickup" class="bk-in" type="text" placeholder="上車地點" value="' + _esc(b.pickup && b.pickup.text) + '">' +
       '<label class="bk-lbl">下車點</label><div id="bk-f-dests"></div>' +
+      '<label class="bk-lbl">✈ 航班查詢（桃園機場）</label>' +
+      '<div class="bk-flight">' +
+        '<div class="bk-flight-row">' +
+          '<input id="bk-f-flight" class="bk-in" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="航班編號 例 BR225">' +
+          '<select id="bk-f-flightdir" class="bk-in bk-flight-dir"><option value="departure">送機</option><option value="arrival">接機</option></select>' +
+          '<button type="button" class="bk-flight-go" onclick="MaptripBooking._flightLookup()">查詢</button>' +
+        '</div>' +
+        '<div id="bk-flight-result" class="bk-flight-result"></div>' +
+      '</div>' +
       '<label class="bk-lbl">客人稱呼</label>' +
       '<input id="bk-f-name" class="bk-in" type="text" placeholder="例：林小姐" value="' + _esc(b.name) + '">' +
       '<label class="bk-lbl">電話</label>' +
@@ -369,6 +379,44 @@
   }
   function _addDest() { _readDestInputs(); if (_formDests.length < MAX_DESTS) _formDests.push(''); _renderDests(); }
   function _rmDest(i) { _readDestInputs(); _formDests.splice(i, 1); if (!_formDests.length) _formDests = ['']; _renderDests(); }
+
+  // ---------- 航班查詢（桃園）----------
+  function _flightLookup() {
+    var no = ((document.getElementById('bk-f-flight') || {}).value || '').trim();
+    var dir = (document.getElementById('bk-f-flightdir') || {}).value || 'departure';
+    var box = document.getElementById('bk-flight-result'); if (!box) return;
+    if (!no) { _toast('請輸入航班編號'); return; }
+    if (!global.MaptripFlight) { box.innerHTML = '<div class="bk-flight-msg">航班模組未載入</div>'; return; }
+    box.innerHTML = '<div class="bk-flight-msg">查詢中…</div>';
+    MaptripFlight.lookup(no, dir).then(function (f) {
+      if (!f) { box.innerHTML = '<div class="bk-flight-msg">查無此航班。航班資訊通常只有近 1–2 天；若一直查不到，可能是共用代理尚未放行航空資料。</div>'; _flightRes = null; return; }
+      _flightRes = f;
+      var acts = (f.actual && f.actual !== f.sched) ? '（實際 ' + _esc(f.actual) + '）' : '';
+      var extra = [f.status ? _esc(f.status) : '', f.gate ? '登機門 ' + _esc(f.gate) : ''].filter(Boolean).join('　');
+      box.innerHTML = '<div class="bk-flight-card">' +
+        '<div class="bk-flight-l1">' + _esc(f.airline) + ' ' + _esc(f.flight) + '　<b>' + _esc(f.terminalText) + '</b></div>' +
+        '<div class="bk-flight-l2">' + (dir === 'arrival' ? '抵達' : '起飛') + ' ' + _esc(f.sched || '—') + acts + (extra ? '　' + extra : '') + '</div>' +
+        '<button type="button" class="bk-flight-apply" onclick="MaptripBooking._flightApply()">帶入' + (dir === 'arrival' ? '出發地' : '目的地') + '</button>' +
+        '</div>';
+    }).catch(function (e) {
+      _flightRes = null;
+      box.innerHTML = '<div class="bk-flight-msg">查詢失敗（' + _esc(String((e && e.message) || e)) + '）</div>';
+    });
+  }
+  function _flightApply() {
+    var f = _flightRes; if (!f) return;
+    var term = f.terminalText;
+    if (f.dir === 'arrival') {
+      var p = document.getElementById('bk-f-pickup'); if (p) p.value = term;
+    } else {
+      _readDestInputs();
+      var i = _formDests.length - 1;
+      if (_formDests[i] && _formDests[i].trim() && _formDests.length < MAX_DESTS) _formDests.push(term);
+      else _formDests[i] = term;
+      _renderDests();
+    }
+    _toast('已帶入 ' + term + (f.sched ? '（航班 ' + f.sched + '）' : ''));
+  }
   function _renderReminderChips() {
     var el = document.getElementById('bk-f-reminders'); if (!el) return;
     var chips = _formReminders.map(function (m, i) {
@@ -469,7 +517,7 @@
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
     navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
-    _addDest: _addDest, _rmDest: _rmDest,
+    _addDest: _addDest, _rmDest: _rmDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
     _tickReminders: _tickReminders, _updateBadge: _updateBadge,
     // 純函式（測試）
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,

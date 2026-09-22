@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.385';</script>
+<script>window.INDEX_VERSION = '1.1.386';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -543,6 +543,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/addr-search.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 搜尋 FAB 彈出選單（找客熱區／加油站／停車場／便利商店／醫院／搜尋地址） -->
 <script>document.write('<scr' + 'ipt src="js/search-menu.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 航班查詢（桃園 TPE，TDX Air FIDS 走火車共用代理）：預約表單用 -->
+<script>document.write('<scr' + 'ipt src="js/flight.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 預約 Phase 1：滿版清單/表單、多站導航、撥號、App 內提醒、12h 紅點、雲端同步 -->
 <script>document.write('<scr' + 'ipt src="js/booking.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 單行道方向顯示（OSM oneway，紫線＋方向箭頭） -->

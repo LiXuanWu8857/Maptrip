@@ -455,6 +455,19 @@ textarea.bk-in { resize: vertical; }
 .bk-dest-row .bk-in { margin: 0; }
 .bk-dest-x { flex: none; width: 40px; height: 44px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.12); background: #fff; color: #9aa0a6; font-size: 0.9rem; font-family: inherit; cursor: pointer; }
 .bk-adddest { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 10px; border: 1px dashed rgba(26,115,232,0.4); background: rgba(26,115,232,0.05); color: #1a73e8; font-size: 0.85rem; font-weight: 600; font-family: inherit; cursor: pointer; }
+/* 航班查詢 */
+.bk-flight-row { display: flex; gap: 8px; align-items: stretch; }
+.bk-flight-row .bk-in { margin: 0; }
+.bk-flight-row #bk-f-flight { flex: 1; min-width: 0; text-transform: uppercase; }
+.bk-flight-dir { flex: none; width: 84px; padding: 11px 8px; }
+.bk-flight-go { flex: none; padding: 0 16px; border-radius: 10px; border: none; background: #1a73e8; color: #fff; font-size: 0.9rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+.bk-flight-result { margin-top: 8px; }
+.bk-flight-card { border: 1px solid rgba(26,115,232,0.3); background: rgba(26,115,232,0.05); border-radius: 12px; padding: 11px 12px; }
+.bk-flight-l1 { font-size: 0.95rem; color: #202124; margin-bottom: 3px; }
+.bk-flight-l1 b { color: #1a73e8; }
+.bk-flight-l2 { font-size: 0.82rem; color: #5f6368; margin-bottom: 9px; }
+.bk-flight-apply { padding: 9px 14px; border-radius: 10px; border: none; background: #1a73e8; color: #fff; font-size: 0.85rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+.bk-flight-msg { font-size: 0.82rem; color: #9aa0a6; padding: 8px 2px; line-height: 1.5; }
 .bk-rem { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .bk-addrem { padding: 8px 10px; border-radius: 10px; border: 1px dashed rgba(0,0,0,0.25); background: #fff; color: #1a73e8; font-family: inherit; font-size: 0.82rem; }
 .bk-form-acts { display: flex; flex-direction: column; gap: 10px; margin: 20px 0 12px; }
@@ -482,6 +495,9 @@ textarea.bk-in { resize: vertical; }
   .bk-note { background: #262626; color: #c7ccd1; border-color: rgba(255,255,255,0.1); }
   .bk-dest-x { background: #1e1e1e; color: #9aa0a6; border-color: rgba(255,255,255,0.12); }
   .bk-adddest { background: rgba(138,180,248,0.1); color: #8ab4f8; border-color: rgba(138,180,248,0.4); }
+  .bk-flight-card { background: rgba(138,180,248,0.1); border-color: rgba(138,180,248,0.35); }
+  .bk-flight-l1 { color: #e8eaed; } .bk-flight-l1 b { color: #8ab4f8; }
+  .bk-flight-l2 { color: #9aa0a6; }
   .bk-chip { background: #2a2a2a; color: #c7ccd1; }
   .bk-chip.rem { background: rgba(138,180,248,0.14); color: #8ab4f8; }
   .bk-acts button { background: #262626; color: #8ab4f8; border-color: rgba(255,255,255,0.12); }
