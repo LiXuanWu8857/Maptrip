@@ -1266,7 +1266,8 @@ html, body {
   font-family: inherit; cursor: pointer; text-align: center;
 }
 .sync-sec-chev { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; color: #9aa0a6; }
-.sync-sec-b { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 2px; }
+/* 展開內容左右內縮＝按鈕比標題窄，一眼看出是「被展開的區塊」內容 */
+.sync-sec-b { display: flex; flex-direction: column; gap: 8px; padding: 8px 18px 4px; }
 .sync-sec-b .acc-list { margin: 2px 0 0; }
 .sync-sec-cur { font-size: 0.86rem; color: #5f6368; padding: 6px 2px 2px; text-align: center; }
 .sync-sec-cur b { color: #202124; }
