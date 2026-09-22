@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.376';
+const APP_VERSION  = '1.1.377';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -928,7 +928,8 @@ function _menuTouchEnd(e) {
   e.preventDefault();
   const hit = _menuHitBtn(e);
   const action = hit ? hit.getAttribute('data-menu') : null;
-  // 關選單的決策移進 _dispatchMenu（settings 是「展開」不關；其餘執行後關）
+  // 只有「設定」是就地展開不關；點一般項、或點選單外(action=null)都要關選單
+  if (action !== 'settings') closeTopMenu();
   _dispatchMenu(action);
 }
 // 選單派發（touch 與電腦版滑鼠點擊共用）。防重：400ms 內同一次點的 touch+click 只派一次。
@@ -938,10 +939,8 @@ function _dispatchMenu(action) {
   const now = Date.now();
   if (now - _lastMenuAt < 400) return;
   _lastMenuAt = now;
-  // 「設定」是就地展開 accordion，不關選單、不執行動作
+  // 「設定」是就地展開 accordion，不關選單、不執行動作（關選單由呼叫端負責）
   if (action === 'settings') { toggleSettingsGroup(); return; }
-  // 其餘動作：先關選單再執行
-  closeTopMenu();
   if (action === 'today') toggleTripList();
   else if (action === 'finance') { closeSheet(); if (window.openFinance) window.openFinance(); }
   else if (action === 'bookkeeper') { closeSheet(); if (window.openBookkeeper) window.openBookkeeper(); }
