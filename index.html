@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.382';</script>
+<script>window.INDEX_VERSION = '1.1.383';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -204,7 +204,9 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
         '#top-menu{top:52px!important}' +
         '#gps-badge{top:56px!important}' +
         '#tile-toggle{top:56px!important}' +
-        '#oneway-toggle{top:56px!important}';
+        '#oneway-toggle{top:56px!important}' +
+        // 預約滿版頁同病：reload 場次 viewport 已整體下移，標題列不可再套 safe-area（否則雙重下移＝頂端多一條空白）
+        '.bk-overlay .bk-head{padding-top:8px!important}';
       document.head.appendChild(s);
     } else if (!on && s) {
       s.remove();
