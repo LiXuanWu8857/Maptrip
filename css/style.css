@@ -1257,20 +1257,18 @@ html, body {
   font-family: inherit; cursor: pointer;
 }
 
-/* 同步面板可收合區塊（切換帳號 / 資料）：標題列點擊展開 */
-.sync-sec { border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; overflow: hidden; background: #fff; }
+/* 同步面板可收合區塊（切換帳號 / 資料）：標題列做成與其他按鈕一致的置中膠囊，箭頭靠右 */
+.sync-sec { border: none; border-radius: 0; overflow: visible; background: transparent; }
 .sync-sec-h {
-  width: 100%; display: flex; align-items: center; justify-content: space-between;
-  padding: 13px 14px; border: none; background: transparent;
-  font-family: inherit; font-size: 0.92rem; font-weight: 600; color: #202124; cursor: pointer;
+  position: relative; width: 100%; padding: 12px; border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.12); background: #f1f3f4;
+  color: #202124; font-size: 0.9rem; font-weight: 600;
+  font-family: inherit; cursor: pointer; text-align: center;
 }
-.sync-sec-chev { font-size: 0.8rem; color: #9aa0a6; }
-.sync-sec-b {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 4px 12px 12px; border-top: 1px solid rgba(0,0,0,0.05);
-}
+.sync-sec-chev { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 0.8rem; color: #9aa0a6; }
+.sync-sec-b { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 2px; }
 .sync-sec-b .acc-list { margin: 2px 0 0; }
-.sync-sec-cur { font-size: 0.86rem; color: #5f6368; padding: 8px 2px 2px; }
+.sync-sec-cur { font-size: 0.86rem; color: #5f6368; padding: 6px 2px 2px; text-align: center; }
 .sync-sec-cur b { color: #202124; }
 
 /* 記住的帳號快速切換（account-switch.js） */
@@ -1317,9 +1315,7 @@ html, body {
   .acc-row { background: #2a2a2a; border-color: rgba(255,255,255,0.08); }
   .acc-name { color: #e8eaed; }
   .acc-cur { color: #8ab4f8; }
-  .sync-sec { background: #262626; border-color: rgba(255,255,255,0.08); }
-  .sync-sec-h { color: #e8eaed; }
-  .sync-sec-b { border-top-color: rgba(255,255,255,0.06); }
+  .sync-sec-h { background: #2d2d2d; border-color: rgba(255,255,255,0.12); color: #e8eaed; }
   .sync-sec-cur { color: #9aa0a6; }
   .sync-sec-cur b { color: #e8eaed; }
 }
