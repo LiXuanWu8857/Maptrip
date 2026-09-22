@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.378';
+const APP_VERSION  = '1.1.379';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -211,7 +211,7 @@ function initMap() {
 
   // 地圖旋轉時，讓指北針的針頭永遠指向真正的北方
   if (map.setBearing) {
-    document.getElementById('compass-btn').style.display = 'flex';
+    // 定位＋指北針已合併成一顆常駐鈕（#locate-btn，內含 #compass-needle），不需再顯示獨立指北針鈕
     map.on('rotate', () => {
       updateCompassNeedle();
       updateMyHeadingArrow();
@@ -837,6 +837,16 @@ function centerOnMe() {
   // 朝車頭模式：恢復跟隨的同時也恢復自動旋轉
   if (headingUp && lastHeading) setTargetBearing(-lastHeading);
 }
+
+// 定位＋指北針合併鈕：單擊＝回到我的位置；5 秒內第 2 下＝切換朝向（朝車頭↔鎖定指北）。
+// 沿用既有 centerOnMe()/toggleCompass()，只加點擊計時分流。
+let _lcLastTap = 0; const LC_TAP_GAP = 5000;
+function onLocateCompassTap() {
+  const now = Date.now();
+  if (now - _lcLastTap < LC_TAP_GAP) { _lcLastTap = 0; toggleCompass(); }   // 5 秒內第 2 下 → 切朝向
+  else { _lcLastTap = now; centerOnMe(); }                                   // 第 1 下 → 回到我的位置
+}
+window.onLocateCompassTap = onLocateCompassTap;
 
 // 兩點間方位角（度，正北為 0，順時針）
 // 地圖朝向/羅盤/方向光束（朝車頭旋轉）已抽成模組 js/orient.js（MaptripOrient，body 逐字不變，
@@ -2431,7 +2441,7 @@ function boot() {
   // 朝行進方向預設開啟（按指北針可關，選擇會記住）
   try {
     headingUp = localStorage.getItem('maptrip_headup') !== '0';
-    if (headingUp) document.getElementById('compass-btn')?.classList.add('heading-on');
+    if (headingUp) document.getElementById('locate-btn')?.classList.add('heading-on');
   } catch (_) {}
   // 開機自動嘗試啟用羅盤（先前授權過就生效），方向光束一開始就會顯示
   setTimeout(() => { try { enableDeviceCompass(true); } catch (_) {} }, 800);

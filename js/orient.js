@@ -124,14 +124,14 @@
     const hu = !ctx.getHeadingUp();
     ctx.setHeadingUp(hu);
     try { localStorage.setItem('maptrip_headup', hu ? '1' : '0'); } catch (_) {}
-    const btn = document.getElementById('compass-btn');
+    const btn = document.getElementById('locate-btn');   // 定位＋指北針已合併成一顆
     if (hu) {
-      btn.classList.add('heading-on');
+      if (btn) btn.classList.add('heading-on');
       enableDeviceCompass();                            // 啟用手機羅盤（停著也能轉）
       if (ctx.getLastHeading()) setTargetBearing(-ctx.getLastHeading());
       toast('地圖朝行進方向');
     } else {
-      btn.classList.remove('heading-on');
+      if (btn) btn.classList.remove('heading-on');
       setTargetBearing(0);                              // 平滑轉回指北
       toast('地圖已鎖定指北');
     }

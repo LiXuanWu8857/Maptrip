@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.378';</script>
+<script>window.INDEX_VERSION = '1.1.379';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -347,15 +347,9 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <!-- 預約 FAB：疊在搜尋上方；內含 12h 紅點 badge（MaptripBooking 動態控制） -->
 <button id="booking-btn" onclick="MaptripBooking&&MaptripBooking.open()" title="預約">📋</button>
 
-<!-- My Location FAB（Google Maps 風格，右下角浮動） -->
-<button id="locate-btn" onclick="centerOnMe()" title="我的位置">
-  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-  </svg>
-</button>
-
-<!-- 指北針：朝車頭模式時亮起；按下鎖定指北 -->
-<button id="compass-btn" onclick="toggleCompass()" title="指北針" style="display:none">
+<!-- 定位＋指北針合併鈕：單擊回到我的位置、5 秒內雙擊切換朝向（朝車頭↔鎖定指北）。
+     圖示用指北針針頭（#compass-needle）一物二用：既是定位鈕、針頭又當朝向指示。 -->
+<button id="locate-btn" onclick="onLocateCompassTap()" title="我的位置／指北針">
   <span id="compass-needle">
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
       <polygon points="12,3 8,13 12,11 16,13" fill="#EA4335"/>

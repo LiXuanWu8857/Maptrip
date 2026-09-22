@@ -289,7 +289,8 @@ html, body {
   cursor: pointer; z-index: 15; padding: 0;
 }
 #compass-btn:active { background: #f1f3f4; }
-#compass-btn.heading-on { box-shadow: 0 2px 8px rgba(26,115,232,0.4), 0 0 0 1.5px #1a73e8; }
+/* 合併鈕（#locate-btn）朝車頭模式時亮藍框；針頭沿用 #compass-needle 當朝向指示 */
+#locate-btn.heading-on { box-shadow: 0 2px 8px rgba(26,115,232,0.4), 0 0 0 1.5px #1a73e8; }
 #compass-needle { display: flex; transition: transform 0.15s linear; }
 
 /* 我的位置：藍點 + 方向光束（Google 地圖風格） */
