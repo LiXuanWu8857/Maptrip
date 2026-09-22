@@ -22,6 +22,9 @@
   var _formDests = [''];      // 表單暫存的下車點文字（可多個，最多 4）
   var MAX_DESTS = 4;
   var _flightRes = null;      // 最近一次航班查詢結果
+  var ONMAP_WIN = 30 * 60000; // 地圖橫幅：預約時間剩 ≤30 分才出現
+  var ONMAP_GRACE = 15 * 60000; // 過時 15 分內仍顯示（司機可能晚到）
+  var _onmapSig = '';         // 地圖橫幅內容簽章，內容沒變就不重畫（避免每 30 秒閃）
 
   // ---------- 純函式（供測試） ----------
   function _pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -51,6 +54,29 @@
       if ((b.status === 'pending' || b.status === 'confirmed') && b.pickupTime >= now && b.pickupTime <= end) n++;
     });
     return n;
+  }
+
+  // 地圖主頁橫幅要顯示的預約：剩 ≤30 分（含過時 15 分內）、pending/confirmed，依時間升冪
+  function _dueOnMap(list, now) {
+    now = now || Date.now();
+    var out = [];
+    (list || []).forEach(function (b) {
+      if (!b || !b.pickupTime) return;
+      if (b.status === 'done' || b.status === 'cancelled') return;
+      var left = b.pickupTime - now;
+      if (left <= ONMAP_WIN && left >= -ONMAP_GRACE) out.push(b);
+    });
+    out.sort(function (a, b) { return a.pickupTime - b.pickupTime; });
+    return out;
+  }
+  // 地圖橫幅倒數文字：過時→「已過 N 分」、1 分內→「即將到達」、否則「還有 …」
+  function _onmapCountdown(ms, now) {
+    now = now || Date.now();
+    var left = ms - now;
+    if (left < -60000) return '已過 ' + Math.round(-left / 60000) + ' 分';
+    if (left < 60000) return '即將到達';
+    var mins = Math.round(left / 60000), h = Math.floor(mins / 60), mm = mins % 60;
+    return h > 0 ? ('還有 ' + h + ' 小時' + (mm ? (' ' + mm + ' 分') : '')) : ('還有 ' + mins + ' 分');
   }
 
   // 該觸發的提醒（跨過提前點、尚在 pickup 前、未提醒過）；done/cancelled 不提醒
@@ -126,6 +152,7 @@
   function set(list) {
     _list = (list || []).slice();
     _persist(); _updateBadge();
+    try { _updateOnMap(); } catch (_) {}
     if (_isListOpen()) _renderList();
   }
 
@@ -138,12 +165,14 @@
     for (var k = 0; k < _list.length; k++) { if (_list[k].id === b.id) { i = k; break; } }
     if (i >= 0) _list[i] = b; else _list.push(b);
     _persist(); _updateBadge();
+    try { _updateOnMap(); } catch (_) {}
     try { if (global.MaptripSync && MaptripSync.writeBooking) MaptripSync.writeBooking(b); } catch (_) {}
     return b;
   }
   function remove(id) {
     _list = _list.filter(function (b) { return b.id !== id; });
     _persist(); _updateBadge();
+    try { _updateOnMap(); } catch (_) {}
     try { if (global.MaptripSync && MaptripSync.deleteBooking) MaptripSync.deleteBooking(id); } catch (_) {}
   }
   function markConfirmed(id) {
@@ -152,7 +181,7 @@
     save(b);
     if (_isListOpen()) _renderList();
   }
-  function clear() { _list = []; try { localStorage.removeItem(KEY); } catch (_) {} _updateBadge(); if (_isListOpen()) _renderList(); }
+  function clear() { _list = []; try { localStorage.removeItem(KEY); } catch (_) {} _updateBadge(); try { _updateOnMap(); } catch (_) {} if (_isListOpen()) _renderList(); }
 
   // ---------- 動作 ----------
   function navigate(id) {
@@ -177,6 +206,7 @@
       var where = (b.pickup && b.pickup.text) || '';
       _toast('⏰ ' + d.lead + ' 分後有預約：' + hhmm + ' ' + who + ' ' + where);
     });
+    try { _updateOnMap(); } catch (_) {}
   }
 
   // ---------- 12h 紅點 ----------
@@ -188,6 +218,75 @@
     if (!badge) { badge = document.createElement('span'); badge.className = 'bk-badge'; btn.appendChild(badge); }
     if (n > 0) { badge.textContent = n > 99 ? '99+' : String(n); badge.style.display = 'block'; }
     else { badge.style.display = 'none'; }
+  }
+
+  // ---------- 地圖主頁「即將開始」提醒橫幅（貼底、原本計時器的位置） ----------
+  function _ensureOnMapDom() {
+    var el = document.getElementById('bk-onmap');
+    if (!el) { el = document.createElement('div'); el.id = 'bk-onmap'; el.style.display = 'none'; document.body.appendChild(el); }
+    return el;
+  }
+  function _elShown(id) { var e = document.getElementById(id); return !!e && e.style.display !== 'none'; }
+  function _isRecording() { var rb = document.getElementById('rec-banner'); return !!rb && rb.style.display && rb.style.display !== 'none'; }
+  // 主頁以外（清單/表單開著、單趟或全日預覽、熱區面板、底部 sheet）不顯示
+  function _onMapBlocked() {
+    return _elShown('bk-list') || _elShown('bk-form') || _elShown('solo-bar') ||
+           _elShown('day-preview-bar') || _elShown('hs-panel') || _elShown('sheet-overlay');
+  }
+  function _onmapWhen(b) { return '⏰ ' + _onmapCountdown(b.pickupTime, Date.now()) + ' · ' + _fmtTime(b.pickupTime); }
+  function _actsHtml(b) {
+    return '<span class="bkm-acts">' +
+      (b.phone ? '<button class="bkm-btn" onclick="event.stopPropagation();MaptripBooking.call(\'' + b.id + '\')">📞</button>' : '') +
+      '<button class="bkm-btn" onclick="event.stopPropagation();MaptripBooking.navigate(\'' + b.id + '\')">🧭</button>' +
+      '</span>';
+  }
+  function _mapCardHtml(b) {
+    var name = b.name || b.lineName || '預約';
+    var pickup = (b.pickup && b.pickup.text) ? '<div class="bkm-line"><span class="ic">📍</span><span class="tx">' + _esc(b.pickup.text) + '</span></div>' : '';
+    var dests = _destsOf(b);
+    var dest = dests.length ? '<div class="bkm-line"><span class="ic">🏁</span><span class="tx">' + _esc(dests[dests.length - 1].text) + '</span></div>' : '';
+    var note = b.note ? '<div class="bkm-note">📝 ' + _esc(b.note) + '</div>' : '';
+    return '<div class="bkm-card" onclick="MaptripBooking.openFromMap(\'' + b.id + '\')">' +
+      '<div class="bkm-r1"><span class="bkm-when">' + _onmapWhen(b) + '</span>' +
+      '<span class="bkm-name">' + _esc(name) + '</span>' + _actsHtml(b) + '</div>' +
+      pickup + dest + note + '</div>';
+  }
+  // 跑車中：縮成一小條紅字（掛在藍色計時器上方）
+  function _stripHtml(b, total) {
+    var name = b.name || b.lineName || '預約';
+    var where = (b.pickup && b.pickup.text) ? (' · ' + _esc(b.pickup.text)) : '';
+    var more = total > 1 ? ' <span class="bkm-smore">＋' + (total - 1) + '</span>' : '';
+    return '<div class="bkm-strip" onclick="MaptripBooking.openFromMap(\'' + b.id + '\')">' +
+      '<span class="bkm-sdot"></span>' +
+      '<span class="bkm-stext">下一筆 <b>' + _fmtTime(b.pickupTime) + '</b> ' + _esc(name) + where + '　' + _onmapCountdown(b.pickupTime, Date.now()) + more + '</span>' +
+      (b.phone ? '<button class="bkm-sbtn" onclick="event.stopPropagation();MaptripBooking.call(\'' + b.id + '\')">📞</button>' : '') +
+      '<button class="bkm-sbtn" onclick="event.stopPropagation();MaptripBooking.navigate(\'' + b.id + '\')">🧭</button>' +
+      '</div>';
+  }
+  function openFromMap(id) { open(); }
+
+  function _updateOnMap() {
+    var el = _ensureOnMapDom();
+    if (_onMapBlocked()) { el.style.display = 'none'; _onmapSig = ''; return; }
+    var now = Date.now();
+    var due = _dueOnMap(_list, now);
+    if (!due.length) { if (el.style.display !== 'none') el.style.display = 'none'; el.innerHTML = ''; _onmapSig = ''; return; }
+    var rec = _isRecording();
+    // 內容簽章：狀態＋各筆 id＋分鐘倒數，沒變就不重畫（避免每 30 秒重繪閃動）
+    var sig = (rec ? 'R|' : 'F|') + due.map(function (b) { return b.id + '@' + Math.round((b.pickupTime - now) / 60000); }).join(',');
+    if (rec) {
+      if (sig !== _onmapSig) { el.innerHTML = _stripHtml(due[0], due.length); }
+      var rb = document.getElementById('rec-banner');
+      el.style.bottom = (64 + (rb ? rb.offsetHeight : 48) + 8) + 'px';   // 疊在計時器上方
+    } else {
+      if (sig !== _onmapSig) {
+        el.innerHTML = due.slice(0, 2).map(_mapCardHtml).join('') +
+          (due.length > 2 ? '<div class="bkm-more">＋ 還有 ' + (due.length - 2) + ' 筆在 30 分內</div>' : '');
+      }
+      el.style.bottom = '64px';
+    }
+    _onmapSig = sig;
+    if (el.style.display !== 'block') el.style.display = 'block';
   }
 
   // ---------- UI：滿版清單 ----------
@@ -507,7 +606,7 @@
     _loadLocal();
     _updateBadge();
     if (_tickTimer) clearInterval(_tickTimer);
-    _tickReminders();
+    _tickReminders();   // 內含 _updateOnMap()
     _tickTimer = setInterval(_tickReminders, 30000);
   }
 
@@ -516,11 +615,13 @@
     save: save, remove: remove, markConfirmed: markConfirmed, clear: clear, set: set,
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
     navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
+    openFromMap: openFromMap,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
     _addDest: _addDest, _rmDest: _rmDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
-    _tickReminders: _tickReminders, _updateBadge: _updateBadge,
+    _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap,
     // 純函式（測試）
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
+    _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,
     _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf
   };
 

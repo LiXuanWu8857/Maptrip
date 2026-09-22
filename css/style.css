@@ -348,6 +348,39 @@ html, body {
   box-shadow: 0 1px 3px rgba(0,0,0,0.3); display: none;
 }
 
+/* 地圖主頁「即將開始」提醒橫幅：貼底、原本計時器（#rec-banner）的位置、留右 76px 給 FAB */
+#bk-onmap {
+  position: fixed; left: 12px; right: 76px; bottom: 64px; z-index: 19;
+  display: none;
+}
+.bkm-card {
+  background: #e0342a; color: #fff; border-radius: 14px; padding: 11px 12px;
+  box-shadow: 0 6px 18px rgba(224,52,42,0.4); margin-top: 8px; cursor: pointer;
+}
+.bkm-card:first-child { margin-top: 0; }
+.bkm-r1 { display: flex; align-items: center; gap: 8px; }
+.bkm-when { font-size: 0.86rem; font-weight: 800; white-space: nowrap; letter-spacing: .2px; }
+.bkm-name { font-size: 0.9rem; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bkm-acts { display: flex; gap: 6px; flex: none; }
+.bkm-btn { width: 34px; height: 34px; border-radius: 9px; border: none; background: rgba(255,255,255,0.22); color: #fff; font-size: 0.95rem; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; }
+.bkm-btn:active { background: rgba(255,255,255,0.36); }
+.bkm-line { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; margin-top: 6px; opacity: 0.98; }
+.bkm-line .ic { width: 16px; text-align: center; flex: none; }
+.bkm-line .tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bkm-note { background: rgba(255,255,255,0.16); border-radius: 7px; padding: 5px 8px; font-size: 0.78rem; margin-top: 6px; word-break: break-word; }
+.bkm-more { color: #fff; background: #c02a22; border-radius: 10px; text-align: center; font-size: 0.74rem; padding: 5px; margin-top: 6px; box-shadow: 0 4px 12px rgba(224,52,42,0.3); }
+/* 跑車中：紅色小條（掛在藍色計時器上方） */
+.bkm-strip { display: flex; align-items: center; gap: 7px; background: #e0342a; color: #fff; border-radius: 11px; padding: 7px 10px; box-shadow: 0 4px 12px rgba(224,52,42,0.35); font-size: 0.8rem; cursor: pointer; }
+.bkm-sdot { width: 9px; height: 9px; border-radius: 50%; background: #fff; flex: none; animation: pulse 1.2s infinite; }
+.bkm-stext { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bkm-smore { background: rgba(255,255,255,0.24); border-radius: 8px; padding: 0 5px; font-size: 0.72rem; }
+.bkm-sbtn { flex: none; width: 30px; height: 30px; border-radius: 8px; border: none; background: rgba(255,255,255,0.22); color: #fff; font-size: 0.85rem; cursor: pointer; font-family: inherit; }
+.bkm-sbtn:active { background: rgba(255,255,255,0.36); }
+@media (prefers-color-scheme: dark) {
+  .bkm-card, .bkm-strip { background: #e5453b; }
+  .bkm-more { background: #c73129; }
+}
+
 /* 預約：滿版 overlay（清單/表單共用外框） */
 /* 滿版三段式：固定頭 / 可捲身 / 固定尾（FAB） */
 .bk-overlay {

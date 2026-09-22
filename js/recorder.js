@@ -218,6 +218,7 @@
     startBtn.querySelector('.ctrl-label').textContent = '結束';
     startBtn.classList.add('recording');
     document.getElementById('rec-banner').style.display = 'flex';
+    try { global.MaptripBooking && MaptripBooking._updateOnMap && MaptripBooking._updateOnMap(); } catch (_) {}
     timerTick = setInterval(refreshRecBanner, 1000);
     M().panTo([pos.lat, pos.lng]);
     toast('行程開始！');
@@ -265,6 +266,7 @@
     startBtn.querySelector('.ctrl-label').textContent = '開始';
     startBtn.classList.remove('recording');
     document.getElementById('rec-banner').style.display = 'none';
+    try { global.MaptripBooking && MaptripBooking._updateOnMap && MaptripBooking._updateOnMap(); } catch (_) {}
 
     // 釋放螢幕常亮鎖
     const wl = ctx.getWakeLock();
@@ -413,6 +415,7 @@
     startBtn.querySelector('.ctrl-label').textContent = '結束';
     startBtn.classList.add('recording');
     document.getElementById('rec-banner').style.display = 'flex';
+    try { global.MaptripBooking && MaptripBooking._updateOnMap && MaptripBooking._updateOnMap(); } catch (_) {}
     timerTick = setInterval(refreshRecBanner, 1000);
     refreshRecBanner();
     requestWakeLock();
