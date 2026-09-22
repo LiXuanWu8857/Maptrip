@@ -44,8 +44,8 @@
     '#mt-sm.on .pill{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;' +
       'transition:opacity .2s ease,transform .34s cubic-bezier(.2,.9,.25,1.06);}' +
     // 搜尋選單開啟時淡出右側三顆 FAB：我的位置📍／指北針🧭／搜尋🔍本身（選單像從我的位置長出、畫面乾淨）
-    '#locate-btn,#compass-btn,#hotspot-btn{transition:opacity .18s ease,transform .18s ease;}' +
-    'body.mt-search-open #locate-btn,body.mt-search-open #compass-btn,body.mt-search-open #hotspot-btn' +
+    '#locate-btn,#compass-btn,#hotspot-btn,#booking-btn{transition:opacity .18s ease,transform .18s ease;}' +
+    'body.mt-search-open #locate-btn,body.mt-search-open #compass-btn,body.mt-search-open #hotspot-btn,body.mt-search-open #booking-btn' +
       '{opacity:0;transform:scale(.5);pointer-events:none;}' +
     // 展開（.on）：由下（最靠近 FAB）往上依序長出 nth-child 1→5 延遲遞增。
     '#mt-sm.on .pill:nth-child(1){transition-delay:0s;}' +

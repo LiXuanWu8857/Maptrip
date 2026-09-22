@@ -261,7 +261,7 @@ html, body {
 /* My Location FAB — Google Maps 風格右下角浮動按鈕 */
 #locate-btn {
   position: fixed;
-  bottom: 64px;
+  bottom: 176px;   /* FAB 由上而下：指北針(176) → 搜尋(120) → 預約(64) */
   right: 14px;
   width: 48px; height: 48px;
   border-radius: 14px;
@@ -311,7 +311,7 @@ html, body {
 /* 找客熱區 FAB：疊在指北針上方 */
 #hotspot-btn {
   position: fixed;
-  bottom: 176px;   /* locate(64) → compass(120) → hotspot(176) */
+  bottom: 120px;   /* 中：搜尋 */
   right: 14px;
   width: 48px; height: 48px;
   border-radius: 14px;
@@ -333,7 +333,7 @@ html, body {
 
 /* 預約 FAB：疊在搜尋鈕上方 */
 #booking-btn {
-  position: fixed; bottom: 232px; right: 14px;   /* locate64 → compass120 → hotspot176 → booking232 */
+  position: fixed; bottom: 64px; right: 14px;   /* 最下：預約（最靠近底部工具列） */
   width: 48px; height: 48px; border-radius: 14px;
   background: #fff; border: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(0,0,0,0.06);
