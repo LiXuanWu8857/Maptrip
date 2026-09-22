@@ -112,6 +112,11 @@
         ? '<button class="sync-out" style="border-color:rgba(26,115,232,0.3);background:rgba(26,115,232,0.06);color:#1a73e8" ' +
           'onclick="MaptripBackup.exportFile()">⬇️ 匯出備份（存成 JSON 檔）</button>'
         : '';
+      // 匯入備份：選 .json → 依趟 id 合併回本機/雲端，救回被刪的行程（含路線）
+      const importBtn = (window.MaptripImport)
+        ? '<button class="sync-out" style="border-color:rgba(52,168,83,0.3);background:rgba(52,168,83,0.06);color:#188038" ' +
+          'onclick="MaptripImport.pickFile()">📥 匯入備份（救回被刪的行程）</button>'
+        : '';
       // 換日整理（可重複、自動偵測）：只要還有凌晨趟卡在前一天就顯示按鈕（含待搬趟數）；
       // 整理乾淨(0 趟)才隱藏。做過(有快照)則另給還原逃生鈕。
       let migrateBtn = '';
@@ -129,6 +134,7 @@
       }
       actEl.innerHTML = accHtml +
         backupBtn +
+        importBtn +
         migrateBtn +
         '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
         '<button class="sync-out" ' +

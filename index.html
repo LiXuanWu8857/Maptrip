@@ -516,6 +516,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/day-boundary.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 資料備份/還原（遷移前先匯出保存）：讀 loadTrips/MaptripSync -->
 <script>document.write('<scr' + 'ipt src="js/backup.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 匯入備份（依趟 id 合併回本機/雲端、解墓碑救回被刪行程）：讀 loadTrips/serializeTrip/MaptripSync -->
+<script>document.write('<scr' + 'ipt src="js/import-backup.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 換日一次性遷移（範圍 B，把主鍵改真實日曆日）：依賴 day-boundary/backup/sync -->
 <script>document.write('<scr' + 'ipt src="js/migrate-day.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 刪除回收桶（24h 可復原）：storage.removeTripFromStorage 會呼叫 push；還原用 sync.undeleteId -->
