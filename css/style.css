@@ -391,13 +391,22 @@ html, body {
 
 /* 預約卡 */
 .bk-card {
-  background: #fff; border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
-  border: 1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  background: #fff; border-radius: 14px; margin-bottom: 10px; overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
-.bk-card.confirmed { background: rgba(52,168,83,0.06); border-color: rgba(52,168,83,0.25); }
-.bk-card.done, .bk-card.cancelled { opacity: 0.7; }
-.bk-crow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.bk-time { font-size: 1.3rem; font-weight: 700; color: #202124; font-variant-numeric: tabular-nums; }
+.bk-card.confirmed { border-color: rgba(52,168,83,0.35); }
+.bk-card.soon { border-color: rgba(181,125,18,0.4); }
+.bk-card.done, .bk-card.cancelled { opacity: 0.75; }
+/* 時間帶（兩段式上段，帶底色）；白底身 .bk-body2 */
+.bk-dt { display: flex; align-items: center; gap: 12px; padding: 11px 13px; background: #f5f3ef; border-bottom: 1px solid rgba(0,0,0,0.05); }
+.bk-card.soon .bk-dt { background: #fbf0d8; }
+.bk-card.confirmed .bk-dt { background: rgba(52,168,83,0.12); }
+.bk-dtmid { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.bk-day { font-size: 0.82rem; font-weight: 700; color: #3c4043; }
+.bk-sub { font-size: 0.72rem; color: #9aa0a6; }
+.bk-body2 { padding: 11px 13px; }
+.bk-time { font-size: 1.7rem; font-weight: 800; color: #202124; letter-spacing: .5px; line-height: 1; font-variant-numeric: tabular-nums; }
+.bk-card.soon .bk-time { color: #b06000; }
 .bk-pill { font-size: 0.74rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
 .bk-pill.pending   { background: rgba(251,188,4,0.18); color: #b06000; }
 .bk-pill.confirmed { background: rgba(52,168,83,0.16); color: #1e8e3e; }
@@ -461,8 +470,13 @@ textarea.bk-in { resize: vertical; }
   .bk-title { color: #e8eaed; }
   .bk-x { background: #2a2a2a; color: #9aa0a6; }
   .bk-card { background: #1e1e1e; border-color: rgba(255,255,255,0.07); }
-  .bk-card.confirmed { background: rgba(52,168,83,0.1); border-color: rgba(52,168,83,0.3); }
+  .bk-card.confirmed { border-color: rgba(52,168,83,0.4); }
+  .bk-dt { background: #262320; border-bottom-color: rgba(255,255,255,0.06); }
+  .bk-card.soon .bk-dt { background: #3a2f18; }
+  .bk-card.confirmed .bk-dt { background: rgba(52,168,83,0.16); }
+  .bk-day { color: #c7ccd1; }
   .bk-time { color: #e8eaed; }
+  .bk-card.soon .bk-time { color: #e6b552; }
   .bk-who { color: #c7ccd1; }
   .bk-stop { color: #e8eaed; }
   .bk-note { background: #262626; color: #c7ccd1; border-color: rgba(255,255,255,0.1); }

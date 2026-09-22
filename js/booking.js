@@ -217,6 +217,24 @@
 
   function toggleDay(k) { _collapsed[k] = !_collapsed[k]; _renderList(); }
 
+  // 卡片時間帶用：日期標籤（今天/明天/日期 · 週X）
+  function _dayLabelShort(ms, now) {
+    var d = new Date(ms); now = now || Date.now();
+    var wd = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+    var dk = _dayKey(ms), tk = _dayKey(now), tmr = _dayKey(now + 86400000);
+    var rel = dk === tk ? '今天' : (dk === tmr ? '明天' : ((d.getMonth() + 1) + '/' + d.getDate()));
+    return rel + ' · 週' + wd;
+  }
+  // 倒數副標：24 小時內才顯示「還有 N 小時 M 分」
+  function _relSub(ms, now) {
+    now = now || Date.now();
+    var diff = ms - now;
+    if (diff < 0) return '已過時間';
+    if (diff > 86400000) return '';
+    var mins = Math.round(diff / 60000), h = Math.floor(mins / 60), m = mins % 60;
+    return h > 0 ? ('還有 ' + h + ' 小時' + (m ? ' ' + m + ' 分' : '')) : ('還有 ' + m + ' 分');
+  }
+
   function _cardHtml(b) {
     var sm = _statusMeta(b.status);
     var who = [b.name, b.lineName ? ('LINE:' + b.lineName) : ''].filter(Boolean).join('　');
@@ -238,11 +256,20 @@
       '<button onclick="MaptripBooking.openForm(\'' + b.id + '\')">✏️ 編輯</button>' +
       (b.status === 'pending' ? '<button class="bk-ok" onclick="MaptripBooking.markConfirmed(\'' + b.id + '\')">✓ 標記已確認</button>' : '') +
       '</div>';
-    return '<div class="bk-card ' + sm.cls + '">' +
-      '<div class="bk-crow"><span class="bk-time">' + _fmtTime(b.pickupTime) + '</span>' +
-      '<span class="bk-pill ' + sm.cls + '">' + sm.label + '</span></div>' +
+    var now = Date.now();
+    var soon = (b.status === 'pending' && b.pickupTime > now && b.pickupTime - now <= 12 * 3600000);
+    var sub = _relSub(b.pickupTime, now);
+    return '<div class="bk-card ' + sm.cls + (soon ? ' soon' : '') + '">' +
+      '<div class="bk-dt">' +
+        '<span class="bk-time">' + _fmtTime(b.pickupTime) + '</span>' +
+        '<div class="bk-dtmid"><span class="bk-day">' + _dayLabelShort(b.pickupTime, now) + '</span>' +
+        (sub ? '<span class="bk-sub">' + sub + '</span>' : '') + '</div>' +
+        '<span class="bk-pill ' + sm.cls + '">' + sm.label + '</span>' +
+      '</div>' +
+      '<div class="bk-body2">' +
       (who ? '<div class="bk-who">' + _esc(who) + '</div>' : '') +
-      route + noteBox + reminders + confirmLine + navBtn + btns + '</div>';
+      route + noteBox + reminders + confirmLine + navBtn + btns +
+      '</div></div>';
   }
 
   function _renderList() {
