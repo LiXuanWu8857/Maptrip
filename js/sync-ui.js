@@ -106,7 +106,10 @@
         + '<br><span class="sync-hint">雲端：' + c.days + ' 天　' + c.trips + ' 趟'
         + '　本機：' + (TripStore.bytes() / 1048576).toFixed(1) + ' MB（' + TripStore.mode() + '）</span>';
       // 「允許記帳者修改車資」開關已移到「記帳者」面板的『授權我的記帳者』區（語意相符處），此處不再放。
-      // 已記住的其他帳號 → 一鍵切換（免密碼，若有存密碼）
+      // 面板改成三個可收合區塊（使用者指定）：切換帳號 / 資料 / 登出。
+      //   ① 切換帳號：顯示目前登入帳號 + 已記住的其他帳號（一鍵切換）
+      //   ② 資料：匯出 / 匯入 / 換日整理 / 清除本機並重抓雲端
+      //   ③ 登出：直接動作，不收合
       const accHtml = (window.MaptripAccounts) ? MaptripAccounts.accountsHtml(true) : '';
       const backupBtn = (window.MaptripBackup)
         ? '<button class="sync-out" style="border-color:rgba(26,115,232,0.3);background:rgba(26,115,232,0.06);color:#1a73e8" ' +
@@ -132,15 +135,47 @@
             '↩︎ 還原換日整理前</button>';
         }
       }
-      actEl.innerHTML = accHtml +
-        backupBtn +
-        importBtn +
-        migrateBtn +
-        '<button class="sync-out" onclick="MaptripSync.signOut()">登出</button>' +
-        '<button class="sync-out" ' +
+      const resetBtn = '<button class="sync-out" ' +
         'onclick="if(confirm(\'清除這台裝置的本機行程，改從雲端重新下載？（用於：換帳號後仍看到別帳號的行程）\'))MaptripSync.resetLocal()">' +
         '🧹 清除本機並重抓雲端</button>';
+
+      // ① 切換帳號區：目前帳號 + 其他已記住帳號
+      const accBody =
+        '<div class="sync-sec-cur">目前登入：<b>' + _esc(st.email || '') + '</b></div>' +
+        (accHtml || '<div class="sync-hint" style="padding:2px">沒有其他已記住的帳號（在登入頁勾「記住這個帳號」即可加入）</div>');
+      // ② 資料區
+      const dataBody = backupBtn + importBtn + migrateBtn + resetBtn;
+
+      actEl.innerHTML =
+        _section('acc', '👤 切換帳號', accBody) +
+        _section('data', '🗂 資料', dataBody) +
+        '<button class="sync-out" onclick="MaptripSync.signOut()">🚪 登出</button>';
     }
+  }
+
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // 可收合區塊：標題列（點擊展開/收合）+ 內容。開合狀態記在 _openSec，重繪後保留。
+  var _openSec = { acc: false, data: false };
+  function _section(key, title, bodyHtml) {
+    var open = !!_openSec[key];
+    return '<div class="sync-sec">' +
+      '<button class="sync-sec-h" onclick="MaptripSyncUI.toggleSyncSection(\'' + key + '\')">' +
+        '<span>' + title + '</span>' +
+        '<span class="sync-sec-chev" id="syncchev-' + key + '">' + (open ? '▾' : '▸') + '</span>' +
+      '</button>' +
+      '<div class="sync-sec-b" id="syncsec-' + key + '"' + (open ? '' : ' style="display:none"') + '>' + bodyHtml + '</div>' +
+      '</div>';
+  }
+  function toggleSyncSection(key) {
+    _openSec[key] = !_openSec[key];
+    var b = document.getElementById('syncsec-' + key);
+    var c = document.getElementById('syncchev-' + key);
+    if (b) b.style.display = _openSec[key] ? '' : 'none';
+    if (c) c.textContent = _openSec[key] ? '▾' : '▸';
   }
 
   function submitSyncLogin() {
@@ -161,7 +196,8 @@
     submitGateLogin: submitGateLogin,
     maybeAskName: maybeAskName,
     renderSyncPanel: renderSyncPanel,
-    submitSyncLogin: submitSyncLogin
+    submitSyncLogin: submitSyncLogin,
+    toggleSyncSection: toggleSyncSection
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

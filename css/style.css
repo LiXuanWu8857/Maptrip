@@ -1257,6 +1257,22 @@ html, body {
   font-family: inherit; cursor: pointer;
 }
 
+/* 同步面板可收合區塊（切換帳號 / 資料）：標題列點擊展開 */
+.sync-sec { border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; overflow: hidden; background: #fff; }
+.sync-sec-h {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 14px; border: none; background: transparent;
+  font-family: inherit; font-size: 0.92rem; font-weight: 600; color: #202124; cursor: pointer;
+}
+.sync-sec-chev { font-size: 0.8rem; color: #9aa0a6; }
+.sync-sec-b {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 4px 12px 12px; border-top: 1px solid rgba(0,0,0,0.05);
+}
+.sync-sec-b .acc-list { margin: 2px 0 0; }
+.sync-sec-cur { font-size: 0.86rem; color: #5f6368; padding: 8px 2px 2px; }
+.sync-sec-cur b { color: #202124; }
+
 /* 記住的帳號快速切換（account-switch.js） */
 .acc-list { margin: 4px 0 10px; }
 .acc-list-t { font-size: 0.76rem; color: #9aa0a6; margin: 2px 0 6px; }
@@ -1301,6 +1317,11 @@ html, body {
   .acc-row { background: #2a2a2a; border-color: rgba(255,255,255,0.08); }
   .acc-name { color: #e8eaed; }
   .acc-cur { color: #8ab4f8; }
+  .sync-sec { background: #262626; border-color: rgba(255,255,255,0.08); }
+  .sync-sec-h { color: #e8eaed; }
+  .sync-sec-b { border-top-color: rgba(255,255,255,0.06); }
+  .sync-sec-cur { color: #9aa0a6; }
+  .sync-sec-cur b { color: #e8eaed; }
 }
 
 /* 🚆 火車到站提醒彈出視窗（頂部置中，醒目） */
