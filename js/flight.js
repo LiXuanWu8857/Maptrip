@@ -138,14 +138,14 @@
     return apiGet(_fidsPath(dir)).then(function (list) { return _pick(list, flightNo, isArr ? 'arrival' : 'departure'); });
   }
 
-  // ---------- 獨立查詢視窗（選單捷徑用）：浮動視窗，可拖曳移動、浮在地圖上 ----------
+  // ---------- 獨立查詢視窗（選單捷徑用）：浮動視窗，畫面正中央、大小貼合內容 ----------
   function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function _ensureDom() {
     if (document.getElementById('flight-lookup')) return;
     var ov = document.createElement('div');
     ov.id = 'flight-lookup'; ov.style.display = 'none';
     ov.innerHTML =
-      '<div class="fl-head" id="fl-head"><span class="fl-title">✈ 航班查詢（桃園）</span>' +
+      '<div class="fl-head"><span class="fl-title">✈ 航班查詢（桃園）</span>' +
       '<button class="fl-x" onclick="MaptripFlight.closeLookup()">✕</button></div>' +
       '<div class="fl-body">' +
         '<div class="bk-flight"><div class="bk-flight-row">' +
@@ -156,31 +156,6 @@
         '<div class="bk-flight-msg">查桃園機場當天班機的航廈與時刻。航班資訊通常只有近 1–2 天。</div>' +
       '</div>';
     document.body.appendChild(ov);
-    _drag(ov, document.getElementById('fl-head'));
-  }
-  // 讓浮動視窗可用標題列拖曳（觸控走 touch＋passive:false，桌面走滑鼠）
-  function _drag(win, handle) {
-    if (!handle) return;
-    var ox = 0, oy = 0, sx = 0, sy = 0, on = false;
-    function start(x, y) {
-      on = true;
-      var r = win.getBoundingClientRect();
-      ox = r.left; oy = r.top; sx = x; sy = y;
-      win.style.transform = 'none'; win.style.left = ox + 'px'; win.style.top = oy + 'px'; win.style.right = 'auto';
-    }
-    function move(x, y) {
-      if (!on) return;
-      var maxL = (window.innerWidth || 400) - 40, maxT = (window.innerHeight || 700) - 40;
-      win.style.left = Math.max(8 - win.offsetWidth + 40, Math.min(maxL, ox + x - sx)) + 'px';
-      win.style.top = Math.max(8, Math.min(maxT, oy + y - sy)) + 'px';
-    }
-    function end() { on = false; }
-    handle.addEventListener('touchstart', function (e) { var t = e.touches[0]; if (t) start(t.clientX, t.clientY); }, { passive: true });
-    handle.addEventListener('touchmove', function (e) { var t = e.touches[0]; if (t) { move(t.clientX, t.clientY); e.preventDefault(); } }, { passive: false });
-    handle.addEventListener('touchend', end); handle.addEventListener('touchcancel', end);
-    handle.addEventListener('mousedown', function (e) { if (e.target && e.target.closest && e.target.closest('.fl-x')) return; start(e.clientX, e.clientY); e.preventDefault(); });
-    document.addEventListener('mousemove', function (e) { move(e.clientX, e.clientY); });
-    document.addEventListener('mouseup', end);
   }
   function openLookup() { _ensureDom(); var r = document.getElementById('fl-result'); if (r) r.innerHTML = ''; document.getElementById('flight-lookup').style.display = 'flex'; }
   function closeLookup() { var el = document.getElementById('flight-lookup'); if (el) el.style.display = 'none'; }

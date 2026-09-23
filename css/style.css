@@ -519,10 +519,10 @@ textarea.bk-in { resize: vertical; }
 .bk-flight-apply { padding: 9px 14px; border-radius: 10px; border: none; background: #1a73e8; color: #fff; font-size: 0.85rem; font-weight: 700; font-family: inherit; cursor: pointer; }
 .bk-flight-msg { font-size: 0.82rem; color: #9aa0a6; padding: 8px 2px; line-height: 1.5; }
 
-/* 航班查詢：浮動視窗（可拖曳、浮在地圖上、非滿版） */
+/* 航班查詢：浮動視窗（畫面正中央、大小貼合內容、浮在地圖上） */
 #flight-lookup {
-  position: fixed; left: 50%; top: 92px; transform: translateX(-50%);
-  width: min(360px, calc(100vw - 24px)); max-height: calc(100vh - 130px);
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 120px);
   background: #fff; border-radius: 16px; z-index: 65;
   box-shadow: 0 12px 40px rgba(0,0,0,0.3), 0 0 0 0.5px rgba(0,0,0,0.08);
   display: none; flex-direction: column; overflow: hidden;
@@ -530,12 +530,12 @@ textarea.bk-in { resize: vertical; }
 .fl-head {
   flex: none; display: flex; align-items: center; justify-content: space-between;
   padding: 11px 12px 11px 14px; background: #f5f3ef; border-bottom: 1px solid rgba(0,0,0,0.06);
-  cursor: move; touch-action: none; user-select: none; -webkit-user-select: none;
+  user-select: none; -webkit-user-select: none;
 }
 .fl-title { font-size: 0.98rem; font-weight: 700; color: #202124; }
 .fl-x { flex: none; width: 32px; height: 32px; border-radius: 9px; border: none; background: #e8eaed; color: #5f6368; font-size: 0.95rem; cursor: pointer; font-family: inherit; }
 .fl-x:active { background: #dcdfe3; }
-.fl-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px 14px; }
+.fl-body { flex: 0 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px 14px; }
 @media (prefers-color-scheme: dark) {
   #flight-lookup { background: #1e1e1e; box-shadow: 0 12px 40px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,255,255,0.06); }
   .fl-head { background: #262320; border-bottom-color: rgba(255,255,255,0.06); }
