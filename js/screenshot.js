@@ -355,6 +355,39 @@ function _monthWorkDays(raw, ym) {
 // 陣列 min/max（避免 Math.max(...大陣列) 在整月上千點時爆 call stack）
 function _bounds(nums) { let mn = Infinity, mx = -Infinity; for (let i = 0; i < nums.length; i++) { const v = nums[i]; if (v < mn) mn = v; if (v > mx) mx = v; } return [mn, mx]; }
 
+// ---- 區名反向地理編碼（單趟截圖用：出發/目的地的行政區）----
+// 快取在 localStorage maptrip_distcache（key＝座標小數 3 位≈100m 網格；空字串也快取避免重打）。
+// Nominatim reverse zoom=14 取行政區；台灣的「區」多落在 city_district/suburb/town。
+function _distCacheGet(k) { try { return JSON.parse(localStorage.getItem('maptrip_distcache') || '{}')[k]; } catch (_) { return undefined; } }
+function _distCacheSet(k, v) { try { const m = JSON.parse(localStorage.getItem('maptrip_distcache') || '{}'); m[k] = v; localStorage.setItem('maptrip_distcache', JSON.stringify(m)); } catch (_) {} }
+async function _districtOf(lat, lng) {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return '';
+  const key = lat.toFixed(3) + ',' + lng.toFixed(3);
+  const hit = _distCacheGet(key);
+  if (hit !== undefined) return hit;                     // 命中（含空字串）→ 不再打網路
+  try {
+    const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1' +
+      '&accept-language=zh-TW&lat=' + lat + '&lon=' + lng;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
+    if (!res.ok) throw 0;
+    const a = (await res.json()).address || {};
+    const dist = a.city_district || a.suburb || a.town || a.village || a.district || a.county || a.city || '';
+    _distCacheSet(key, dist);
+    return dist;
+  } catch (_) { return ''; }
+}
+// 地圖上的半透明膠囊標籤（置中於 cx，頂端 topY）：出發/目的地區名用。
+function _drawMapCaption(c, cx, topY, text) {
+  c.save();
+  c.font = 'bold 13px system-ui, sans-serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  const h = 24, w = c.measureText(text).width + 22;
+  _rrect(c, cx - w / 2, topY, w, h, 12);
+  c.fillStyle = 'rgba(20,20,20,0.72)'; c.fill();
+  c.fillStyle = '#ffffff'; c.fillText(text, cx, topY + h / 2 + 0.5);
+  c.restore();
+}
+
 // 單趟截圖
 async function captureSingleTripScreenshot(trip) {
   if (!trip) return;
@@ -391,6 +424,11 @@ async function captureSingleTripScreenshot(trip) {
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
+  // 出發/目的地區名（反向地理編碼，與圖磚載入並行；畫完路線後再貼標籤）
+  const _geoP = (pts.length > 1)
+    ? Promise.all([_districtOf(pts[0][0], pts[0][1]),
+                   _districtOf(pts[pts.length - 1][0], pts[pts.length - 1][1])])
+    : Promise.resolve(['', '']);
 
   if (pts.length > 1) {
     let z = 12, sc, viewX0, viewY0;
@@ -439,6 +477,13 @@ async function captureSingleTripScreenshot(trip) {
   } else {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
+
+  // 地圖上貼「出發區 → 目的區」標籤（頂端置中）；查得到才畫，同區只顯示一個
+  try {
+    const [dStart, dEnd] = await _geoP;
+    let capt = (dStart && dEnd) ? (dStart === dEnd ? dStart : dStart + ' → ' + dEnd) : (dStart || dEnd || '');
+    if (capt) _drawMapCaption(c, rX + rW / 2, rY + 10, capt);
+  } catch (_) {}
 
   // 統計：行程時間 + 里程 + 車資(選填)；時間已移到右上角
   const hasFare = !!trip.fare;
