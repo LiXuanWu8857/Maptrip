@@ -182,6 +182,20 @@
     save(b);
     if (_isListOpen()) _renderList();
   }
+  // 標記完成（縮到清單最下面的小方塊）
+  function markDone(id) {
+    var b = get(id); if (!b) return;
+    b.status = 'done'; b.doneAt = Date.now();
+    save(b);
+    if (_isListOpen()) _renderList();
+  }
+  // 還原：把已完成的拉回未完成（有確認過就回 confirmed，否則 pending）
+  function reopen(id) {
+    var b = get(id); if (!b) return;
+    b.status = b.confirmedAt ? 'confirmed' : 'pending';
+    save(b);
+    if (_isListOpen()) _renderList();
+  }
   function clear() { _list = []; try { localStorage.removeItem(KEY); } catch (_) {} _updateBadge(); try { _updateOnMap(); } catch (_) {} if (_isListOpen()) _renderList(); }
 
   // ---------- 動作 ----------
@@ -289,7 +303,11 @@
     try { if (global.startTrip) global.startTrip(); } catch (_) {}
     try { _updateOnMap(); } catch (_) {}
   }
-  function endFromMap() { try { if (global.endTrip) global.endTrip(); } catch (_) {} }
+  function endFromMap() {
+    // 從預約開始的行程結束 → 該筆自動標記完成（縮到清單最下面）
+    if (_activeBookingId) { var b = get(_activeBookingId); if (b && b.status !== 'cancelled') { b.status = 'done'; b.doneAt = Date.now(); save(b); } }
+    try { if (global.endTrip) global.endTrip(); } catch (_) {}
+  }
   // 跑車中：縮成一小條紅字（掛在藍色計時器上方）
   function _stripHtml(b, total) {
     var name = b.name || b.lineName || '預約';
@@ -417,6 +435,7 @@
       (b.status === 'pending' ? '<button onclick="MaptripBooking.shareConfirm(\'' + b.id + '\')">📤 傳確認</button>' : '') +
       '<button onclick="MaptripBooking.openForm(\'' + b.id + '\')">✏️ 編輯</button>' +
       (b.status === 'pending' ? '<button class="bk-ok" onclick="MaptripBooking.markConfirmed(\'' + b.id + '\')">✓ 標記已確認</button>' : '') +
+      ((b.status === 'pending' || b.status === 'confirmed') ? '<button class="bk-done-btn" onclick="MaptripBooking.markDone(\'' + b.id + '\')">🏁 完成</button>' : '') +
       '</div>';
     var now = Date.now();
     var soon = (b.status === 'pending' && b.pickupTime > now && b.pickupTime - now <= 12 * 3600000);
@@ -434,12 +453,31 @@
       '</div></div>';
   }
 
+  // 已完成的小方塊（一行、淡化）：排在清單最下面
+  function _doneMiniHtml(b) {
+    var t = new Date(b.pickupTime);
+    var md = (t.getMonth() + 1) + '/' + t.getDate();
+    var name = b.name || b.lineName || '';
+    var where = (b.pickup && b.pickup.text) ? b.pickup.text : '';
+    var who = [name, where].filter(Boolean).join(' · ');
+    return '<div class="bk-mini" onclick="MaptripBooking.openForm(\'' + b.id + '\')">' +
+      '<span class="bk-mini-tick">🏁</span>' +
+      '<span class="bk-mini-dt">' + md + ' ' + _fmtTime(b.pickupTime) + '</span>' +
+      '<span class="bk-mini-who">' + _esc(who) + '</span>' +
+      '<button class="bk-mini-x" onclick="event.stopPropagation();MaptripBooking.reopen(\'' + b.id + '\')" title="還原">↩</button>' +
+      '</div>';
+  }
+
   function _renderList() {
     _ensureListDom();
     var body = document.getElementById('bk-list-body');
-    var groups = _byDay(_list, Date.now());
-    if (!groups.length) { body.innerHTML = '<div class="bk-empty">目前沒有預約<br>點右下角「＋ 新增預約」開始</div>'; return; }
-    body.innerHTML = groups.map(function (g) {
+    // 未完成（含 cancelled）走日期分組、由近至遠；已完成縮成小方塊、排最下面、由遠至近
+    var active = _list.filter(function (b) { return b && b.status !== 'done'; });
+    var done = _list.filter(function (b) { return b && b.status === 'done'; })
+                    .sort(function (a, b) { return a.pickupTime - b.pickupTime; });
+    var groups = _byDay(active, Date.now());
+    if (!groups.length && !done.length) { body.innerHTML = '<div class="bk-empty">目前沒有預約<br>點右下角「＋ 新增預約」開始</div>'; return; }
+    var html = groups.map(function (g) {
       var collapsed = !g.isToday && _collapsed[g.day];
       var arrow = g.isToday ? '' : '<span class="bk-arrow">' + (collapsed ? '▸' : '▾') + '</span>';
       var head = '<div class="bk-dhead"' + (g.isToday ? '' : ' onclick="MaptripBooking.toggleDay(\'' + g.day + '\')"') + '>' +
@@ -447,6 +485,11 @@
       var cards = collapsed ? '' : g.items.map(_cardHtml).join('');
       return '<div class="bk-group">' + head + cards + '</div>';
     }).join('');
+    if (done.length) {
+      html += '<div class="bk-done-sec"><div class="bk-done-head">🏁 已完成（' + done.length + '）</div>' +
+        done.map(_doneMiniHtml).join('') + '</div>';
+    }
+    body.innerHTML = html;
   }
 
   // ---------- UI：滿版表單 ----------
@@ -674,7 +717,7 @@
 
   global.MaptripBooking = {
     init: init, open: open, close: close, openForm: openForm, closeForm: closeForm,
-    save: save, remove: remove, markConfirmed: markConfirmed, clear: clear, set: set,
+    save: save, remove: remove, markConfirmed: markConfirmed, markDone: markDone, reopen: reopen, clear: clear, set: set,
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
     navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
     openFromMap: openFromMap, startFromMap: startFromMap, endFromMap: endFromMap,

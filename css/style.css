@@ -487,6 +487,16 @@ html, body {
   font-family: inherit; cursor: pointer;
 }
 .bk-acts button.bk-ok { background: #34a853; color: #fff; border-color: #34a853; }
+.bk-acts button.bk-done-btn { background: rgba(26,115,232,0.08); color: #1a73e8; border-color: rgba(26,115,232,0.3); }
+/* 已完成區：小方塊、淡化、排在清單最下面 */
+.bk-done-sec { margin-top: 10px; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 8px; }
+.bk-done-head { font-size: 0.8rem; font-weight: 700; color: #9aa0a6; padding: 4px 4px 8px; }
+.bk-mini { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px; padding: 8px 10px; margin-bottom: 6px; opacity: 0.72; cursor: pointer; }
+.bk-mini:active { opacity: 0.9; }
+.bk-mini-tick { flex: none; font-size: 0.9rem; }
+.bk-mini-dt { flex: none; font-size: 0.8rem; color: #5f6368; font-variant-numeric: tabular-nums; }
+.bk-mini-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.84rem; color: #3c4043; }
+.bk-mini-x { flex: none; border: none; background: #f1f3f4; color: #5f6368; border-radius: 8px; padding: 4px 9px; font-size: 0.85rem; cursor: pointer; font-family: inherit; }
 
 /* 表單 */
 .bk-lbl { display: block; font-size: 0.8rem; color: #5f6368; margin: 12px 2px 5px; font-weight: 600; }
@@ -576,6 +586,11 @@ textarea.bk-in { resize: vertical; }
   .bk-chip.rem { background: rgba(138,180,248,0.14); color: #8ab4f8; }
   .bk-acts button { background: #262626; color: #8ab4f8; border-color: rgba(255,255,255,0.12); }
   .bk-acts button.bk-ok { background: #34a853; color: #fff; }
+  .bk-acts button.bk-done-btn { background: rgba(138,180,248,0.14); color: #8ab4f8; border-color: rgba(138,180,248,0.35); }
+  .bk-done-sec { border-top-color: rgba(255,255,255,0.08); }
+  .bk-mini { background: #1e1e1e; border-color: rgba(255,255,255,0.07); }
+  .bk-mini-who { color: #c7ccd1; }
+  .bk-mini-x { background: #2a2a2a; color: #9aa0a6; }
   .bk-in { background: #1e1e1e; color: #e8eaed; border-color: rgba(255,255,255,0.15); }
   .bk-lbl { color: #9aa0a6; }
 }
