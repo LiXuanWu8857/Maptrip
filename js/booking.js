@@ -25,6 +25,7 @@
   var ONMAP_WIN = 30 * 60000; // 地圖橫幅：預約時間剩 ≤30 分才出現
   var ONMAP_GRACE = 15 * 60000; // 過時 15 分內仍顯示（司機可能晚到）
   var _onmapSig = '';         // 地圖橫幅內容簽章，內容沒變就不重畫（避免每 30 秒閃）
+  var _activeBookingId = null; // 從地圖橫幅按「開始」啟動的那筆預約 id（跑車中卡片沿用其資料）
 
   // ---------- 純函式（供測試） ----------
   function _pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -227,7 +228,8 @@
     return el;
   }
   function _elShown(id) { var e = document.getElementById(id); return !!e && e.style.display !== 'none'; }
-  function _isRecording() { var rb = document.getElementById('rec-banner'); return !!rb && rb.style.display && rb.style.display !== 'none'; }
+  // 跑車判定用「開始鈕的 recording class」（rec-banner 會被我們藏起來，不能拿它當訊號）
+  function _isRecording() { var b = document.getElementById('start-btn'); return !!b && b.classList.contains('recording'); }
   // 主頁以外（清單/表單開著、單趟或全日預覽、熱區面板、底部 sheet）不顯示
   function _onMapBlocked() {
     return _elShown('bk-list') || _elShown('bk-form') || _elShown('solo-bar') ||
@@ -246,11 +248,48 @@
     var dests = _destsOf(b);
     var dest = dests.length ? '<div class="bkm-line"><span class="ic">🏁</span><span class="tx">' + _esc(dests[dests.length - 1].text) + '</span></div>' : '';
     var note = b.note ? '<div class="bkm-note">📝 ' + _esc(b.note) + '</div>' : '';
+    var startBtn = '<div class="bkm-idleacts"><button class="bkm-start" onclick="event.stopPropagation();MaptripBooking.startFromMap(\'' + b.id + '\')">▶ 開始行程</button></div>';
     return '<div class="bkm-card" onclick="MaptripBooking.openFromMap(\'' + b.id + '\')">' +
       '<div class="bkm-r1"><span class="bkm-when">' + _onmapWhen(b) + '</span>' +
       '<span class="bkm-name">' + _esc(name) + '</span>' + _actsHtml(b) + '</div>' +
-      pickup + dest + note + '</div>';
+      pickup + dest + note + startBtn + '</div>';
   }
+  // 跑車中（從此預約開始）：整卡改藍色，保留預約資料，加上即時時間/距離＋已抵達
+  function _recCardHtml(b) {
+    var name = b.name || b.lineName || '預約';
+    var pickup = (b.pickup && b.pickup.text) ? '<div class="bkm-line"><span class="ic">📍</span><span class="tx">' + _esc(b.pickup.text) + '</span></div>' : '';
+    var dests = _destsOf(b);
+    var dest = dests.length ? '<div class="bkm-line"><span class="ic">🏁</span><span class="tx">' + _esc(dests[dests.length - 1].text) + '</span></div>' : '';
+    var note = b.note ? '<div class="bkm-note">📝 ' + _esc(b.note) + '</div>' : '';
+    return '<div class="bkm-card rec">' +
+      '<div class="bkm-r1">' +
+        '<span class="bkm-recinfo"><span class="bkm-rdot"></span>' +
+        '<b class="bkm-rt">00:00</b><span class="bkm-rd">0 m</span></span>' +
+        '<span class="bkm-name">' + _esc(name) + '</span></div>' +
+      pickup + dest + note +
+      '<div class="bkm-recacts">' +
+        (b.phone ? '<button class="bkm-rbtn" onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
+        '<button class="bkm-rbtn" onclick="MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航</button>' +
+        '<button class="bkm-end" onclick="MaptripBooking.endFromMap()">已抵達 ✓</button>' +
+      '</div></div>';
+  }
+  // 每秒由 refreshRecBanner 呼叫：把計時器的時間/距離鏡射進跑車卡
+  function _syncRecInfo() {
+    var wrap = document.getElementById('bk-onmap'); if (!wrap) return;
+    var rt = wrap.querySelector('.bkm-rt'), rd = wrap.querySelector('.bkm-rd');
+    if (!rt && !rd) return;
+    var t = document.getElementById('rec-time'), d = document.getElementById('rec-dist');
+    if (rt && t) rt.textContent = t.textContent;
+    if (rd && d) rd.textContent = d.textContent;
+  }
+  // 從地圖橫幅按「開始」→ 記住這筆、啟動 App 的 startTrip（沿用 GPS 品質閘門等既有流程）
+  function startFromMap(id) {
+    if (_isRecording()) { _toast('行程記錄中，請先結束'); return; }
+    _activeBookingId = id;
+    try { if (global.startTrip) global.startTrip(); } catch (_) {}
+    try { _updateOnMap(); } catch (_) {}
+  }
+  function endFromMap() { try { if (global.endTrip) global.endTrip(); } catch (_) {} }
   // 跑車中：縮成一小條紅字（掛在藍色計時器上方）
   function _stripHtml(b, total) {
     var name = b.name || b.lineName || '預約';
@@ -269,23 +308,46 @@
     var el = _ensureOnMapDom();
     if (_onMapBlocked()) { el.style.display = 'none'; _onmapSig = ''; return; }
     var now = Date.now();
+    var rec = _isRecording();
+    var rb = document.getElementById('rec-banner');
+    if (!rec) _activeBookingId = null;   // 沒在跑車就清掉「開始的那筆」
+
+    // (A) 跑車中，且行程是從某筆預約按「開始」啟動的 → 整卡改藍、併入時間/距離、藏掉原藍條
+    if (rec && _activeBookingId) {
+      var active = get(_activeBookingId);
+      if (active && active.status !== 'done' && active.status !== 'cancelled') {
+        var sigA = 'REC|' + active.id;   // 時間/距離另由 _syncRecInfo 每秒更新，不進簽章
+        if (sigA !== _onmapSig) { el.innerHTML = _recCardHtml(active); _onmapSig = sigA; }
+        if (rb) rb.style.display = 'none';
+        el.style.bottom = '64px';
+        _syncRecInfo();
+        if (el.style.display !== 'block') el.style.display = 'block';
+        return;
+      }
+      _activeBookingId = null;   // 那筆不見了/被取消 → 退回一般行為
+    }
+
     var due = _dueOnMap(_list, now);
     if (!due.length) { if (el.style.display !== 'none') el.style.display = 'none'; el.innerHTML = ''; _onmapSig = ''; return; }
-    var rec = _isRecording();
-    // 內容簽章：狀態＋各筆 id＋分鐘倒數，沒變就不重畫（避免每 30 秒重繪閃動）
-    var sig = (rec ? 'R|' : 'F|') + due.map(function (b) { return b.id + '@' + Math.round((b.pickupTime - now) / 60000); }).join(',');
+
+    // (B) 跑車中但不是從預約開始 → 原藍條照顯示、預約縮成小條掛上方
     if (rec) {
-      if (sig !== _onmapSig) { el.innerHTML = _stripHtml(due[0], due.length); }
-      var rb = document.getElementById('rec-banner');
-      el.style.bottom = (64 + (rb ? rb.offsetHeight : 48) + 8) + 'px';   // 疊在計時器上方
-    } else {
-      if (sig !== _onmapSig) {
-        el.innerHTML = due.slice(0, 2).map(_mapCardHtml).join('') +
-          (due.length > 2 ? '<div class="bkm-more">＋ 還有 ' + (due.length - 2) + ' 筆在 30 分內</div>' : '');
-      }
-      el.style.bottom = '64px';
+      if (rb) rb.style.display = 'flex';
+      var sigB = 'STRIP|' + due[0].id + '@' + Math.round((due[0].pickupTime - now) / 60000) + '/' + due.length;
+      if (sigB !== _onmapSig) { el.innerHTML = _stripHtml(due[0], due.length); _onmapSig = sigB; }
+      el.style.bottom = (64 + (rb ? rb.offsetHeight : 48) + 8) + 'px';
+      if (el.style.display !== 'block') el.style.display = 'block';
+      return;
     }
-    _onmapSig = sig;
+
+    // (C) 閒置 → 完整紅卡（最多 2 張＋「還有 N 筆」）
+    var sigC = 'IDLE|' + due.map(function (b) { return b.id + '@' + Math.round((b.pickupTime - now) / 60000); }).join(',');
+    if (sigC !== _onmapSig) {
+      el.innerHTML = due.slice(0, 2).map(_mapCardHtml).join('') +
+        (due.length > 2 ? '<div class="bkm-more">＋ 還有 ' + (due.length - 2) + ' 筆在 30 分內</div>' : '');
+      _onmapSig = sigC;
+    }
+    el.style.bottom = '64px';
     if (el.style.display !== 'block') el.style.display = 'block';
   }
 
@@ -615,10 +677,10 @@
     save: save, remove: remove, markConfirmed: markConfirmed, clear: clear, set: set,
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
     navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
-    openFromMap: openFromMap,
+    openFromMap: openFromMap, startFromMap: startFromMap, endFromMap: endFromMap,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
     _addDest: _addDest, _rmDest: _rmDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
-    _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap,
+    _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap, _syncRecInfo: _syncRecInfo,
     // 純函式（測試）
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
     _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,

@@ -376,9 +376,26 @@ html, body {
 .bkm-smore { background: rgba(255,255,255,0.24); border-radius: 8px; padding: 0 5px; font-size: 0.72rem; }
 .bkm-sbtn { flex: none; width: 30px; height: 30px; border-radius: 8px; border: none; background: rgba(255,255,255,0.22); color: #fff; font-size: 0.85rem; cursor: pointer; font-family: inherit; }
 .bkm-sbtn:active { background: rgba(255,255,255,0.36); }
+/* 閒置卡的「開始行程」鈕（白底紅字） */
+.bkm-idleacts { margin-top: 8px; }
+.bkm-start { width: 100%; box-sizing: border-box; padding: 9px; border: none; border-radius: 10px; background: #fff; color: #d0271d; font-size: 0.9rem; font-weight: 800; font-family: inherit; cursor: pointer; }
+.bkm-start:active { background: rgba(255,255,255,0.85); }
+/* 跑車中卡：整卡改藍、保留預約資料、加即時時間/距離 */
+.bkm-card.rec { background: #1a73e8; box-shadow: 0 6px 18px rgba(26,115,232,0.4); }
+.bkm-recinfo { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; }
+.bkm-rdot { width: 9px; height: 9px; border-radius: 50%; background: #ff5b5b; flex: none; animation: pulse 1.2s infinite; }
+.bkm-rt { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bkm-rd { font-size: 0.8rem; opacity: 0.92; font-variant-numeric: tabular-nums; }
+.bkm-recacts { display: flex; gap: 8px; margin-top: 9px; }
+.bkm-rbtn { flex: 1; padding: 9px 6px; border: none; border-radius: 10px; background: rgba(255,255,255,0.22); color: #fff; font-size: 0.84rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+.bkm-rbtn:active { background: rgba(255,255,255,0.34); }
+.bkm-end { flex: 1.2; padding: 9px 6px; border: none; border-radius: 10px; background: #fff; color: #1a73e8; font-size: 0.86rem; font-weight: 800; font-family: inherit; cursor: pointer; }
+.bkm-end:active { opacity: 0.85; }
 @media (prefers-color-scheme: dark) {
   .bkm-card, .bkm-strip { background: #e5453b; }
   .bkm-more { background: #c73129; }
+  .bkm-card.rec { background: #1b6fd6; box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
+  .bkm-end { background: #e8eaed; color: #1b6fd6; }
 }
 
 /* 預約：滿版 overlay（清單/表單共用外框） */

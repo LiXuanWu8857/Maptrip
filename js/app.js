@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.388';
+const APP_VERSION  = '1.1.389';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -897,6 +897,7 @@ function refreshRecBanner() {
   const dist    = activeDist();
   document.getElementById('rec-time').textContent = fmtDur(elapsed);
   document.getElementById('rec-dist').textContent = fmtDist(dist);
+  try { window.MaptripBooking && MaptripBooking._syncRecInfo && MaptripBooking._syncRecInfo(); } catch (_) {}
   liveAct()?.updateTrip({ elapsed: Math.floor(elapsed / 1000), distance: Math.round(dist) });
 }
 
