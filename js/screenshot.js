@@ -377,14 +377,23 @@ async function _districtOf(lat, lng) {
   } catch (_) { return ''; }
 }
 // 地圖上的半透明膠囊標籤（置中於 cx，頂端 topY）：出發/目的地區名用。
-function _drawMapCaption(c, cx, topY, text) {
+// 在某個地圖上的點（px,py）旁貼一個區名膠囊；自動夾在地圖框內、避免超出邊界
+function _drawPointLabel(c, px, py, text, dotColor, rX, rY, rW, rH) {
+  if (!text) return;
   c.save();
-  c.font = 'bold 13px system-ui, sans-serif';
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  const h = 24, w = c.measureText(text).width + 22;
-  _rrect(c, cx - w / 2, topY, w, h, 12);
-  c.fillStyle = 'rgba(20,20,20,0.72)'; c.fill();
-  c.fillStyle = '#ffffff'; c.fillText(text, cx, topY + h / 2 + 0.5);
+  c.font = 'bold 12px system-ui, sans-serif';
+  c.textAlign = 'left'; c.textBaseline = 'middle';
+  const padX = 8, h = 22, tw = c.measureText(text).width, w = tw + padX * 2;
+  // 預設貼在點的右上方；若右邊會超出就改貼左邊
+  let bx = px + 10, by = py - h - 8;
+  if (bx + w > rX + rW - 4) bx = px - 10 - w;      // 右邊放不下 → 移到左邊
+  if (bx < rX + 4) bx = rX + 4;                     // 仍超左 → 夾住
+  if (by < rY + 4) by = py + 8;                      // 上方放不下 → 移到點下方
+  if (by + h > rY + rH - 4) by = rY + rH - 4 - h;
+  _rrect(c, bx, by, w, h, 11);
+  c.fillStyle = 'rgba(20,20,20,0.78)'; c.fill();
+  c.fillStyle = dotColor || '#ffffff';
+  c.fillText(text, bx + padX, by + h / 2 + 0.5);
   c.restore();
 }
 
@@ -424,6 +433,7 @@ async function captureSingleTripScreenshot(trip) {
 
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
+  let sPix = null, ePix = null;   // 起/迄點在畫布上的座標（畫完路線後貼區名標籤用）
   // 出發/目的地區名（反向地理編碼，與圖磚載入並行；畫完路線後再貼標籤）
   const _geoP = (pts.length > 1)
     ? Promise.all([_districtOf(pts[0][0], pts[0][1]),
@@ -471,18 +481,26 @@ async function captureSingleTripScreenshot(trip) {
     c.moveTo(sx0, sy0);
     pts.slice(1).forEach(p => { const [px, py] = wp2c(p[0], p[1]); c.lineTo(px, py); });
     c.strokeStyle = '#4fc3f7'; c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke();
-    c.beginPath(); c.arc(sx0, sy0, 5, 0, Math.PI * 2);
-    c.fillStyle = '#4fc3f7'; c.fill();
+    const [ex0, ey0] = wp2c(pts[pts.length - 1][0], pts[pts.length - 1][1]);
+    // 起點（綠）
+    c.beginPath(); c.arc(sx0, sy0, 5.5, 0, Math.PI * 2);
+    c.fillStyle = '#34d058'; c.fill();
+    c.lineWidth = 2; c.strokeStyle = '#ffffff'; c.stroke();
+    // 迄點（紅）
+    c.beginPath(); c.arc(ex0, ey0, 5.5, 0, Math.PI * 2);
+    c.fillStyle = '#ff5252'; c.fill();
+    c.lineWidth = 2; c.strokeStyle = '#ffffff'; c.stroke();
     c.restore();
+    sPix = [sx0, sy0]; ePix = [ex0, ey0];
   } else {
     c.fillStyle = '#1a2035'; _rrect(c, rX, rY, rW, rH, 14); c.fill();
   }
 
-  // 地圖上貼「出發區 → 目的區」標籤（頂端置中）；查得到才畫，同區只顯示一個
+  // 在起/迄點旁直接貼區名（使用者要求：區名直接出現在出發點和結束點旁邊）
   try {
     const [dStart, dEnd] = await _geoP;
-    let capt = (dStart && dEnd) ? (dStart === dEnd ? dStart : dStart + ' → ' + dEnd) : (dStart || dEnd || '');
-    if (capt) _drawMapCaption(c, rX + rW / 2, rY + 10, capt);
+    if (sPix && dStart) _drawPointLabel(c, sPix[0], sPix[1], dStart, '#7fffa0', rX, rY, rW, rH);
+    if (ePix && dEnd)   _drawPointLabel(c, ePix[0], ePix[1], dEnd, '#ff9b9b', rX, rY, rW, rH);
   } catch (_) {}
 
   // 統計：行程時間 + 里程 + 車資(選填)；時間已移到右上角

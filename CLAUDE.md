@@ -366,11 +366,15 @@
 - **歷史行程**：月/日收合清單、日預覽（白底黑線＋編號）、回放、刪除、休息時間設定
 - **回放**：今日或歷史日，鏡頭跟隨、速度調整；回放中所有自動運鏡讓路
 - **截圖**：單趟/全日，含日期時間、金額、「其他」顯示備註；分享／儲存合一
-  - **單趟截圖顯示出發/目的地區名（v1.1.391）** `screenshot.js`：`captureSingleTripScreenshot` 在地圖頂端貼半透明膠囊
-    「出發區 → 目的區」（同區只顯一個、查不到就不畫）。`_districtOf(lat,lng)` 反向地理編碼（Nominatim reverse
-    `zoom=14&accept-language=zh-TW`，取 `city_district/suburb/town/village/district/county/city`），快取
-    localStorage `maptrip_distcache`（key＝座標小數 3 位≈100m，含空字串快取避免重打）；與圖磚載入並行、畫完路線後貼標籤。
-    純繪製 `_drawMapCaption`。驗證：Playwright 實算單趟卡「中山區 → 松山區」膠囊正確、零 pageerror。
+  - **單趟截圖顯示出發/目的地區名（v1.1.391；v1.1.392 改貼在起迄點旁）** `screenshot.js`：`captureSingleTripScreenshot`
+    反向地理編碼查出發/目的地區名，**直接貼在地圖上的起點與迄點旁邊**（使用者要求：不要頂端一條膠囊，要區名直接出現在
+    出發點和結束點旁）。起點畫**綠色**圓點＋綠字膠囊、迄點畫**紅色**圓點＋紅字膠囊（路線仍藍色）。`_drawPointLabel(c,px,py,
+    text,dotColor,rX,rY,rW,rH)` 純繪製：預設貼點的右上，右邊放不下就翻左、上方放不下就翻下、一律夾在地圖框內不溢出。
+    `_districtOf(lat,lng)` 反向地理編碼（Nominatim reverse `zoom=14&accept-language=zh-TW`，取
+    `city_district/suburb/town/village/district/county/city`），快取 localStorage `maptrip_distcache`（key＝座標小數
+    3 位≈100m，含空字串快取避免重打）；與圖磚載入並行、畫完路線後貼標籤（`sPix/ePix` 起迄畫布座標）。查不到該端就不畫該標。
+    v391 曾用頂端置中膠囊 `_drawMapCaption`（已棄用、函式移除）。驗證：Playwright 實算單趟卡起點「中山區」（綠）、
+    迄點「松山區」（紅）標籤位置正確、零 pageerror。
 - **月結截圖（v1.1.349，v1.1.350 修數字）** `screenshot.js` `captureMonthScreenshot(ym, stats)`：歷史「每月」標題列
   加「📷 月結」鈕。畫當月所有載客路線（單色半透明疊加＝跑車熱度感、趟數多不編號）＋右上角「XXXX年X月」＋當月總金額
   （hero 綠字）＋三欄總工時/出車天數/平均時薪＋底部趟數·里程。重用截圖引擎的 canvas 工具＋預覽/分享基礎設施。
