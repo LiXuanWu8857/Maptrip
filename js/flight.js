@@ -7,8 +7,8 @@
  * Phase 1 只做查詢（不做延誤提醒）。只桃園 TPE。
  *
  * 注意（沙箱測不到、需實機驗）：①Worker 若只白名單放行 Rail 路徑，Air 會被擋
- *   →要在 Cloudflare 端讓 Worker 放行 /v1/Air/*。②TDX Air FIDS 欄位以官方文件為準，
- *   實機跑一次確認欄位名對得上。
+ *   →要在 Cloudflare 端讓 Worker 放行 /v2/Air/*。②TDX Air FIDS 端點＝v2
+ *   （/v2/Air/FIDS/Airport/Departure|Arrival/{IATA}，官方 swagger 確認；v1 會 404）。
  * ============================================================= */
 (function (global) {
   'use strict';
@@ -127,11 +127,15 @@
     };
   }
 
+  // TDX Air FIDS 端點（v2；官方 swagger：/v2/Air/FIDS/Airport/Departure|Arrival/{IATA}）
+  function _fidsPath(dir) {
+    var isArr = dir === 'arrival';
+    return '/v2/Air/FIDS/Airport/' + (isArr ? 'Arrival' : 'Departure') + '/' + AIRPORT + '?$format=JSON';
+  }
   // 對外查詢：dir ∈ 'departure'(送機) | 'arrival'(接機) → Promise<物件|null>
   function lookup(flightNo, dir) {
     var isArr = dir === 'arrival';
-    var path = '/v1/Air/FIDS/Airport/' + (isArr ? 'Arrival' : 'Departure') + '/' + AIRPORT + '?$format=JSON';
-    return apiGet(path).then(function (list) { return _pick(list, flightNo, isArr ? 'arrival' : 'departure'); });
+    return apiGet(_fidsPath(dir)).then(function (list) { return _pick(list, flightNo, isArr ? 'arrival' : 'departure'); });
   }
 
   // ---------- 獨立查詢視窗（選單捷徑用，沿用預約的滿版 .bk-overlay 樣式） ----------
@@ -177,6 +181,6 @@
     lookup: lookup, terminalText: terminalText, airlineName: airlineName,
     openLookup: openLookup, closeLookup: closeLookup, _go: _go,
     // 純函式（測試）
-    _norm: _norm, _key: _key, _match: _match, _pick: _pick, _statusZh: _statusZh, _hhmm: _hhmm, _fullNo: _fullNo
+    _norm: _norm, _key: _key, _match: _match, _pick: _pick, _statusZh: _statusZh, _hhmm: _hhmm, _fullNo: _fullNo, _fidsPath: _fidsPath
   };
 })(typeof window !== 'undefined' ? window : globalThis);
