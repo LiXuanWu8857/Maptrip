@@ -498,12 +498,14 @@ function captureHistoryTripShot(e, dayKey, i) {
 
 let _screenshotBlob = null, _screenshotLabel = '';
 
-function _shareImageFile(withTitle) {
+// 分享內容：只帶圖片檔、不帶 title/text（否則 LINE 等會多顯示一行「Maptrip 日期」文字）
+function _shareOpts(file) { return { files: [file] }; }
+
+function _shareImageFile() {
   if (!_screenshotBlob) return;
   const file = new File([_screenshotBlob], `maptrip-${_screenshotLabel}.png`, { type: 'image/png' });
-  const opts = withTitle ? { files: [file], title: `Maptrip ${_screenshotLabel}` } : { files: [file] };
   if (navigator.share) {
-    navigator.share(opts).catch(() => _fallbackDownload());
+    navigator.share(_shareOpts(file)).catch(() => _fallbackDownload());
   } else {
     _fallbackDownload();
   }
@@ -517,7 +519,7 @@ function _fallbackDownload() {
   a.click();
 }
 
-function shareScreenshot() { _shareImageFile(true); }
+function shareScreenshot() { _shareImageFile(); }
 
 function saveImageToPhotos() {
   if (!_screenshotBlob) return;
@@ -529,11 +531,11 @@ function saveImageToPhotos() {
       const base64 = reader.result.replace(/^data:[^;]+;base64,/, '');
       plugin.savePhotoBase64({ base64 })
         .then(() => toast('已儲存到相片庫'))
-        .catch(() => _shareImageFile(false));
+        .catch(() => _shareImageFile());
     };
     reader.readAsDataURL(_screenshotBlob);
   } else {
-    _shareImageFile(false);
+    _shareImageFile();
   }
 }
 
@@ -629,7 +631,8 @@ function _fullDateLabel(ts) {
     shareScreenshot: shareScreenshot,
     saveImageToPhotos: saveImageToPhotos,
     closeScreenshotPreview: closeScreenshotPreview,
-    _latlngToWorldPx: _latlngToWorldPx
+    _latlngToWorldPx: _latlngToWorldPx,
+    _shareOpts: _shareOpts
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
