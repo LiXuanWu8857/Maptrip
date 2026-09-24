@@ -96,23 +96,26 @@ html, body {
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.14);
-  z-index: 50; overflow-y: auto; width: 220px;   /* 固定寬：展開「設定」子項時選單不再左右變寬/位移 */
+  z-index: 50; overflow-y: auto; width: 200px;   /* 寬＝最長那項（新地圖引擎（Beta））剛好放得下；固定寬＝展開設定不位移 */
   max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 72px);
   animation: menuFadeIn 0.15s ease;
 }
-/* 「設定」子群組：略縮排＋淺底，表示是展開的次級項目 */
-#menu-settings-group button { padding-left: 30px; background: rgba(0,0,0,0.025); }
-#top-menu button[data-menu="settings"] #settings-chev { margin-left: auto; color: #9aa0a6; font-size: 0.8rem; }
+/* 「設定」子群組：max-height 收合（不 display:none）→ 子項永遠在版面內、撐住選單寬度。
+   淺底表示是次級項；文字置中故不縮排。 */
+#menu-settings-group { max-height: 0; overflow: hidden; transition: max-height 0.2s ease; }
+#menu-settings-group.open { max-height: 60vh; }
+#menu-settings-group button { background: rgba(0,0,0,0.025); }
+#top-menu button[data-menu="settings"] #settings-chev { margin-left: 4px; color: #9aa0a6; font-size: 0.8rem; }
 @keyframes menuFadeIn {
   from { opacity: 0; transform: scale(0.95) translateY(-4px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 #top-menu button {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
   width: 100%; padding: 13px 18px;
   background: none; border: none;
   font-size: 0.88rem; font-family: inherit; cursor: pointer;
-  text-align: left; color: #202124;
+  text-align: center; color: #202124;
   -webkit-tap-highlight-color: transparent;
 }
 #top-menu button:not(:last-child) { border-bottom: 1px solid rgba(0,0,0,0.06); }

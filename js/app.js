@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.399';
+const APP_VERSION  = '1.1.400';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -975,9 +975,10 @@ function toggleSettingsGroup() {
   const g = document.getElementById('menu-settings-group');
   const chev = document.getElementById('settings-chev');
   if (!g) return;
-  const open = g.style.display !== 'none';
-  g.style.display = open ? 'none' : 'block';
-  if (chev) chev.textContent = open ? '▸' : '▾';
+  // 用 .open class（max-height 收合）而非 display:none：子項永遠在版面內、
+  // 撐住選單 max-content 寬 → 展開/收合寬度不變、不左右位移。
+  const open = g.classList.toggle('open');
+  if (chev) chev.textContent = open ? '▾' : '▸';
 }
 
 // 單行道常駐鈕：切換顯示並同步 .active 態
@@ -1017,7 +1018,7 @@ function closeTopMenu() {
   menu.querySelectorAll('button.pressed').forEach(b => b.classList.remove('pressed'));
   // 收合「設定」子群組，下次開選單回到收合態
   const g = document.getElementById('menu-settings-group');
-  if (g) g.style.display = 'none';
+  if (g) g.classList.remove('open');
   const chev = document.getElementById('settings-chev');
   if (chev) chev.textContent = '▸';
   document.removeEventListener('touchstart', _menuTouchStart, { passive: true });
