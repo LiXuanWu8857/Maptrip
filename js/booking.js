@@ -337,7 +337,7 @@
         var sigA = 'REC|' + active.id;   // 時間/距離另由 _syncRecInfo 每秒更新，不進簽章
         if (sigA !== _onmapSig) { el.innerHTML = _recCardHtml(active); _onmapSig = sigA; }
         if (rb) rb.style.display = 'none';
-        el.style.bottom = '64px';
+        el.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 64px)';
         _syncRecInfo();
         if (el.style.display !== 'block') el.style.display = 'block';
         return;
@@ -353,7 +353,7 @@
       if (rb) rb.style.display = 'flex';
       var sigB = 'STRIP|' + due[0].id + '@' + Math.round((due[0].pickupTime - now) / 60000) + '/' + due.length;
       if (sigB !== _onmapSig) { el.innerHTML = _stripHtml(due[0], due.length); _onmapSig = sigB; }
-      el.style.bottom = (64 + (rb ? rb.offsetHeight : 48) + 8) + 'px';
+      el.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + ' + (64 + (rb ? rb.offsetHeight : 48) + 8) + 'px)';
       if (el.style.display !== 'block') el.style.display = 'block';
       return;
     }
@@ -365,7 +365,7 @@
         (due.length > 2 ? '<div class="bkm-more">＋ 還有 ' + (due.length - 2) + ' 筆在 30 分內</div>' : '');
       _onmapSig = sigC;
     }
-    el.style.bottom = '64px';
+    el.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 64px)';
     if (el.style.display !== 'block') el.style.display = 'block';
   }
 
