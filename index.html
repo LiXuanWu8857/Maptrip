@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.397';</script>
+<script>window.INDEX_VERSION = '1.1.398';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -126,13 +126,25 @@ try {
    （按停車場→加油站變深色、按行程列→下一列變深色）。全域關掉，改用各自 :active 回饋。 */
 * { -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
-#top-safe { display: none !important; }
+/* 頂部安全區（動態島兩側）：霧化白填滿，狀態列不再露出地圖。reload-fix 場次會隱藏它。 */
+#top-safe {
+  position: fixed !important;
+  top: 0 !important; left: 0 !important; right: 0 !important;
+  height: env(safe-area-inset-top, 0px) !important;
+  background: rgba(255,255,255,0.9) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  z-index: 21 !important;
+  display: block !important;
+}
 #top-bar {
   position: fixed !important;
   top: env(safe-area-inset-top, 0px) !important;
   left: 0 !important; right: 0 !important;
   height: 48px !important;
   background: rgba(255,255,255,0.9) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
   display: flex !important; align-items: center !important;
   justify-content: space-between !important;
   padding: 0 16px !important;   /* padding-top:0 防止舊快取 padding-top 疊加 */
@@ -148,6 +160,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
   -webkit-backdrop-filter: blur(16px) !important;
   border-top: 1px solid rgba(0,0,0,0.08) !important;
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06) !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;   /* 按鈕上移＋Home 條區霧化白填滿 */
   z-index: 20 !important;
 }
 #bottom-buttons {
@@ -158,6 +171,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 .ctrl-btn  { padding: 2px 14px !important; gap: 2px !important; }
 .ctrl-icon { line-height: 1 !important; }
 @media (prefers-color-scheme: dark) {
+  #top-safe  { background: rgba(18,18,18,0.9) !important; }
   #top-bar   { background: rgba(18,18,18,0.9) !important; }
   #map       { background: #1a1a1a !important; }
   #bottom-bar { background: rgba(24,24,24,0.96) !important; border-top-color: rgba(255,255,255,0.07) !important; box-shadow: 0 -2px 12px rgba(0,0,0,0.3) !important; }
@@ -201,6 +215,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
       s.id = 'reload-fix';
       s.textContent =
         '#top-bar{top:0!important}' +
+        '#top-safe{display:none!important}' +   // 場次已整體下移：頂部安全區填充要隱藏，否則變成頂列下方一條白
         '#top-menu{top:52px!important}' +
         '#gps-badge{top:56px!important}' +
         '#tile-toggle{top:56px!important}' +

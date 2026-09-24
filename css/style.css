@@ -46,7 +46,15 @@ html, body {
   z-index: 0;
 }
 
-#top-safe { display: none; }
+#top-safe {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: rgba(255,255,255,0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 21;
+}
 
 #top-bar {
   position: fixed;
@@ -88,7 +96,7 @@ html, body {
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.14);
-  z-index: 50; overflow-y: auto; min-width: 148px;
+  z-index: 50; overflow-y: auto; width: 220px;   /* 固定寬：展開「設定」子項時選單不再左右變寬/位移 */
   max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 72px);
   animation: menuFadeIn 0.15s ease;
 }
@@ -241,6 +249,7 @@ html, body {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: rgba(255,255,255,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid rgba(0,0,0,0.08);
+  padding-bottom: env(safe-area-inset-bottom, 0px);   /* 按鈕上移＋Home 條區霧化白填滿 */
   z-index: 20;
   box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
 }
@@ -1271,6 +1280,7 @@ textarea.bk-in { resize: vertical; }
   .leaflet-tile-pane { filter: invert(92%) hue-rotate(180deg) brightness(0.88) saturate(0.9); }
 
   #top-bar  { background: rgba(24,24,24,0.92); border-bottom-color: rgba(255,255,255,0.07); }
+  #top-safe { background: rgba(24,24,24,0.92); }
   #top-date { color: #9aa0a6; }
   #top-tripcount { color: #6ab4ff; background: rgba(106,180,255,0.15); }
   .icon-btn { background: rgba(255,255,255,0.1); color: #e8eaed; }
