@@ -1,42 +1,54 @@
 // ⚠️ 此檔案只加入「主 App target（App）」
 // Capacitor 6：app 內建插件不會自動註冊，需在此明確註冊。
-// 還要把 Main.storyboard 的 View Controller「Custom Class」改成 MainViewController。
+// 主視窗由 SceneDelegate 以程式碼建立（無 Main.storyboard）。
 
 import UIKit
 import Capacitor
 
 class MainViewController: CAPBridgeViewController {
+
+    private var didColdReload = false      // 冷啟動只重載一次（修 safe-area）
+    private var hasBeenBackgrounded = false // 真的離開過背景才做死活檢查
+
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(LiveActivityPlugin())
     }
 
-    // 鎖定直向保險（belt-and-suspenders）：某些 iOS 版本只認 VC 層的方向設定，
-    // 與 AppDelegate 的全域鎖一起，確保 WebView 這個 VC 也只允許直向。
+    // 鎖定直向保險（與 AppDelegate 的全域鎖一起）
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
     override var shouldAutorotate: Bool { true }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // WKWebView 在 reload 後會重複套用安全區內距，導致頂端出現空白、
-        // 首次載入時容器尺寸也算錯。關閉自動內距，改由 CSS 的 env() 處理。
+        // 關閉自動內距，改由網頁 CSS 的 env(safe-area-inset-*) 處理頂/底留白。
         webView?.scrollView.contentInsetAdjustmentBehavior = .never
 
-        // 背景時 iOS 可能把網頁行程砍掉（記憶體壓力）→ 回前景只剩白畫面，
-        // 且網頁端 JS 已死、無法自救。回前景時檢查網頁是否還活著，死了就重載。
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(reloadWebViewIfDead),
             name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
-    @objc private func reloadWebViewIfDead() {
-        guard let wv = webView else { return }
-        // 行程被砍後 URL 可能歸 nil → 直接重載
-        if wv.url == nil {
-            wv.reload()
-            return
+    // WKWebView 的 env(safe-area-inset-*) 在「第一次載入」常回 0（頂/底留白消失）。
+    // 等 safe area 真的確定（top>0）的那一刻，重載一次網頁 → env() 重新讀到正確值。只做一次。
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if !didColdReload && view.safeAreaInsets.top > 0 {
+            didColdReload = true
+            webView?.reload()
         }
-        // 用「App 一定會設定的全域變數」探測 JS 環境：
-        // 網頁行程被砍後 WKWebView 會給一個空白的新環境，INDEX_VERSION 不存在 → 重載
+    }
+
+    @objc private func appDidEnterBackground() { hasBeenBackgrounded = true }
+
+    // 只在「離開過背景又回來」時檢查網頁是否被系統砍掉；冷啟動／載入中一律不碰。
+    @objc private func reloadWebViewIfDead() {
+        guard hasBeenBackgrounded else { return }
+        hasBeenBackgrounded = false
+        guard let wv = webView else { return }
+        if wv.isLoading { return }
         wv.evaluateJavaScript("typeof window.INDEX_VERSION") { result, error in
             if error != nil || (result as? String) != "string" {
                 wv.reload()
