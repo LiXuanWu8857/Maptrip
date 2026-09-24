@@ -1,46 +1,28 @@
 // ⚠️ 此檔案只加入「主 App target（App）」
-// 標準 Capacitor 模板 + 鎖屏 widget 的 maptrip:// URL 處理。
+// 手機視窗與 CarPlay 都走 scene 生命週期；scene→delegate 的對應由 Info.plist
+// 的 UIApplicationSceneManifest 指定（Default→SceneDelegate、CarPlay→CarPlaySceneDelegate）。
+// AppDelegate 本身不再持有/建立 window。
 
 import UIKit
 import Capacitor
-import CarPlay   // .carTemplateApplication / CarPlay 場景角色由此框架提供，未 import 會編譯不過
+import CarPlay   // .carTemplateApplication 由此框架提供
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
-    var window: UIWindow?
-
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // 專案沒有 Main.storyboard → 直接用程式碼建立主視窗與 root VC（Capacitor 的 WebView 殼）。
-        // 這樣就不依賴 UIMainStoryboardFile；Info.plist 也要移除 UIMainStoryboardFile 這個 key。
-        let window = UIWindow(frame: UIScreen.main.bounds)
-        window.rootViewController = MainViewController()
-        window.makeKeyAndVisible()
-        self.window = window
         return true
     }
 
-    // MARK: - 鎖定直向（禁止橫置）
-    // iOS WKWebView 不支援網頁 orientation lock，只能在原生殼鎖。手機主 App 一律直向；
-    // CarPlay 場景（車機）不鎖，讓車機自行決定，否則會弄壞車機顯示。
+    // 鎖定直向（禁止橫置）；CarPlay 車機不鎖
     func application(_ application: UIApplication,
                      supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        if window?.windowScene?.session.role == .carTemplateApplication {
-            return .all
-        }
+        if window?.windowScene?.session.role == .carTemplateApplication { return .all }
         return .portrait
     }
 
-    func applicationWillResignActive(_ application: UIApplication) {}
-    func applicationDidEnterBackground(_ application: UIApplication) {}
-    func applicationWillEnterForeground(_ application: UIApplication) {}
-    func applicationDidBecomeActive(_ application: UIApplication) {}
-    func applicationWillTerminate(_ application: UIApplication) {}
-
+    // 鎖屏 widget 的 maptrip:// 一鍵開始/結束
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        // 鎖屏 widget 的 maptrip:// （由 .widgetURL 觸發）在這裡接手。
-        // 此 method 在「主 App 程序」執行 → 寫進 UserDefaults.standard，
-        // 與 LiveActivityPlugin 同程序，consumePendingCommand 一定讀得到（免 App Group）。
         handleMapTripURL(url)
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
@@ -49,22 +31,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
-    // MARK: - 場景設定（僅為 CarPlay 提供場景；手機本體仍用上方 window 生命週期）
-    func application(_ application: UIApplication,
-                     configurationForConnecting connectingSceneSession: UISceneSession,
-                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        if connectingSceneSession.role == .carTemplateApplication {
-            let config = UISceneConfiguration(name: "CarPlay", sessionRole: connectingSceneSession.role)
-            if #available(iOS 14.0, *) {
-                config.delegateClass = CarPlaySceneDelegate.self
-            }
-            return config
-        }
-        // 其他（手機）場景：回傳預設設定，維持既有 AppDelegate window 行為
-        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
-    }
-
-    // 把 widget 指令寫進主程序 UserDefaults，並即時廣播給 plugin（App 已在前景時用）
     private func handleMapTripURL(_ url: URL) {
         guard url.scheme == "maptrip" else { return }
         let action = (url.host == "end") ? "end" : "start"
