@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.396';</script>
+<script>window.INDEX_VERSION = '1.1.397';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -219,9 +219,10 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
       (performance.navigation && performance.navigation.type === 1 ? 'reload' : '');
     isReload = (t === 'reload');
   } catch (e) {}
-  if (isReload) setFix(true);   // 冷啟動自動 reload 的主路徑：維持既有已驗證行為
+  // 不再因「是 reload」就寫死 top:0。改用量測（下方 evaluate）判斷 viewport 是否真的
+  // 整體下移，reload 場次也一樣量測：新原生殼（SceneDelegate）reload 後 viewport 不下移，
+  // 量到「不需修正」→ 保留 env(safe-area-inset) 留白；舊殼真的下移時仍量得到並套用。
   function evaluate() {
-    if (isReload) return;   // reload 場次固定套用，不做量測（避免誤判動到已正常的狀態）
     try {
       // 鍵盤開啟時 innerHeight 會縮小，量出來不準 → 略過，等鍵盤收起後的 resize 再判斷
       var ae = document.activeElement;

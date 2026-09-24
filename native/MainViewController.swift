@@ -7,7 +7,6 @@ import Capacitor
 
 class MainViewController: CAPBridgeViewController {
 
-    private var didColdReload = false      // 冷啟動只重載一次（修 safe-area）
     private var hasBeenBackgrounded = false // 真的離開過背景才做死活檢查
 
     override open func capacitorDidLoad() {
@@ -21,6 +20,7 @@ class MainViewController: CAPBridgeViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         // 關閉自動內距，改由網頁 CSS 的 env(safe-area-inset-*) 處理頂/底留白。
+        // 頂/底 safe-area 由網頁端量測式修正（index.html）處理，這裡不做冷啟動重載。
         webView?.scrollView.contentInsetAdjustmentBehavior = .never
 
         NotificationCenter.default.addObserver(
@@ -29,16 +29,6 @@ class MainViewController: CAPBridgeViewController {
         NotificationCenter.default.addObserver(
             self, selector: #selector(reloadWebViewIfDead),
             name: UIApplication.didBecomeActiveNotification, object: nil)
-    }
-
-    // WKWebView 的 env(safe-area-inset-*) 在「第一次載入」常回 0（頂/底留白消失）。
-    // 等 safe area 真的確定（top>0）的那一刻，重載一次網頁 → env() 重新讀到正確值。只做一次。
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        if !didColdReload && view.safeAreaInsets.top > 0 {
-            didColdReload = true
-            webView?.reload()
-        }
     }
 
     @objc private func appDidEnterBackground() { hasBeenBackgrounded = true }
