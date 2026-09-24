@@ -96,7 +96,7 @@ html, body {
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.14);
-  z-index: 50; overflow-y: auto; width: 200px;   /* 寬＝最長那項（新地圖引擎（Beta））剛好放得下；固定寬＝展開設定不位移 */
+  z-index: 50; overflow-y: auto; width: 180px;   /* 使用者指定寬度（紅框）；固定寬＝展開設定不位移 */
   max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 72px);
   animation: menuFadeIn 0.15s ease;
 }
@@ -111,8 +111,8 @@ html, body {
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 #top-menu button {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  width: 100%; padding: 13px 18px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 13px 12px;
   background: none; border: none;
   font-size: 0.88rem; font-family: inherit; cursor: pointer;
   text-align: center; color: #202124;
