@@ -4,7 +4,6 @@
 // 不依賴 Main.storyboard（已遺失），root VC 直接程式碼建立。
 
 import UIKit
-import Capacitor
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
