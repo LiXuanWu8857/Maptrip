@@ -3,6 +3,7 @@
 
 import UIKit
 import Capacitor
+import CarPlay   // .carTemplateApplication / CarPlay 場景角色由此框架提供，未 import 會編譯不過
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
