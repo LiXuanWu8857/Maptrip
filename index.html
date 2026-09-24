@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.400';</script>
+<script>window.INDEX_VERSION = '1.1.401';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -563,6 +563,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <!-- 航班查詢（桃園 TPE，TDX Air FIDS 走火車共用代理）：預約表單用 -->
 <script>document.write('<scr' + 'ipt src="js/flight.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 預約 Phase 1：滿版清單/表單、多站導航、撥號、App 內提醒、12h 紅點、雲端同步 -->
+<!-- 預約原生本地通知（Phase 2）：需在 booking.js 前載入（booking.js 會呼叫它） -->
+<script>document.write('<scr' + 'ipt src="js/booking-notify.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/booking.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 單行道方向顯示（OSM oneway，紫線＋方向箭頭） -->
 <script>document.write('<scr' + 'ipt src="js/oneway.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>

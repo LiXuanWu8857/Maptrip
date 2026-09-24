@@ -150,10 +150,14 @@
   function upcomingCount(hours) { return _upcomingCount(_list, hours || 12, Date.now()); }
 
   // 雲端 onSnapshot 回來 → 用雲端覆蓋本機快取（自己的資料，雲端為準）
+  // 預約異動後，重排原生本地通知（未裝外掛/瀏覽器時安全 no-op）
+  function _notifySync() { try { if (global.MaptripBookingNotify) MaptripBookingNotify.resync(_list); } catch (_) {} }
+
   function set(list) {
     _list = (list || []).slice();
     _persist(); _updateBadge();
     try { _updateOnMap(); } catch (_) {}
+    _notifySync();
     if (_isListOpen()) _renderList();
   }
 
@@ -167,6 +171,7 @@
     if (i >= 0) _list[i] = b; else _list.push(b);
     _persist(); _updateBadge();
     try { _updateOnMap(); } catch (_) {}
+    _notifySync();
     try { if (global.MaptripSync && MaptripSync.writeBooking) MaptripSync.writeBooking(b); } catch (_) {}
     return b;
   }
@@ -174,6 +179,7 @@
     _list = _list.filter(function (b) { return b.id !== id; });
     _persist(); _updateBadge();
     try { _updateOnMap(); } catch (_) {}
+    _notifySync();
     try { if (global.MaptripSync && MaptripSync.deleteBooking) MaptripSync.deleteBooking(id); } catch (_) {}
   }
   function markConfirmed(id) {
@@ -196,7 +202,7 @@
     save(b);
     if (_isListOpen()) _renderList();
   }
-  function clear() { _list = []; try { localStorage.removeItem(KEY); } catch (_) {} _updateBadge(); try { _updateOnMap(); } catch (_) {} if (_isListOpen()) _renderList(); }
+  function clear() { _list = []; try { localStorage.removeItem(KEY); } catch (_) {} _updateBadge(); try { _updateOnMap(); } catch (_) {} _notifySync(); if (_isListOpen()) _renderList(); }
 
   // ---------- 動作 ----------
   function navigate(id) {
@@ -713,6 +719,13 @@
     if (_tickTimer) clearInterval(_tickTimer);
     _tickReminders();   // 內含 _updateOnMap()
     _tickTimer = setInterval(_tickReminders, 30000);
+    // 原生本地通知：加點通知監聽、要權限、依現況排程（未裝外掛/瀏覽器時安全 no-op）
+    try {
+      if (global.MaptripBookingNotify) {
+        MaptripBookingNotify.init();
+        MaptripBookingNotify.ensurePermission().then(function () { _notifySync(); });
+      }
+    } catch (_) {}
   }
 
   global.MaptripBooking = {
