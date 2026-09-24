@@ -11,6 +11,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // 專案沒有 Main.storyboard → 直接用程式碼建立主視窗與 root VC（Capacitor 的 WebView 殼）。
+        // 這樣就不依賴 UIMainStoryboardFile；Info.plist 也要移除 UIMainStoryboardFile 這個 key。
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = MainViewController()
+        window.makeKeyAndVisible()
+        self.window = window
         return true
     }
 
