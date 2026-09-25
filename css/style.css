@@ -503,9 +503,13 @@ html, body {
 .bk-acts button.bk-ok { background: #34a853; color: #fff; border-color: #34a853; }
 /* 次要動作列（撥號/傳確認/標記已確認）：小鈕 */
 .bk-acts.bk-sec button { font-size: 0.8rem; padding: 7px 11px; }
-/* 主要動作列：完成（左，綠）＋開始（右，藍），左右對半填滿 */
-.bk-acts.bk-main { margin-top: 8px; flex-wrap: nowrap; }
-.bk-acts.bk-main button { flex: 1; padding: 11px 12px; font-size: 0.9rem; font-weight: 700; }
+/* 主要動作列：完成（左，綠，窄）＋開始（右，藍，寬＋放大）＝約 40 : 60 */
+.bk-acts.bk-main { margin-top: 8px; flex-wrap: nowrap; align-items: stretch; }
+.bk-acts.bk-main button {
+  flex: 2; padding: 11px 12px; font-size: 0.9rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.bk-acts.bk-main button.bk-start-btn { flex: 3; padding: 13px 12px; font-size: 1rem; }
 .bk-acts button.bk-done-btn { background: #34a853; color: #fff; border-color: #34a853; }
 .bk-acts button.bk-start-btn { background: #1a73e8; color: #fff; border-color: #1a73e8; }
 /* 編輯：移到卡片標題右上角、低調小鈕 */
@@ -535,7 +539,12 @@ html, body {
 .bk-in:focus { border-color: #1a73e8; }
 .bk-in-dt { -webkit-appearance: none; appearance: none; }
 textarea.bk-in { resize: vertical; }
-.bk-chip.rem { background: rgba(26,115,232,0.1); color: #1a73e8; }
+/* 提醒時間：改成方塊（非藥丸圓角）＋等寬置中＝兩個提醒一致對齊 */
+.bk-chip.rem {
+  background: rgba(26,115,232,0.1); color: #1a73e8;
+  border: 1px solid rgba(26,115,232,0.22); border-radius: 7px;
+  padding: 4px 10px; min-width: 78px; justify-content: center;
+}
 /* 下車點動態列 */
 .bk-dest-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .bk-dest-row .bk-in { margin: 0; }
@@ -609,7 +618,7 @@ textarea.bk-in { resize: vertical; }
   .bk-flight-l1 { color: #e8eaed; } .bk-flight-l1 b { color: #8ab4f8; }
   .bk-flight-l2 { color: #9aa0a6; }
   .bk-chip { background: #2a2a2a; color: #c7ccd1; }
-  .bk-chip.rem { background: rgba(138,180,248,0.14); color: #8ab4f8; }
+  .bk-chip.rem { background: rgba(138,180,248,0.14); color: #8ab4f8; border-color: rgba(138,180,248,0.3); }
   .bk-acts button { background: #262626; color: #8ab4f8; border-color: rgba(255,255,255,0.12); }
   .bk-acts button.bk-ok { background: #34a853; color: #fff; }
   .bk-acts button.bk-done-btn { background: #34a853; color: #fff; border-color: #34a853; }
