@@ -501,7 +501,19 @@ html, body {
   font-family: inherit; cursor: pointer;
 }
 .bk-acts button.bk-ok { background: #34a853; color: #fff; border-color: #34a853; }
-.bk-acts button.bk-done-btn { background: rgba(26,115,232,0.08); color: #1a73e8; border-color: rgba(26,115,232,0.3); }
+/* 次要動作列（撥號/傳確認/標記已確認）：小鈕 */
+.bk-acts.bk-sec button { font-size: 0.8rem; padding: 7px 11px; }
+/* 主要動作列：完成（左，綠）＋開始（右，藍），左右對半填滿 */
+.bk-acts.bk-main { margin-top: 8px; flex-wrap: nowrap; }
+.bk-acts.bk-main button { flex: 1; padding: 11px 12px; font-size: 0.9rem; font-weight: 700; }
+.bk-acts button.bk-done-btn { background: #34a853; color: #fff; border-color: #34a853; }
+.bk-acts button.bk-start-btn { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+/* 編輯：移到卡片標題右上角、低調小鈕 */
+.bk-edit-corner {
+  flex: none; border: 1px solid rgba(0,0,0,0.12); background: rgba(255,255,255,0.65);
+  color: #1a73e8; border-radius: 9px; padding: 5px 10px; font-size: 0.76rem;
+  font-weight: 700; font-family: inherit; white-space: nowrap; cursor: pointer;
+}
 /* 已完成區：小方塊、淡化、排在清單最下面 */
 .bk-done-sec { margin-top: 10px; border-top: 1px solid rgba(0,0,0,0.08); padding-top: 8px; }
 .bk-done-head { font-size: 0.8rem; font-weight: 700; color: #9aa0a6; padding: 4px 4px 8px; }
@@ -600,7 +612,9 @@ textarea.bk-in { resize: vertical; }
   .bk-chip.rem { background: rgba(138,180,248,0.14); color: #8ab4f8; }
   .bk-acts button { background: #262626; color: #8ab4f8; border-color: rgba(255,255,255,0.12); }
   .bk-acts button.bk-ok { background: #34a853; color: #fff; }
-  .bk-acts button.bk-done-btn { background: rgba(138,180,248,0.14); color: #8ab4f8; border-color: rgba(138,180,248,0.35); }
+  .bk-acts button.bk-done-btn { background: #34a853; color: #fff; border-color: #34a853; }
+  .bk-acts button.bk-start-btn { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+  .bk-edit-corner { background: rgba(255,255,255,0.06); color: #8ab4f8; border-color: rgba(255,255,255,0.18); }
   .bk-done-sec { border-top-color: rgba(255,255,255,0.08); }
   .bk-mini { background: #1e1e1e; border-color: rgba(255,255,255,0.07); }
   .bk-mini-who { color: #c7ccd1; }

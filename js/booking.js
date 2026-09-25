@@ -309,6 +309,12 @@
     try { if (global.startTrip) global.startTrip(); } catch (_) {}
     try { _updateOnMap(); } catch (_) {}
   }
+  // 從預約清單卡「開始」：直接開始計時紀錄，並關掉清單讓司機看到跑車中的地圖
+  function startFromList(id) {
+    if (_isRecording()) { _toast('行程記錄中，請先結束'); return; }
+    startFromMap(id);
+    try { close(); } catch (_) {}
+  }
   function endFromMap() {
     // 從預約開始的行程結束 → 該筆自動標記完成（縮到清單最下面）
     if (_activeBookingId) { var b = get(_activeBookingId); if (b && b.status !== 'cancelled') { b.status = 'done'; b.doneAt = Date.now(); save(b); } }
@@ -440,13 +446,21 @@
     var routeRow = (route || navBtn)
       ? '<div class="bk-routewrap">' + route + '<div class="bk-navcol">' + navBtn + '</div></div>'
       : '';
-    var btns = '<div class="bk-acts">' +
+    // 編輯移到標題右上角（見 header）。動作分兩列：
+    //   次要列＝撥號/傳確認/標記已確認（小鈕，依狀態出現）
+    //   主要列＝完成（左，綠）＋開始（右，藍＝直接開始計時紀錄），左右對半填滿
+    var secBtns =
       (b.phone ? '<button onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
       (b.status === 'pending' ? '<button onclick="MaptripBooking.shareConfirm(\'' + b.id + '\')">📤 傳確認</button>' : '') +
-      '<button onclick="MaptripBooking.openForm(\'' + b.id + '\')">✏️ 編輯</button>' +
-      (b.status === 'pending' ? '<button class="bk-ok" onclick="MaptripBooking.markConfirmed(\'' + b.id + '\')">✓ 標記已確認</button>' : '') +
-      ((b.status === 'pending' || b.status === 'confirmed') ? '<button class="bk-done-btn" onclick="MaptripBooking.markDone(\'' + b.id + '\')">🏁 完成</button>' : '') +
-      '</div>';
+      (b.status === 'pending' ? '<button class="bk-ok" onclick="MaptripBooking.markConfirmed(\'' + b.id + '\')">✓ 標記已確認</button>' : '');
+    var secRow = secBtns ? '<div class="bk-acts bk-sec">' + secBtns + '</div>' : '';
+    var mainRow = (b.status === 'pending' || b.status === 'confirmed')
+      ? '<div class="bk-acts bk-main">' +
+          '<button class="bk-done-btn" onclick="MaptripBooking.markDone(\'' + b.id + '\')">🏁 完成</button>' +
+          '<button class="bk-start-btn" onclick="MaptripBooking.startFromList(\'' + b.id + '\')">▶ 開始</button>' +
+        '</div>'
+      : '';
+    var btns = secRow + mainRow;
     var now = Date.now();
     var soon = (b.status === 'pending' && b.pickupTime > now && b.pickupTime - now <= 12 * 3600000);
     var sub = _relSub(b.pickupTime, now);
@@ -455,6 +469,7 @@
         '<span class="bk-time">' + _fmtTime(b.pickupTime) + '</span>' +
         '<div class="bk-dtmid"><span class="bk-day">' + _dayLabelShort(b.pickupTime, now) + '</span>' +
         (sub ? '<span class="bk-sub">' + sub + '</span>' : '') + '</div>' +
+        '<button class="bk-edit-corner" onclick="MaptripBooking.openForm(\'' + b.id + '\')">✏️ 編輯</button>' +
         '<span class="bk-pill ' + sm.cls + '">' + sm.label + '</span>' +
       '</div>' +
       '<div class="bk-body2">' +
@@ -737,7 +752,7 @@
     save: save, remove: remove, markConfirmed: markConfirmed, markDone: markDone, reopen: reopen, clear: clear, set: set,
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
     navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
-    openFromMap: openFromMap, startFromMap: startFromMap, endFromMap: endFromMap,
+    openFromMap: openFromMap, startFromMap: startFromMap, startFromList: startFromList, endFromMap: endFromMap,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
     _addDest: _addDest, _rmDest: _rmDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
     _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap, _syncRecInfo: _syncRecInfo,
