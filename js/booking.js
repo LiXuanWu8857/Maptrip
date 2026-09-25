@@ -427,7 +427,7 @@
     // 路線：出發 →（下車點 1..N），每站一列＋圓點
     var stops = [];
     if (b.pickup && b.pickup.text) stops.push({ lead: '出發', cls: 'a', text: b.pickup.text });
-    _destsOf(b).forEach(function (d, i) { stops.push({ lead: (i === _destsOf(b).length - 1 ? '目的' : '下車'), cls: 'b', text: d.text }); });
+    _destsOf(b).forEach(function (d, i) { stops.push({ lead: (i === _destsOf(b).length - 1 ? '目的' : '中途'), cls: 'b', text: d.text }); });
     var route = stops.length ? '<div class="bk-route">' + stops.map(function (s) {
       return '<div class="bk-stop"><span class="bk-dot ' + s.cls + '"></span><span class="bk-slead">' + s.lead + '</span><span class="bk-saddr">' + _esc(s.text) + '</span></div>';
     }).join('') + '</div>' : '';
@@ -435,7 +435,11 @@
     var reminders = (b.reminders && b.reminders.length) ? '<div class="bk-chips">' + b.reminders.map(function (m) { return '<span class="bk-chip rem">🔔' + _fmtLead(m) + '</span>'; }).join('') + '</div>' : '';
     var confirmLine = (b.status === 'confirmed' && b.confirmedAt)
       ? '<div class="bk-confirmed">✓ 客戶已確認 ' + _fmtTime(b.confirmedAt) + '</div>' : '';
-    var navBtn = '<button class="bk-nav" onclick="MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航　<small>出發地 → 目的地</small></button>';
+    // 導航按鈕：只顯示「導航」，放在地址（路線）的右邊
+    var navBtn = '<button class="bk-nav" onclick="MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航</button>';
+    var routeRow = (route || navBtn)
+      ? '<div class="bk-routewrap">' + route + '<div class="bk-navcol">' + navBtn + '</div></div>'
+      : '';
     var btns = '<div class="bk-acts">' +
       (b.phone ? '<button onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
       (b.status === 'pending' ? '<button onclick="MaptripBooking.shareConfirm(\'' + b.id + '\')">📤 傳確認</button>' : '') +
@@ -455,7 +459,7 @@
       '</div>' +
       '<div class="bk-body2">' +
       (who ? '<div class="bk-who">' + _esc(who) + '</div>' : '') +
-      route + noteBox + reminders + confirmLine + navBtn + btns +
+      routeRow + noteBox + reminders + confirmLine + btns +
       '</div></div>';
   }
 
@@ -740,7 +744,8 @@
     // 純函式（測試）
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
     _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,
-    _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf
+    _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf,
+    _cardHtml: _cardHtml
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

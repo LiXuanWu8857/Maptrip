@@ -474,6 +474,9 @@ html, body {
 .bk-pill.confirmed { background: rgba(52,168,83,0.16); color: #1e8e3e; }
 .bk-pill.done, .bk-pill.cancelled { background: rgba(0,0,0,0.06); color: #9aa0a6; }
 .bk-who { font-size: 0.86rem; color: #3c4043; margin-bottom: 6px; }
+.bk-routewrap { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.bk-routewrap .bk-route { flex: 1; min-width: 0; margin-bottom: 0; }
+.bk-navcol { flex: none; }
 .bk-route { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
 .bk-stop { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #202124; }
 .bk-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
@@ -482,8 +485,7 @@ html, body {
 .bk-slead { font-size: 0.72rem; color: #9aa0a6; flex: none; width: 26px; }
 .bk-saddr { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bk-note { display: flex; gap: 6px; font-size: 0.82rem; color: #5f6368; background: #f6f7f9; border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; padding: 7px 9px; margin-bottom: 8px; word-break: break-word; }
-.bk-nav { width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 8px; border: none; border-radius: 10px; background: #1a73e8; color: #fff; font-size: 0.9rem; font-weight: 700; font-family: inherit; cursor: pointer; }
-.bk-nav small { font-weight: 500; opacity: 0.9; font-size: 0.72rem; }
+.bk-nav { box-sizing: border-box; padding: 9px 14px; border: none; border-radius: 10px; background: #1a73e8; color: #fff; font-size: 0.85rem; font-weight: 700; font-family: inherit; white-space: nowrap; cursor: pointer; }
 .bk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .bk-chip {
   font-size: 0.74rem; color: #5f6368; background: #f1f3f4;
