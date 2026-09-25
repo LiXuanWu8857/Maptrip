@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.402';
+const APP_VERSION  = '1.1.403';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -921,7 +921,13 @@ function _menuHitBtn(e) {
     document.body.removeChild(probe);
   }
   let hit = null;
+  // 設定子群組收合時（max-height:0; overflow:hidden），裡面的按鈕視覺上被裁掉、
+  // 但 getBoundingClientRect 仍回傳版面座標（溢出在選單卡下方的地圖區）→ 純座標比對會誤中，
+  // 造成「沒展開設定卻單點就觸發設定裡的項目」。收合時一律略過這些按鈕。
+  const sg = document.getElementById('menu-settings-group');
+  const sgOpen = sg && sg.classList.contains('open');
   menu.querySelectorAll('button[data-menu]').forEach(b => {
+    if (!sgOpen && sg && sg.contains(b)) return;
     const r = b.getBoundingClientRect();
     if (y >= r.top && y <= r.bottom && x >= r.left && x <= r.right) hit = b;
   });
