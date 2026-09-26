@@ -249,7 +249,35 @@
   }
   function _elShown(id) { var e = document.getElementById(id); return !!e && e.style.display !== 'none'; }
   // 跑車判定用「開始鈕的 recording class」（rec-banner 會被我們藏起來，不能拿它當訊號）
-  function _isRecording() { var b = document.getElementById('start-btn'); return !!b && b.classList.contains('recording'); }
+  function _isRecording() {
+    if (typeof document === 'undefined') return false;
+    var b = document.getElementById('start-btn'); return !!b && b.classList.contains('recording');
+  }
+  // 目前正在錄製的行程起始時間（供 ±20 分後備配對；存在 recorder 的 maptrip_active）
+  function _runningStart() {
+    try { var s = JSON.parse(localStorage.getItem('maptrip_active') || 'null'); return s && s.startTime ? s.startTime : null; }
+    catch (_) { return null; }
+  }
+  // 純函式：判斷目前哪一筆預約算「跑車中」。精準綁定（boundId）優先；否則用行程起始時間
+  // ±20 分配對最接近的未完成預約（後備：從地圖底部開始、或 App 重載後綁定遺失時）。
+  function _pickActiveId(list, recording, boundId, runningStart, now) {
+    if (!recording) return null;
+    if (boundId) return boundId;
+    var start = runningStart || now;
+    var WIN = 20 * 60000, best = null, bestDiff = WIN + 1;
+    (list || []).forEach(function (b) {
+      if (!b || (b.status !== 'pending' && b.status !== 'confirmed')) return;
+      var d = Math.abs(b.pickupTime - start);
+      if (d <= WIN && d < bestDiff) { bestDiff = d; best = b.id; }
+    });
+    return best;
+  }
+  function _activeIdNow() { return _pickActiveId(_list, _isRecording(), _activeBookingId, _runningStart(), Date.now()); }
+  // 設定/清除「這台正在跑哪一筆」並鏡射到 localStorage（App 重載後可還原精準綁定）
+  function _setActiveBk(id) {
+    _activeBookingId = id || null;
+    try { if (_activeBookingId) localStorage.setItem('maptrip_active_booking', _activeBookingId); else localStorage.removeItem('maptrip_active_booking'); } catch (_) {}
+  }
   // 主頁以外（清單/表單開著、單趟或全日預覽、熱區面板、底部 sheet）不顯示
   function _onMapBlocked() {
     return _elShown('bk-list') || _elShown('bk-form') || _elShown('solo-bar') ||
@@ -305,7 +333,7 @@
   // 從地圖橫幅按「開始」→ 記住這筆、啟動 App 的 startTrip（沿用 GPS 品質閘門等既有流程）
   function startFromMap(id) {
     if (_isRecording()) { _toast('行程記錄中，請先結束'); return; }
-    _activeBookingId = id;
+    _setActiveBk(id);
     try { if (global.startTrip) global.startTrip(); } catch (_) {}
     try { _updateOnMap(); } catch (_) {}
   }
@@ -315,9 +343,19 @@
     startFromMap(id);
     try { close(); } catch (_) {}
   }
+  // 從預約清單卡「完成」：結束這筆的行程並標記完成，關清單→走主頁結束流程（跳車資輸入）。
+  // 不倚賴 _activeBookingId（±20 分後備配對時它可能是空的），直接對 id 結案。
+  function finishFromList(id) {
+    var b = get(id);
+    if (b && b.status !== 'cancelled') { b.status = 'done'; b.doneAt = Date.now(); save(b); }
+    _setActiveBk(null);
+    try { close(); } catch (_) {}
+    try { if (global.endTrip) global.endTrip(); } catch (_) {}   // endTrip → showFareDialog（跟主頁地圖同一條路）
+  }
   function endFromMap() {
     // 從預約開始的行程結束 → 該筆自動標記完成（縮到清單最下面）
     if (_activeBookingId) { var b = get(_activeBookingId); if (b && b.status !== 'cancelled') { b.status = 'done'; b.doneAt = Date.now(); save(b); } }
+    _setActiveBk(null);
     try { if (global.endTrip) global.endTrip(); } catch (_) {}
   }
   // 跑車中：縮成一小條紅字（掛在藍色計時器上方）
@@ -340,7 +378,7 @@
     var now = Date.now();
     var rec = _isRecording();
     var rb = document.getElementById('rec-banner');
-    if (!rec) _activeBookingId = null;   // 沒在跑車就清掉「開始的那筆」
+    if (!rec) _setActiveBk(null);   // 沒在跑車就清掉「開始的那筆」
 
     // (A) 跑車中，且行程是從某筆預約按「開始」啟動的 → 整卡改藍、併入時間/距離、藏掉原藍條
     if (rec && _activeBookingId) {
@@ -354,7 +392,7 @@
         if (el.style.display !== 'block') el.style.display = 'block';
         return;
       }
-      _activeBookingId = null;   // 那筆不見了/被取消 → 退回一般行為
+      _setActiveBk(null);   // 那筆不見了/被取消 → 退回一般行為
     }
 
     var due = _dueOnMap(_list, now);
@@ -427,7 +465,7 @@
     return h > 0 ? ('還有 ' + h + ' 小時' + (m ? ' ' + m + ' 分' : '')) : ('還有 ' + m + ' 分');
   }
 
-  function _cardHtml(b) {
+  function _cardHtml(b, activeId) {
     var sm = _statusMeta(b.status);
     var who = [b.name, b.lineName ? ('LINE:' + b.lineName) : ''].filter(Boolean).join('　');
     // 路線：出發 →（下車點 1..N），每站一列＋圓點
@@ -447,19 +485,25 @@
       ? '<div class="bk-routewrap">' + route + '<div class="bk-navcol">' + navBtn + '</div></div>'
       : '';
     // 編輯移到標題右上角（見 header）。動作分兩列：
-    //   次要列＝撥號/傳確認/標記已確認（小鈕，依狀態出現）
-    //   主要列＝完成（左，綠）＋開始（右，藍＝直接開始計時紀錄），左右對半填滿
+    //   主要列＝單顆全幅：未跑這筆→「開始」（藍，開始計時紀錄）；跑這筆中→「完成」（綠，
+    //     結束行程並跳車資輸入，跟主頁地圖同一條路）。
+    //   次要列＝撥號/傳確認/標記已確認 + 直接完成（不跑車結案的小鈕，跑這筆中時隱藏）。
+    var canAct = (b.status === 'pending' || b.status === 'confirmed');
+    var isRunningThis = !!activeId && activeId === b.id;
+    var mainRow = '';
+    if (isRunningThis) {
+      mainRow = '<div class="bk-acts bk-main">' +
+        '<button class="bk-finish-btn" onclick="MaptripBooking.finishFromList(\'' + b.id + '\')">🏁 完成</button></div>';
+    } else if (canAct) {
+      mainRow = '<div class="bk-acts bk-main">' +
+        '<button class="bk-start-btn" onclick="MaptripBooking.startFromList(\'' + b.id + '\')">▶ 開始</button></div>';
+    }
     var secBtns =
       (b.phone ? '<button onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
       (b.status === 'pending' ? '<button onclick="MaptripBooking.shareConfirm(\'' + b.id + '\')">📤 傳確認</button>' : '') +
-      (b.status === 'pending' ? '<button class="bk-ok" onclick="MaptripBooking.markConfirmed(\'' + b.id + '\')">✓ 標記已確認</button>' : '');
+      (b.status === 'pending' ? '<button class="bk-ok" onclick="MaptripBooking.markConfirmed(\'' + b.id + '\')">✓ 標記已確認</button>' : '') +
+      ((canAct && !isRunningThis) ? '<button onclick="MaptripBooking.markDone(\'' + b.id + '\')">✓ 直接完成</button>' : '');
     var secRow = secBtns ? '<div class="bk-acts bk-sec">' + secBtns + '</div>' : '';
-    var mainRow = (b.status === 'pending' || b.status === 'confirmed')
-      ? '<div class="bk-acts bk-main">' +
-          '<button class="bk-done-btn" onclick="MaptripBooking.markDone(\'' + b.id + '\')">🏁 完成</button>' +
-          '<button class="bk-start-btn" onclick="MaptripBooking.startFromList(\'' + b.id + '\')">▶ 開始</button>' +
-        '</div>'
-      : '';
     var btns = secRow + mainRow;
     var now = Date.now();
     var soon = (b.status === 'pending' && b.pickupTime > now && b.pickupTime - now <= 12 * 3600000);
@@ -502,12 +546,13 @@
                     .sort(function (a, b) { return a.pickupTime - b.pickupTime; });
     var groups = _byDay(active, Date.now());
     if (!groups.length && !done.length) { body.innerHTML = '<div class="bk-empty">目前沒有預約<br>點右下角「＋ 新增預約」開始</div>'; return; }
+    var activeId = _activeIdNow();   // 目前跑車中且綁定的預約 id（精準或 ±20 分後備）
     var html = groups.map(function (g) {
       var collapsed = !g.isToday && _collapsed[g.day];
       var arrow = g.isToday ? '' : '<span class="bk-arrow">' + (collapsed ? '▸' : '▾') + '</span>';
       var head = '<div class="bk-dhead"' + (g.isToday ? '' : ' onclick="MaptripBooking.toggleDay(\'' + g.day + '\')"') + '>' +
         '<span>' + _fmtDayLabel(g.day, g.isToday) + '　' + g.count + ' 筆</span>' + arrow + '</div>';
-      var cards = collapsed ? '' : g.items.map(_cardHtml).join('');
+      var cards = collapsed ? '' : g.items.map(function (b) { return _cardHtml(b, activeId); }).join('');
       return '<div class="bk-group">' + head + cards + '</div>';
     }).join('');
     if (done.length) {
@@ -734,6 +779,7 @@
     ctx = ctx || {};
     if (ctx.testMode) KEY = 'maptrip_bookings_test';
     _loadLocal();
+    try { _activeBookingId = localStorage.getItem('maptrip_active_booking') || null; } catch (_) {}   // 還原精準綁定（App 重載後）
     _updateBadge();
     if (_tickTimer) clearInterval(_tickTimer);
     _tickReminders();   // 內含 _updateOnMap()
@@ -752,7 +798,8 @@
     save: save, remove: remove, markConfirmed: markConfirmed, markDone: markDone, reopen: reopen, clear: clear, set: set,
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
     navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
-    openFromMap: openFromMap, startFromMap: startFromMap, startFromList: startFromList, endFromMap: endFromMap,
+    openFromMap: openFromMap, startFromMap: startFromMap, startFromList: startFromList,
+    finishFromList: finishFromList, endFromMap: endFromMap,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
     _addDest: _addDest, _rmDest: _rmDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
     _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap, _syncRecInfo: _syncRecInfo,
@@ -760,7 +807,7 @@
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
     _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,
     _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf,
-    _cardHtml: _cardHtml
+    _cardHtml: _cardHtml, _pickActiveId: _pickActiveId
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

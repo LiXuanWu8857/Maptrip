@@ -503,15 +503,15 @@ html, body {
 .bk-acts button.bk-ok { background: #34a853; color: #fff; border-color: #34a853; }
 /* 次要動作列（撥號/傳確認/標記已確認）：小鈕 */
 .bk-acts.bk-sec button { font-size: 0.8rem; padding: 7px 11px; }
-/* 主要動作列：完成（左，綠，窄）＋開始（右，藍，寬＋放大）＝約 40 : 60 */
-.bk-acts.bk-main { margin-top: 8px; flex-wrap: nowrap; align-items: stretch; }
+/* 主要動作列：單顆全幅。未跑車→開始（藍）；跑這筆中→完成（綠）。放大好按 */
+.bk-acts.bk-main { margin-top: 8px; }
 .bk-acts.bk-main button {
-  flex: 2; padding: 11px 12px; font-size: 0.9rem; font-weight: 700;
+  flex: 1; width: 100%; padding: 13px 12px; font-size: 1rem; font-weight: 700;
   display: flex; align-items: center; justify-content: center; gap: 5px;
 }
-.bk-acts.bk-main button.bk-start-btn { flex: 3; padding: 13px 12px; font-size: 1rem; }
-.bk-acts button.bk-done-btn { background: #34a853; color: #fff; border-color: #34a853; }
 .bk-acts button.bk-start-btn { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+.bk-acts button.bk-finish-btn { background: #34a853; color: #fff; border-color: #34a853; }
+.bk-acts button.bk-done-btn { background: #34a853; color: #fff; border-color: #34a853; }
 /* 編輯：移到卡片標題右上角、低調小鈕 */
 .bk-edit-corner {
   flex: none; border: 1px solid rgba(0,0,0,0.12); background: rgba(255,255,255,0.65);
@@ -622,6 +622,7 @@ textarea.bk-in { resize: vertical; }
   .bk-acts button { background: #262626; color: #8ab4f8; border-color: rgba(255,255,255,0.12); }
   .bk-acts button.bk-ok { background: #34a853; color: #fff; }
   .bk-acts button.bk-done-btn { background: #34a853; color: #fff; border-color: #34a853; }
+  .bk-acts button.bk-finish-btn { background: #34a853; color: #fff; border-color: #34a853; }
   .bk-acts button.bk-start-btn { background: #1a73e8; color: #fff; border-color: #1a73e8; }
   .bk-edit-corner { background: rgba(255,255,255,0.06); color: #8ab4f8; border-color: rgba(255,255,255,0.18); }
   .bk-done-sec { border-top-color: rgba(255,255,255,0.08); }
