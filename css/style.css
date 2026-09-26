@@ -501,8 +501,11 @@ html, body {
   font-family: inherit; cursor: pointer;
 }
 .bk-acts button.bk-ok { background: #34a853; color: #fff; border-color: #34a853; }
-/* 次要動作列（撥號/傳確認/標記已確認）：小鈕 */
-.bk-acts.bk-sec button { font-size: 0.8rem; padding: 7px 11px; }
+/* 次要動作列（撥號/傳確認/標記已確認/直接完成）：一律同一排、不換行；
+   放不下就水平捲動（隱藏捲軸），絕不掉到第二排 */
+.bk-acts.bk-sec { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.bk-acts.bk-sec::-webkit-scrollbar { display: none; }
+.bk-acts.bk-sec button { flex: 0 0 auto; font-size: 0.72rem; padding: 6px 8px; white-space: nowrap; }
 /* 主要動作列：單顆全幅。未跑車→開始（藍）；跑這筆中→完成（綠）。放大好按 */
 .bk-acts.bk-main { margin-top: 8px; }
 .bk-acts.bk-main button {
