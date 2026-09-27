@@ -501,6 +501,7 @@
     var secBtns =
       (b.phone ? '<button onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
       (b.status === 'pending' ? '<button onclick="MaptripBooking.shareConfirm(\'' + b.id + '\')">📤 傳確認</button>' : '') +
+      (canAct ? '<button class="bk-copy" onclick="MaptripBooking.copyReminder(\'' + b.id + '\')">📋 複製訊息</button>' : '') +
       (b.status === 'pending' ? '<button class="bk-ok" onclick="MaptripBooking.markConfirmed(\'' + b.id + '\')">✓ 標記已確認</button>' : '') +
       ((canAct && !isRunningThis) ? '<button onclick="MaptripBooking.markDone(\'' + b.id + '\')">✓ 直接完成</button>' : '');
     var secRow = secBtns ? '<div class="bk-acts bk-sec">' + secBtns + '</div>' : '';
@@ -774,6 +775,48 @@
     } catch (_) { _toast('分享失敗'); }
   }
 
+  // ---------- 複製訊息（預約前一天提醒客人用；與「傳確認」分開） ----------
+  // 傳確認＝請客人確認預約內容是否正確（走分享選單）；
+  // 複製訊息＝前一天提醒客人明天的預約（直接複製到剪貼簿，自己貼到 LINE）。
+  function _reminderText(b, now) {
+    now = now || Date.now();
+    var t = new Date(b.pickupTime);
+    var wd = ['日', '一', '二', '三', '四', '五', '六'][t.getDay()];
+    var dk = _dayKey(b.pickupTime);
+    var rel = dk === _dayKey(now) ? '今天' : (dk === _dayKey(now + 86400000) ? '明天' : '');
+    var when = (rel ? rel + ' ' : '') + (t.getMonth() + 1) + '/' + t.getDate() + '（週' + wd + '）' + _fmtTime(b.pickupTime);
+    var ds = _destsOf(b);
+    return '【預約提醒】\n' +
+      (b.name ? b.name + ' 您好，' : '您好，') + '提醒您' + (rel || '') + '的預約：\n' +
+      '時間：' + when + '\n' +
+      '上車：' + ((b.pickup && b.pickup.text) || '') + '\n' +
+      ds.map(function (d, i) { return '下車' + (ds.length > 1 ? (i + 1) : '') + '：' + d.text + '\n'; }).join('') +
+      (b.note ? '備註：' + b.note + '\n' : '') +
+      '我會準時到達，如有變動請再告訴我，謝謝！';
+  }
+  function _copyText(txt) {
+    // WKWebView 上 navigator.clipboard 可能不存在/被拒 → 退回 textarea + execCommand
+    function legacy() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = txt; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, txt.length);
+        var ok = document.execCommand('copy'); document.body.removeChild(ta); return ok;
+      } catch (_) { return false; }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(txt).then(function () { return true; }, function () { return legacy(); });
+    }
+    return Promise.resolve(legacy());
+  }
+  function copyReminder(id) {
+    var b = get(id); if (!b) return;
+    _copyText(_reminderText(b)).then(function (ok) {
+      _toast(ok ? '已複製提醒訊息，貼給客人' : '複製失敗');
+    });
+  }
+
   // ---------- init ----------
   function init(ctx) {
     ctx = ctx || {};
@@ -797,7 +840,7 @@
     init: init, open: open, close: close, openForm: openForm, closeForm: closeForm,
     save: save, remove: remove, markConfirmed: markConfirmed, markDone: markDone, reopen: reopen, clear: clear, set: set,
     all: all, get: get, byDay: byDay, upcomingCount: upcomingCount,
-    navigate: navigate, call: call, shareConfirm: shareConfirm, toggleDay: toggleDay,
+    navigate: navigate, call: call, shareConfirm: shareConfirm, copyReminder: copyReminder, toggleDay: toggleDay,
     openFromMap: openFromMap, startFromMap: startFromMap, startFromList: startFromList,
     finishFromList: finishFromList, endFromMap: endFromMap,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
@@ -807,7 +850,7 @@
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
     _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,
     _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf,
-    _cardHtml: _cardHtml, _pickActiveId: _pickActiveId
+    _cardHtml: _cardHtml, _pickActiveId: _pickActiveId, _reminderText: _reminderText
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
