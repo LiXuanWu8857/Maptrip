@@ -574,11 +574,13 @@
       '<div class="bk-body" id="bk-form-body"></div>';
     document.body.appendChild(ov);
   }
+  // 新增預約的預設提醒：1 小時前＋1 天前（分鐘，由小到大，與 _addReminder 排序一致）
+  var DEFAULT_REMINDERS = [60, 1440];
   function openForm(id) {
     _ensureFormDom();
     _editId = id || null;
     var b = id ? get(id) : null;
-    _formReminders = b && b.reminders ? b.reminders.slice() : [30];
+    _formReminders = b && b.reminders ? b.reminders.slice() : DEFAULT_REMINDERS.slice();
     var ds = b ? _destsOf(b).map(function (d) { return d.text || ''; }) : [];
     _formDests = ds.length ? ds : [''];
     document.getElementById('bk-form-title').textContent = id ? '編輯預約' : '新增預約';
@@ -854,7 +856,7 @@
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
     _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,
     _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf,
-    _cardHtml: _cardHtml, _pickActiveId: _pickActiveId, _reminderText: _reminderText
+    _cardHtml: _cardHtml, _pickActiveId: _pickActiveId, _reminderText: _reminderText, DEFAULT_REMINDERS: DEFAULT_REMINDERS
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
