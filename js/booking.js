@@ -784,7 +784,7 @@
     var wd = ['日', '一', '二', '三', '四', '五', '六'][t.getDay()];
     var dk = _dayKey(b.pickupTime);
     var rel = dk === _dayKey(now) ? '今天' : (dk === _dayKey(now + 86400000) ? '明天' : '');
-    var when = (rel ? rel + ' ' : '') + (t.getMonth() + 1) + '/' + t.getDate() + '（週' + wd + '）' + _fmtTime(b.pickupTime);
+    var when = (t.getMonth() + 1) + '/' + t.getDate() + '（週' + wd + '）' + _fmtTime(b.pickupTime);
     var ds = _destsOf(b);
     return '【預約提醒】\n' +
       (b.name ? b.name + ' 您好，' : '您好，') + '提醒您' + (rel || '') + '的預約：\n' +
@@ -792,7 +792,8 @@
       '上車：' + ((b.pickup && b.pickup.text) || '') + '\n' +
       ds.map(function (d, i) { return '下車' + (ds.length > 1 ? (i + 1) : '') + '：' + d.text + '\n'; }).join('') +
       (b.note ? '備註：' + b.note + '\n' : '') +
-      '我會準時到達，如有變動請再告訴我，謝謝！';
+      '我會提前到達，抵達時會傳訊息給您。\n' +
+      '如有變動請再告訴我，謝謝！';
   }
   function _copyText(txt) {
     // WKWebView 上 navigator.clipboard 可能不存在/被拒 → 退回 textarea + execCommand
