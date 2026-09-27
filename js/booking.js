@@ -786,14 +786,17 @@
     var rel = dk === _dayKey(now) ? '今天' : (dk === _dayKey(now + 86400000) ? '明天' : '');
     var when = (t.getMonth() + 1) + '/' + t.getDate() + '（週' + wd + '）' + _fmtTime(b.pickupTime);
     var ds = _destsOf(b);
-    return '【預約提醒】\n' +
-      (b.name ? b.name + ' 您好，' : '您好，') + '提醒您' + (rel || '') + '的預約：\n' +
-      '時間：' + when + '\n' +
-      '上車：' + ((b.pickup && b.pickup.text) || '') + '\n' +
-      ds.map(function (d, i) { return '下車' + (ds.length > 1 ? (i + 1) : '') + '：' + d.text + '\n'; }).join('') +
-      (b.note ? '備註：' + b.note + '\n' : '') +
-      '我會提前到達，抵達時會傳訊息給您。\n' +
-      '如有變動請再告訴我，謝謝！';
+    // 最後一個＝下車（目的地）；中間的＝中途停靠點（多個才編號）
+    var mids = ds.slice(0, -1), last = ds[ds.length - 1];
+    return '🚖【預約提醒】\n' +
+      (b.name ? b.name + ' 您好 😊 ' : '您好 😊 ') + '提醒您' + (rel || '') + '的預約：\n' +
+      '🕐 時間：' + when + '\n' +
+      '📍 上車：' + ((b.pickup && b.pickup.text) || '') + '\n' +
+      mids.map(function (d, i) { return '🔸 中途停靠點' + (mids.length > 1 ? (i + 1) : '') + '：' + d.text + '\n'; }).join('') +
+      (last ? '🏁 下車：' + last.text + '\n' : '') +
+      (b.note ? '📝 備註：' + b.note + '\n' : '') +
+      '🚗 我會提前到達，抵達時會傳訊息給您。\n' +
+      '🙏 如有變動請再告訴我，謝謝！';
   }
   function _copyText(txt) {
     // WKWebView 上 navigator.clipboard 可能不存在/被拒 → 退回 textarea + execCommand
