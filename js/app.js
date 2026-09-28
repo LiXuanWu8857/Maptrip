@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.413';
+const APP_VERSION  = '1.1.414';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1415,7 +1415,7 @@ function openSoloTrip(set, idx, labelFn) {
   soloSet = set;
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
-  // 禁止地圖拖曳（不能平移），但保留縮放並鎖成「以畫面中心縮放」（centerZoom）。
+  // 禁止地圖拖曳（不能平移），但保留平滑的雙指縮放。
   MaptripPreviewGestures.lock(map);
   document.getElementById('map').addEventListener('touchstart', _soloTouchStart, { passive: true });
   document.getElementById('map').addEventListener('touchend',   _soloTouchEnd,   { passive: true });
@@ -1468,8 +1468,6 @@ function renderSoloTrip() {
     );
   }
   fitMapToRoute(coords, 'solo-bar');
-  // 切趟/重新置中後更新「以中心縮放」的鎖定中心（GL 引擎用；Leaflet 為 no-op）
-  MaptripPreviewGestures.recenter(map);
 
   const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
   const info  = `${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
@@ -1861,8 +1859,6 @@ function previewDay(dayKey) {
   showTodayLayers(false);
 
   if (allCoords.length) fitMapToRoute(allCoords, 'day-preview-bar');
-  // fit 完更新中心鎖（GL 引擎；暫停守衛讓 fit 動畫跑完再抓新中心）
-  MaptripPreviewGestures.recenter(map);
 }
 
 function exitDayPreview() {
