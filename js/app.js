@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.412';
+const APP_VERSION  = '1.1.413';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1416,8 +1416,7 @@ function openSoloTrip(set, idx, labelFn) {
   soloIdx = Math.max(0, Math.min(idx, set.length - 1));
   soloLabelFn = labelFn;
   // 禁止地圖拖曳（不能平移），但保留縮放並鎖成「以畫面中心縮放」（centerZoom）。
-  map.dragging.disable();
-  if (map.centerZoom) map.centerZoom.enable(); else map.touchZoom.disable();
+  MaptripPreviewGestures.lock(map);
   document.getElementById('map').addEventListener('touchstart', _soloTouchStart, { passive: true });
   document.getElementById('map').addEventListener('touchend',   _soloTouchEnd,   { passive: true });
   // 先顯示 solo-bar，讓瀏覽器先算好 layout，fitBounds 才能量到正確高度
@@ -1470,7 +1469,7 @@ function renderSoloTrip() {
   }
   fitMapToRoute(coords, 'solo-bar');
   // 切趟/重新置中後更新「以中心縮放」的鎖定中心（GL 引擎用；Leaflet 為 no-op）
-  if (map.centerZoom && map.centerZoom.setCenter) map.centerZoom.setCenter();
+  MaptripPreviewGestures.recenter(map);
 
   const label = soloLabelFn ? soloLabelFn(soloIdx) : '';
   const info  = `${fmtTime(trip.startTime)} → ${fmtTime(trip.endTime)}　${fmtDist(trip.totalDist)}`;
@@ -1529,8 +1528,7 @@ function exitSoloMode() {
   soloSet = []; soloIdx = 0; soloLabelFn = null; soloFromHistory = false;
   showTodayLayers(true);   // 還原今日行程圖層（pane 顯示 + 不透明度）
   // 恢復地圖拖曳 + 還原縮放（centerZoom 對稱關閉，回到主地圖預設）
-  map.dragging.enable();
-  if (map.centerZoom) map.centerZoom.disable(); else map.touchZoom.enable();
+  MaptripPreviewGestures.unlock(map);
   document.getElementById('map').removeEventListener('touchstart', _soloTouchStart);
   document.getElementById('map').removeEventListener('touchend',   _soloTouchEnd);
   document.getElementById('solo-bar').style.display = 'none';
@@ -1835,6 +1833,8 @@ function previewDay(dayKey) {
   // 日預覽時：雙擊地圖回主頁（暫時關掉 Leaflet 雙擊放大避免衝突）
   map.doubleClickZoom.disable();
   map.on('dblclick', backToMainMap);
+  // 歷史整日預覽：鎖平移、只留「以中心」的雙指縮放（與單趟預覽一致）
+  MaptripPreviewGestures.lock(map);
 
   // 深色模式：深色底圖 + 淺色路線/點；淺色模式：淺色底圖 + 黑色路線/點
   const dark = _isDark();
@@ -1861,6 +1861,8 @@ function previewDay(dayKey) {
   showTodayLayers(false);
 
   if (allCoords.length) fitMapToRoute(allCoords, 'day-preview-bar');
+  // fit 完更新中心鎖（GL 引擎；暫停守衛讓 fit 動畫跑完再抓新中心）
+  MaptripPreviewGestures.recenter(map);
 }
 
 function exitDayPreview() {
@@ -1875,6 +1877,8 @@ function exitDayPreview() {
   // 還原原本底圖
   if (dayPreviewTile) { map.removeLayer(dayPreviewTile); dayPreviewTile = null; }
   TILE_LAYERS[currentTile].addTo(map);
+  // 還原地圖拖曳 + 縮放（與單趟預覽對稱）
+  MaptripPreviewGestures.unlock(map);
   // 還原當日行程圖層
   showTodayLayers(true);
 }

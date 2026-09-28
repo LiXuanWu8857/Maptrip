@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.412';</script>
+<script>window.INDEX_VERSION = '1.1.413';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -521,6 +521,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/screenshot.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 截圖預覽雙指縮放/拖曳/雙擊還原（純檢視手勢，掛 #screenshot-img）：app.js 開機 initScreenshot -->
 <script>document.write('<scr' + 'ipt src="js/pinch-view.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 歷史預覽（單趟/整日）地圖手勢鎖定（純函式 lock/unlock/recenter）：app.js 頂層呼叫，排在 app.js 之前 -->
+<script>document.write('<scr' + 'ipt src="js/preview-gestures.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 行程回放（動畫+鏡頭，依賴注入 map）：app.js 的 MaptripReplay.init 在載入時即引用，故排在 app.js 之前 -->
 <script>document.write('<scr' + 'ipt src="js/replay.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 錄製狀態機（生命週期/復原/鎖屏方塊/GPS 監看，依賴注入 map 與共用活狀態）：排在 app.js 之前 -->

@@ -69,6 +69,15 @@
     收斂會被誤判還原）。`maptrip_zigfix` 旗標 v246→v275 重跑一次修既有趟。測試 `geoclean.js` 8 項
     （直線/真街廓/正常轉彎不誤傷、紅燈圈收掉、頭尾保留、dropSpikes 舊行為不變）全過
 - **單趟預覽（今日與歷史）**：一律切白色無標示底圖，退出還原。今日路線藍色、歷史黑色。左右滑切趟。截圖鈕
+  - **歷史預覽地圖手勢鎖定（v1.1.413）** `js/preview-gestures.js`（MaptripPreviewGestures，純函式 `lock/unlock/recenter`）：
+    歷史檢視（**單趟預覽＋整日預覽**）都「**鎖平移、只留以畫面中心的雙指縮放**」（使用者要「雙指縮放但不開放平移」）。
+    兩地圖引擎一致走 `map.centerZoom` facade——GL 由 gl-compat 內建（touchZoomRotate＋中心守衛）、標準 Leaflet 由 initMap
+    polyfill 用原生 `touchZoom:'center'`（繞地圖中心而非手指）。`lock`＝`dragging.disable()`＋`centerZoom.enable()`；
+    `unlock` 對稱還原；`recenter`＝切趟/重新 fitBounds 後 `centerZoom.setCenter()`（暫停守衛讓 fit 動畫跑完再抓新中心，
+    標準 Leaflet 為 no-op）。app.js `showTripSolo/exitSoloMode/renderSoloTrip`（原本就鎖，改成呼叫模組、行為不變）與
+    `previewDay/exitDayPreview`（**新增**：整日預覽原本可平移可縮放→改成鎖平移＋中心縮放）都呼叫此模組。單趟的
+    `_soloMulti` 觸控守衛（多指手勢不誤判切趟/退出）維持不變。測試 `previewgest.js` 18 項（lock/unlock 對稱、
+    無 centerZoom 後備、recenter、null 安全、例外隔離）全過。
   - **底圖來源（血淚，換過三次）**：①原用 CartoDB `light/dark_nolabels`，但 **Carto 2026 起免費底圖需付費 API key** →
     「API KEY REQUIRED」浮水印（使用者回報）。②v1.1.360 換 **Esri Light/Dark Gray Base**（免 key），但實測**其實內建街名＝有字**、
     且**無 retina（@2x）圖磚**→ 高解析手機螢幕上街名字糊（使用者回報）。③**v1.1.362 改用主地圖同一套 Google 圖磚
@@ -492,7 +501,8 @@
   retrySnapBacklog/loadTodayFromStorage 因重畫地圖留 app.js）、`sync-ui.js`（登入閘門/同步面板 UI，
   sync.js 之上；refreshAfterSync 留 app.js）、`orient.js`（羅盤/朝車頭/方向光束，依賴注入 map 與
   heading 狀態；對外開 cancelBearingAnim/syncBearingFromMap 供 initMap 手勢/rotate 呼叫）、
-  `manual-trips.js`（v328，記帳者補登紀錄的顯示層合併 MaptripManual，不進 days）。
+  `manual-trips.js`（v328，記帳者補登紀錄的顯示層合併 MaptripManual，不進 days）、
+  `preview-gestures.js`（v1.1.413，歷史預覽地圖手勢鎖定 MaptripPreviewGestures，純函式 lock/unlock/recenter，map 傳入）。
   **app.js 3909→2225 行**。剩多為歷史清單/單趟預覽 UI（重耦合 map/圖層/DOM，逐一小抽即可）。
   後續新模組：`nav.js`（一鍵導航選單）、`nearby.js`（找附近加油/停車/超商，Overpass）、
   `addr-search.js`（搜尋地址）、`search-menu.js`（右下角搜尋 FAB speed-dial）、
