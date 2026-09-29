@@ -290,31 +290,37 @@
       '<button class="bkm-btn" onclick="event.stopPropagation();MaptripBooking.navigate(\'' + b.id + '\')">🧭</button>' +
       '</span>';
   }
+  // 地圖卡的地址列：出發 📍 →（中途 🔴 每一站）→ 目的 🏁。中途下車點也要顯示。
+  function _stopsLines(b) {
+    var out = '';
+    if (b.pickup && b.pickup.text) out += '<div class="bkm-line"><span class="ic">📍</span><span class="tx">' + _esc(b.pickup.text) + '</span></div>';
+    var dests = _destsOf(b);
+    dests.forEach(function (d, i) {
+      if (!d || !d.text) return;
+      var last = i === dests.length - 1;
+      out += '<div class="bkm-line"><span class="ic">' + (last ? '🏁' : '🔴') + '</span><span class="tx">' + _esc(d.text) + '</span></div>';
+    });
+    return out;
+  }
   function _mapCardHtml(b) {
     var name = b.name || b.lineName || '預約';
-    var pickup = (b.pickup && b.pickup.text) ? '<div class="bkm-line"><span class="ic">📍</span><span class="tx">' + _esc(b.pickup.text) + '</span></div>' : '';
-    var dests = _destsOf(b);
-    var dest = dests.length ? '<div class="bkm-line"><span class="ic">🏁</span><span class="tx">' + _esc(dests[dests.length - 1].text) + '</span></div>' : '';
     var note = b.note ? '<div class="bkm-note">📝 ' + _esc(b.note) + '</div>' : '';
     var startBtn = '<div class="bkm-idleacts"><button class="bkm-start" onclick="event.stopPropagation();MaptripBooking.startFromMap(\'' + b.id + '\')">▶ 開始行程</button></div>';
     return '<div class="bkm-card" onclick="MaptripBooking.openFromMap(\'' + b.id + '\')">' +
       '<div class="bkm-r1"><span class="bkm-when">' + _onmapWhen(b) + '</span>' +
       '<span class="bkm-name">' + _esc(name) + '</span>' + _actsHtml(b) + '</div>' +
-      pickup + dest + note + startBtn + '</div>';
+      _stopsLines(b) + note + startBtn + '</div>';
   }
   // 跑車中（從此預約開始）：整卡改藍色，保留預約資料，加上即時時間/距離＋已抵達
   function _recCardHtml(b) {
     var name = b.name || b.lineName || '預約';
-    var pickup = (b.pickup && b.pickup.text) ? '<div class="bkm-line"><span class="ic">📍</span><span class="tx">' + _esc(b.pickup.text) + '</span></div>' : '';
-    var dests = _destsOf(b);
-    var dest = dests.length ? '<div class="bkm-line"><span class="ic">🏁</span><span class="tx">' + _esc(dests[dests.length - 1].text) + '</span></div>' : '';
     var note = b.note ? '<div class="bkm-note">📝 ' + _esc(b.note) + '</div>' : '';
     return '<div class="bkm-card rec">' +
       '<div class="bkm-r1">' +
         '<span class="bkm-recinfo"><span class="bkm-rdot"></span>' +
         '<b class="bkm-rt">00:00</b><span class="bkm-rd">0 m</span></span>' +
         '<span class="bkm-name">' + _esc(name) + '</span></div>' +
-      pickup + dest + note +
+      _stopsLines(b) + note +
       '<div class="bkm-recacts">' +
         (b.phone ? '<button class="bkm-rbtn" onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
         '<button class="bkm-rbtn" onclick="MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航</button>' +
@@ -856,7 +862,7 @@
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
     _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,
     _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf,
-    _cardHtml: _cardHtml, _pickActiveId: _pickActiveId, _reminderText: _reminderText, DEFAULT_REMINDERS: DEFAULT_REMINDERS
+    _cardHtml: _cardHtml, _pickActiveId: _pickActiveId, _reminderText: _reminderText, DEFAULT_REMINDERS: DEFAULT_REMINDERS, _stopsLines: _stopsLines
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
