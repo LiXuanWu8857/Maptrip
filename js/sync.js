@@ -74,14 +74,38 @@
   // 預約本機備份（按帳號分開）：換帳號清本機前先備份，登入後雲端快照再併回。
   // 這樣即使規則沒部署（預約沒上雲）或離線 backlog，切帳號也不會弄丟預約。
   function _bkBakKey(uid) { return 'mt_bk_bak_' + (uid || ''); }
-  // 純函式（供測試）：雲端清單 ∪ 本機備份（以 id 去重、雲端優先），並回傳「只在備份、需補回雲端」的那些。
-  function _mergeBk(cloud, bak) {
+  // 「雲端上看過的預約 id」（上一次伺服器快照的 id 清單）：用來分辨「本機有、雲端沒有」是
+  // ①還沒上雲（要補回）還是 ②已被刪除（不可復活）。
+  function _bkSeenKey(uid) { return 'mt_bk_seen_' + (uid || ''); }
+  // 純函式（供測試）：雲端清單 ∪ 本機（備份＋目前清單），以 id 去重、雲端優先。
+  //   seen＝上次伺服器快照有的 id；fromServer＝這次快照來自伺服器（非離線快取）。
+  //   本機有、雲端沒有：
+  //     - 沒在雲端出現過 → 還沒上雲 → 保留並補回雲端（push）
+  //     - 曾在雲端出現過、這次伺服器快照卻沒有 → 已被刪除（本機或別台）→ 丟掉，不復活
+  //     - 曾出現過但這次是離線快取（可能不完整）→ 先保留、不補寫
+  //   v1.1.416 版沒有 seen → 刪掉的預約每次快照都被備份「救回來」＝刪不掉（使用者回報）。
+  function _mergeBk(cloud, bak, seen, fromServer) {
     cloud = cloud || []; bak = bak || [];
     var ids = {}; cloud.forEach(function (b) { if (b && b.id != null) ids[String(b.id)] = 1; });
-    var push = [];
-    bak.forEach(function (b) { if (b && b.id != null && !ids[String(b.id)]) push.push(b); });
-    return { list: cloud.concat(push), push: push };
+    var was = {}; (seen || []).forEach(function (id) { was[String(id)] = 1; });
+    var push = [], keep = [], done = {};
+    bak.forEach(function (b) {
+      if (!b || b.id == null) return;
+      var id = String(b.id);
+      if (ids[id] || done[id]) return;
+      done[id] = 1;
+      if (!was[id]) { push.push(b); keep.push(b); }
+      else if (!fromServer) keep.push(b);
+    });
+    var nextSeen = fromServer ? Object.keys(ids) : Object.keys(Object.assign({}, was, ids));
+    return { list: cloud.concat(keep), push: push, seen: nextSeen };
   }
+  // Firestore 不接受 undefined 欄位（set() 直接丟錯）。新預約的座標在還沒查到前是
+  // {text, lat: undefined, lng: undefined} → 以前每筆新預約都寫不上雲（被 catch 靜默吞掉），
+  // 規則部署後雲端快照一來就把本機蓋掉＝「新增後更新就不見」。→ 寫入前先剝掉 undefined。
+  function _cleanBk(b) { try { return JSON.parse(JSON.stringify(b)); } catch (_) { return b; } }
+  function _bkBakRead(uid) { try { return JSON.parse(localStorage.getItem(_bkBakKey(uid)) || '[]') || []; } catch (_) { return []; } }
+  function _bkBakWrite(uid, list) { try { localStorage.setItem(_bkBakKey(uid), JSON.stringify(list || [])); } catch (_) {} }
   function _clearLocalForSwitch() {
     try { if (window.TripStore && TripStore.clearAll) TripStore.clearAll(); } catch (_) {}
     try { localStorage.removeItem('maptrip_deleted'); } catch (_) {}
@@ -362,11 +386,17 @@
   // ── 預約（bookings）：司機本人的預約，users/{uid}/bookings/{id} 每筆一份 ──
   async function writeBooking(b) {
     if (!ready || !user || !b || !b.id) return;
-    try { await db.collection('users').doc(user.uid).collection('bookings').doc(String(b.id)).set(b, { merge: true }); }
-    catch (e) { log('booking write fail ' + (e && e.code)); }
+    var clean = _cleanBk(b);
+    // 先記進本帳號備份：就算這次寫雲端失敗（離線/規則），下次快照也會補寫、不會被雲端蓋掉
+    var bak = _bkBakRead(user.uid).filter(function (x) { return x && String(x.id) !== String(clean.id); });
+    bak.push(clean); _bkBakWrite(user.uid, bak);
+    try { await db.collection('users').doc(user.uid).collection('bookings').doc(String(clean.id)).set(clean, { merge: true }); }
+    catch (e) { log('booking write fail ' + (e && (e.code || e.message))); }
   }
   async function deleteBooking(id) {
     if (!ready || !user || id == null) return;
+    // 備份一併移除，否則下次快照又把它「救回來」
+    _bkBakWrite(user.uid, _bkBakRead(user.uid).filter(function (x) { return x && String(x.id) !== String(id); }));
     try { await db.collection('users').doc(user.uid).collection('bookings').doc(String(id)).delete(); }
     catch (e) { log('booking del fail ' + (e && e.code)); }
   }
@@ -731,15 +761,19 @@
       // 監聽自己的「預約」集合：多裝置即時同步（Phase 1）
       unsubBooking = db.collection('users').doc(user.uid).collection('bookings').onSnapshot(snap => {
         var list = []; snap.forEach(doc => { var b = doc.data() || {}; b.id = doc.id; list.push(b); });
-        // 併入本帳號本機備份：涵蓋「規則未部署→只在本機的預約」與離線 backlog，切帳號不再遺失。
+        // 併入本機（目前清單＋本帳號備份）：涵蓋「還沒上雲」的預約與離線 backlog，切帳號不再遺失；
+        // 用 seen 分辨「還沒上雲（補回）」與「已刪除（不復活）」。
         try {
-          var bakRaw = localStorage.getItem(_bkBakKey(user.uid));
-          var mg = _mergeBk(list, bakRaw ? (JSON.parse(bakRaw) || []) : []);
+          var fromServer = !(snap.metadata && snap.metadata.fromCache);
+          var local = (window.MaptripBooking && MaptripBooking.all) ? MaptripBooking.all() : [];
+          var seen = []; try { seen = JSON.parse(localStorage.getItem(_bkSeenKey(user.uid)) || '[]') || []; } catch (_) {}
+          var mg = _mergeBk(list, local.concat(_bkBakRead(user.uid)), seen, fromServer);
           list = mg.list;
-          mg.push.forEach(function (b) { writeBooking(b); });   // 補回雲端（規則 OK 後即持久）
+          try { localStorage.setItem(_bkSeenKey(user.uid), JSON.stringify(mg.seen)); } catch (_) {}
+          mg.push.forEach(function (b) { writeBooking(b); });   // 補回雲端
         } catch (_) {}
         if (window.MaptripBooking) MaptripBooking.set(list);
-        try { localStorage.setItem(_bkBakKey(user.uid), JSON.stringify(list)); } catch (_) {}   // 更新本帳號備份
+        _bkBakWrite(user.uid, list.map(_cleanBk));   // 更新本帳號備份
       }, err => log('booking snapshot err ' + (err && err.code)));
     } catch (_) {}
     try {
@@ -911,6 +945,6 @@
     createCarTeam: createCarTeam, createTeamInvite: createTeamInvite, joinCarTeam: joinCarTeam, leaveCarTeam: leaveCarTeam,
     contributeHotspot: contributeHotspot, readGroupGrid: readGroupGrid, readGlobalGrid: readGlobalGrid,
     backfillTeamGrid: backfillTeamGrid, backfillGlobalGrid: backfillGlobalGrid,
-    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision, _mergeBk: _mergeBk,
+    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision, _mergeBk: _mergeBk, _cleanBk: _cleanBk,
     _teamClaimBlock: _teamClaimBlock, _capTake: _capTake };
 })();
