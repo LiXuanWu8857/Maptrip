@@ -284,12 +284,6 @@
            _elShown('day-preview-bar') || _elShown('hs-panel') || _elShown('sheet-overlay');
   }
   function _onmapWhen(b) { return '⏰ ' + _onmapCountdown(b.pickupTime, Date.now()) + ' · ' + _fmtTime(b.pickupTime); }
-  function _actsHtml(b) {
-    return '<span class="bkm-acts">' +
-      (b.phone ? '<button class="bkm-btn" onclick="event.stopPropagation();MaptripBooking.call(\'' + b.id + '\')">📞</button>' : '') +
-      '<button class="bkm-btn" onclick="event.stopPropagation();MaptripBooking.navigate(\'' + b.id + '\')">🧭</button>' +
-      '</span>';
-  }
   // 地圖卡的地址列：出發 📍 →（中途 🔴 每一站）→ 目的 🏁。中途下車點也要顯示。
   function _stopsLines(b) {
     var out = '';
@@ -305,11 +299,16 @@
   function _mapCardHtml(b) {
     var name = b.name || b.lineName || '預約';
     var note = b.note ? '<div class="bkm-note">📝 ' + _esc(b.note) + '</div>' : '';
-    var startBtn = '<div class="bkm-idleacts"><button class="bkm-start" onclick="event.stopPropagation();MaptripBooking.startFromMap(\'' + b.id + '\')">▶ 開始行程</button></div>';
+    // v1.1.424 使用者：開始前改成跟開始後同一套排版＝底部一列「撥號／導航／開始」（原本右上角小圖示＋整列開始行程）
+    var acts = '<div class="bkm-recacts">' +
+      (b.phone ? '<button class="bkm-rbtn" onclick="event.stopPropagation();MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
+      '<button class="bkm-rbtn" onclick="event.stopPropagation();MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航</button>' +
+      '<button class="bkm-end bkm-go" onclick="event.stopPropagation();MaptripBooking.startFromMap(\'' + b.id + '\')">▶ 開始</button>' +
+      '</div>';
     return '<div class="bkm-card" onclick="MaptripBooking.openFromMap(\'' + b.id + '\')">' +
       '<div class="bkm-r1"><span class="bkm-when">' + _onmapWhen(b) + '</span>' +
-      '<span class="bkm-name">' + _esc(name) + '</span>' + _actsHtml(b) + '</div>' +
-      _stopsLines(b) + note + startBtn + '</div>';
+      '<span class="bkm-name">' + _esc(name) + '</span></div>' +
+      _stopsLines(b) + note + acts + '</div>';
   }
   // 跑車中（從此預約開始）：整卡改藍色，保留預約資料，加上即時時間/距離＋已抵達
   function _recCardHtml(b) {
@@ -321,8 +320,8 @@
         '<b class="bkm-rt">00:00</b><span class="bkm-rd">0 m</span></span>' +
         '<span class="bkm-name">' + _esc(name) + '</span></div>' +
       _stopsLines(b) + note +
+      // v1.1.424 使用者：開始後拿掉撥號，只留導航＋已抵達（1:3，見 CSS .bkm-card.rec .bkm-end）
       '<div class="bkm-recacts">' +
-        (b.phone ? '<button class="bkm-rbtn" onclick="MaptripBooking.call(\'' + b.id + '\')">📞 撥號</button>' : '') +
         '<button class="bkm-rbtn" onclick="MaptripBooking.navigate(\'' + b.id + '\')">🧭 導航</button>' +
         '<button class="bkm-end" onclick="MaptripBooking.endFromMap()">已抵達 ✓</button>' +
       '</div></div>';
@@ -390,7 +389,7 @@
     if (rec && _activeBookingId) {
       var active = get(_activeBookingId);
       if (active && active.status !== 'done' && active.status !== 'cancelled') {
-        var sigA = 'REC|' + active.id;   // 時間/距離另由 _syncRecInfo 每秒更新，不進簽章
+        var sigA = 'REC|' + active.id + '#' + (active.updatedAt || 0);   // 時間/距離另由 _syncRecInfo 每秒更新，不進簽章
         if (sigA !== _onmapSig) { el.innerHTML = _recCardHtml(active); _onmapSig = sigA; }
         if (rb) rb.style.display = 'none';
         el.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 64px)';
@@ -415,7 +414,8 @@
     }
 
     // (C) 閒置 → 完整紅卡（最多 2 張＋「還有 N 筆」）
-    var sigC = 'IDLE|' + due.map(function (b) { return b.id + '@' + Math.round((b.pickupTime - now) / 60000); }).join(',');
+    // 簽章含 updatedAt：編輯預約（電話/地址）後地圖卡立刻重畫，不用等倒數跳分鐘
+    var sigC = 'IDLE|' + due.map(function (b) { return b.id + '#' + (b.updatedAt || 0) + '@' + Math.round((b.pickupTime - now) / 60000); }).join(',');
     if (sigC !== _onmapSig) {
       el.innerHTML = due.slice(0, 2).map(_mapCardHtml).join('') +
         (due.length > 2 ? '<div class="bkm-more">＋ 還有 ' + (due.length - 2) + ' 筆在 30 分內</div>' : '');

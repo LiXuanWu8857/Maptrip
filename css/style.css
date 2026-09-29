@@ -399,15 +399,21 @@ html, body {
 .bkm-rt { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .bkm-rd { font-size: 0.8rem; opacity: 0.92; font-variant-numeric: tabular-nums; }
 .bkm-recacts { display: flex; gap: 8px; margin-top: 9px; }
-.bkm-rbtn { flex: 1; padding: 9px 6px; border: none; border-radius: 10px; background: rgba(255,255,255,0.22); color: #fff; font-size: 0.84rem; font-weight: 700; font-family: inherit; cursor: pointer; }
+.bkm-rbtn { flex: 1 1 0; min-width: 0; padding: 9px 6px; border: none; border-radius: 10px; background: rgba(255,255,255,0.22); color: #fff; font-size: 0.84rem; font-weight: 700; font-family: inherit; cursor: pointer; }
 .bkm-rbtn:active { background: rgba(255,255,255,0.34); }
-.bkm-end { flex: 1.2; padding: 9px 6px; border: none; border-radius: 10px; background: #fff; color: #1a73e8; font-size: 0.86rem; font-weight: 800; font-family: inherit; cursor: pointer; }
+.bkm-end { flex: 1.2 1 0; min-width: 0; padding: 9px 6px; border: none; border-radius: 10px; background: #fff; color: #1a73e8; font-size: 0.86rem; font-weight: 800; font-family: inherit; cursor: pointer; }
 .bkm-end:active { opacity: 0.85; }
+/* v1.1.424：開始後 導航:已抵達＝1:3；開始前（紅卡）同排版，「開始」白底紅字 */
+/* 導航固定佔 (列寬−間距)/4、已抵達吃剩下＝嚴格 1:3（用 flex 比例的話 padding 會另外加上去、變 1:2.7） */
+.bkm-card.rec .bkm-rbtn { flex: 0 0 calc((100% - 8px) / 4); box-sizing: border-box; }
+.bkm-card.rec .bkm-end { flex: 1 1 0; box-sizing: border-box; }
+.bkm-end.bkm-go { color: #d0271d; }
 @media (prefers-color-scheme: dark) {
   .bkm-card, .bkm-strip { background: #e5453b; }
   .bkm-more { background: #c73129; }
   .bkm-card.rec { background: #1b6fd6; box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
   .bkm-end { background: #e8eaed; color: #1b6fd6; }
+  .bkm-end.bkm-go { color: #d0271d; }
 }
 
 /* 預約：滿版 overlay（清單/表單共用外框） */
