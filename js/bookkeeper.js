@@ -217,7 +217,18 @@
       'border:.5px solid var(--bk-bd2);border-radius:8px;font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text)}' +
       '.bk-erow button{flex:1;padding:9px;border:none;border-radius:8px;background:var(--bk-acc-fill);color:#fff;font-weight:600;font-family:inherit;cursor:pointer}' +
       '.bk-erow .bk-cancel{background:var(--bk-s1);color:var(--bk-t2)}';
+    s.textContent = _scopeCss(s.textContent);
     document.head.appendChild(s);
+  }
+
+  // 「.bk-」前綴與預約（booking.js）共用：.bk-copy/.bk-sec/.bk-card/.bk-chip… 兩邊都有。本檔樣式是
+  // 動態注入的全域 <style>，開過記帳者面板後會漏到預約面板（例：.bk-copy{width:100%} 把「複製訊息」撐滿、
+  // 把「標記已確認/直接完成」擠出畫面；.bk-sec 的 margin 讓按鈕列歪掉）。→ 撞名的 class 一律限縮在
+  // 記帳者自己的容器內（sheet／電腦滿版）。.bk-filter 一併限縮，讓 `.bk-filter .bk-chip` 覆蓋仍然贏。
+  var BK_SCOPE = ':is(#bk-sheet,#bk-home,#bk-home-body) ';
+  function _scopeCss(css) {
+    return String(css).replace(/([}{,])(\.bk-(?:copy|sec|cards?|chips?|empty|mini|note|filter)(?![a-z0-9-]))/g,
+      function (_, pre, sel) { return pre + BK_SCOPE + sel; });
   }
 
   function ensureSheet() {
@@ -1074,7 +1085,7 @@
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
     _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
-    _bkExpOnly: _bkExpOnly, _cats: _cats, BK_EXP_CATS: BK_EXP_CATS
+    _bkExpOnly: _bkExpOnly, _cats: _cats, _scopeCss: _scopeCss, BK_EXP_CATS: BK_EXP_CATS
   };
   window.openBookkeeper = open;
   window.closeBookkeeper = close;
