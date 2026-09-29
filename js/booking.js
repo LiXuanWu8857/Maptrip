@@ -655,24 +655,86 @@
       var ph = (i === 0 ? '下車地點（可留空）' : '下車點 ' + (i + 1));
       var n = _formDests.length;
       var rm = n > 1 ? '<button class="bk-dest-x" onclick="MaptripBooking._rmDest(' + i + ')">✕</button>' : '';
-      // 兩個以上才顯示上下移動（第一個不能再上、最後一個不能再下）
-      var mv = n > 1 ? '<span class="bk-dest-mv">' +
-        '<button class="bk-dest-up"' + (i === 0 ? ' disabled' : '') + ' onclick="MaptripBooking._moveDest(' + i + ',-1)">▲</button>' +
-        '<button class="bk-dest-dn"' + (i === n - 1 ? ' disabled' : '') + ' onclick="MaptripBooking._moveDest(' + i + ',1)">▼</button></span>' : '';
+      // 兩個以上才顯示拖曳把手（三條線），按住上下滑動調整順序
+      var mv = n > 1 ? '<span class="bk-dest-grip" data-i="' + i + '" aria-label="拖曳調整順序"><i></i><i></i><i></i></span>' : '';
       return '<div class="bk-dest-row"><input id="bk-f-dest-' + i + '" class="bk-in" type="text" placeholder="' + ph + '" value="' + _esc(t) + '">' + mv + rm + '</div>';
     }).join('');
     var addBtn = _formDests.length < MAX_DESTS
       ? '<button class="bk-adddest" onclick="MaptripBooking._addDest()">＋ 新增下車點</button>' : '';
     el.innerHTML = rows + addBtn;
+    _bindDestDrag(el);
   }
   function _addDest() { _readDestInputs(); if (_formDests.length < MAX_DESTS) _formDests.push(''); _renderDests(); }
-  // 下車點上下換位（dir=-1 往上、1 往下）；先讀回輸入框目前的字再換，避免打到一半的字不見
-  function _moveDest(i, dir) {
+  // 下車點換位：把 from 搬到 to（先讀回輸入框目前的字，避免打到一半的字不見）
+  function _reorderDest(from, to) {
     _readDestInputs();
-    var j = i + dir;
-    if (j < 0 || j >= _formDests.length) return;
-    var t = _formDests[i]; _formDests[i] = _formDests[j]; _formDests[j] = t;
+    var n = _formDests.length;
+    if (from < 0 || from >= n || to < 0 || to >= n || from === to) { _renderDests(); return; }
+    var item = _formDests.splice(from, 1)[0];
+    _formDests.splice(to, 0, item);
     _renderDests();
+  }
+  function _moveDest(i, dir) { _reorderDest(i, i + dir); }
+
+  // 拖曳排序：按住三條線上下滑。觸控裝置用 touch 事件且 touchmove {passive:false}＋preventDefault
+  // （iOS WKWebView 被動監聽會把拖曳當捲頁、之後收不到 touchmove——見 sheet-drag v283 血淚），
+  // 滑鼠用 pointer 事件。拖曳中只做 transform 視覺位移，放手才真的重排並重畫。
+  var DEST_IS_TOUCH = (typeof window !== 'undefined') && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+  function _bindDestDrag(el) {
+    var grips = el.querySelectorAll('.bk-dest-grip');
+    Array.prototype.forEach.call(grips, function (g) {
+      g.style.touchAction = 'none';
+      if (DEST_IS_TOUCH) {
+        g.addEventListener('touchstart', function (e) {
+          if (!e.touches || !e.touches[0]) return;
+          e.preventDefault();
+          _destDragStart(el, +g.getAttribute('data-i'), e.touches[0].clientY, 'touch');
+        }, { passive: false });
+      } else {
+        g.addEventListener('pointerdown', function (e) {
+          e.preventDefault();
+          _destDragStart(el, +g.getAttribute('data-i'), e.clientY, 'pointer');
+        });
+      }
+    });
+  }
+  function _destDragStart(el, i, y0, kind) {
+    var rows = Array.prototype.slice.call(el.querySelectorAll('.bk-dest-row'));
+    var n = rows.length; if (n < 2 || !rows[i]) return;
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (_) {}
+    var pitch = rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top || 52;
+    var row = rows[i], target = i;
+    row.classList.add('dragging');
+    rows.forEach(function (r) { if (r !== row) r.style.transition = 'transform .15s'; });
+    function move(y) {
+      var dy = Math.max(-i * pitch, Math.min((n - 1 - i) * pitch, y - y0));
+      row.style.transform = 'translateY(' + dy + 'px)';
+      target = Math.max(0, Math.min(n - 1, Math.round(i + dy / pitch)));
+      rows.forEach(function (r, k) {
+        if (r === row) return;
+        var sh = (k > i && k <= target) ? -pitch : ((k < i && k >= target) ? pitch : 0);
+        r.style.transform = sh ? 'translateY(' + sh + 'px)' : '';
+      });
+    }
+    function done() {
+      if (kind === 'touch') {
+        document.removeEventListener('touchmove', onTM, { passive: false });
+        document.removeEventListener('touchend', done); document.removeEventListener('touchcancel', done);
+      } else {
+        document.removeEventListener('pointermove', onPM);
+        document.removeEventListener('pointerup', done); document.removeEventListener('pointercancel', done);
+      }
+      _reorderDest(i, target);
+    }
+    function onTM(e) { if (e.cancelable) e.preventDefault(); if (e.touches && e.touches[0]) move(e.touches[0].clientY); }
+    function onPM(e) { move(e.clientY); }
+    if (kind === 'touch') {
+      document.addEventListener('touchmove', onTM, { passive: false });
+      document.addEventListener('touchend', done); document.addEventListener('touchcancel', done);
+    } else {
+      document.addEventListener('pointermove', onPM);
+      document.addEventListener('pointerup', done); document.addEventListener('pointercancel', done);
+    }
   }
   function _rmDest(i) { _readDestInputs(); _formDests.splice(i, 1); if (!_formDests.length) _formDests = ['']; _renderDests(); }
 
@@ -869,7 +931,7 @@
     openFromMap: openFromMap, startFromMap: startFromMap, startFromList: startFromList,
     finishFromList: finishFromList, endFromMap: endFromMap,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
-    _addDest: _addDest, _rmDest: _rmDest, _moveDest: _moveDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
+    _addDest: _addDest, _rmDest: _rmDest, _moveDest: _moveDest, _reorderDest: _reorderDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
     _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap, _syncRecInfo: _syncRecInfo,
     // 純函式（測試）
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,

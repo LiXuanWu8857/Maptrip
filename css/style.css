@@ -552,10 +552,13 @@ textarea.bk-in { resize: vertical; }
 /* 下車點動態列 */
 .bk-dest-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .bk-dest-row .bk-in { margin: 0; }
-.bk-dest-mv { flex: none; display: flex; flex-direction: column; gap: 2px; height: 44px; }
-.bk-dest-mv button { width: 36px; height: 21px; padding: 0; border-radius: 7px; border: 1px solid rgba(0,0,0,0.12); background: #fff; color: #1a73e8; font-size: 0.62rem; line-height: 1; font-family: inherit; cursor: pointer; }
-.bk-dest-mv button:disabled { color: #dadce0; cursor: default; }
-.bk-dest-mv button:not(:disabled):active { background: #e8f0fe; }
+.bk-dest-row { position: relative; background: transparent; }
+.bk-dest-row.dragging { z-index: 2; }
+.bk-dest-row.dragging .bk-in { box-shadow: 0 6px 16px rgba(0,0,0,0.18); border-color: #1a73e8; }
+.bk-dest-grip { flex: none; width: 36px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
+.bk-dest-grip i { display: block; width: 18px; height: 2px; border-radius: 1px; background: #9aa0a6; }
+.bk-dest-row.dragging .bk-dest-grip { cursor: grabbing; }
+.bk-dest-row.dragging .bk-dest-grip i { background: #1a73e8; }
 .bk-dest-x { flex: none; width: 40px; height: 44px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.12); background: #fff; color: #9aa0a6; font-size: 0.9rem; font-family: inherit; cursor: pointer; }
 .bk-adddest { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 10px; border: 1px dashed rgba(26,115,232,0.4); background: rgba(26,115,232,0.05); color: #1a73e8; font-size: 0.85rem; font-weight: 600; font-family: inherit; cursor: pointer; }
 /* 航班查詢 */
@@ -620,8 +623,8 @@ textarea.bk-in { resize: vertical; }
   .bk-who { color: #c7ccd1; }
   .bk-stop { color: #e8eaed; }
   .bk-note { background: #262626; color: #c7ccd1; border-color: rgba(255,255,255,0.1); }
-  .bk-dest-mv button { background: #1e1e1e; color: #8ab4f8; border-color: rgba(255,255,255,0.12); }
-  .bk-dest-mv button:disabled { color: #3c4043; }
+  .bk-dest-grip i { background: #80868b; }
+  .bk-dest-row.dragging .bk-dest-grip i { background: #8ab4f8; }
   .bk-dest-x { background: #1e1e1e; color: #9aa0a6; border-color: rgba(255,255,255,0.12); }
   .bk-adddest { background: rgba(138,180,248,0.1); color: #8ab4f8; border-color: rgba(138,180,248,0.4); }
   .bk-flight-card { background: rgba(138,180,248,0.1); border-color: rgba(138,180,248,0.35); }
