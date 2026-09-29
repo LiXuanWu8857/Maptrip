@@ -15,7 +15,8 @@
 
   var KEY = 'maptrip_bookings';
   var _list = [];
-  var _alerted = {};     // 已提醒 key 集合（id:lead），避免重複跳
+  var _alerted = {};     // 已提醒 key 集合（id:lead），避免重複跳；存 localStorage（App 重開/冷啟動 reload 不再重跳）
+  var ALERTED_KEY = 'maptrip_bk_alerted';
   var _tickTimer = null;
   var _editId = null;    // 表單目前編輯中的 id（null=新增）
   var _formReminders = [];   // 表單暫存的提醒分鐘陣列
@@ -93,7 +94,35 @@
         if (now >= fire && now <= b.pickupTime && !alerted[key]) out.push({ id: b.id, lead: lead, b: b, key: key });
       });
     });
-    return out;
+    // 同一筆有好幾個提醒同時到期（例：接近上車才新增，「1天前」「1小時前」都已過）→ 只跳一次
+    // （留提前量最小＝最貼近現在的那個），其餘一併標記已提醒（keys）。v1.1.425 使用者回報跳「1440 分後」。
+    var best = {};
+    out.forEach(function (d) {
+      var cur = best[d.id];
+      if (!cur) { best[d.id] = d; d.keys = [d.key]; return; }
+      cur.keys.push(d.key);
+      if (d.lead < cur.lead) { d.keys = cur.keys; best[d.id] = d; }
+    });
+    return Object.keys(best).map(function (id) { return best[id]; });
+  }
+  // 提醒文字用「實際剩下的時間」，不是提醒設定的提前量（lead）。
+  // 以前寫 d.lead → 「1天前」提醒在上車前 5 分才觸發時顯示「1440 分後有預約」。
+  function _alertText(b, now) {
+    var t = new Date(b.pickupTime), hhmm = _pad(t.getHours()) + ':' + _pad(t.getMinutes());
+    var who = b.name || b.lineName || '';
+    var where = (b.pickup && b.pickup.text) || '';
+    var mins = Math.max(0, Math.round((b.pickupTime - (now || Date.now())) / 60000));
+    var h = Math.floor(mins / 60), mm = mins % 60;
+    var lead = mins < 1 ? '即將' : (h > 0 ? (h + ' 小時' + (mm ? ' ' + mm + ' 分' : '') + '後') : (mins + ' 分後'));
+    return ('⏰ ' + lead + '有預約：' + hhmm + ' ' + who + ' ' + where).replace(/\s+$/, '');
+  }
+  function _loadAlerted() { try { _alerted = JSON.parse(localStorage.getItem(ALERTED_KEY) || '{}') || {}; } catch (_) { _alerted = {}; } }
+  function _saveAlerted() {
+    // 只留還存在的預約（避免無限長大）
+    var ids = {}; _list.forEach(function (b) { if (b && b.id != null) ids[String(b.id)] = 1; });
+    var keep = {}; Object.keys(_alerted).forEach(function (k) { if (ids[k.split(':')[0]]) keep[k] = 1; });
+    _alerted = keep;
+    try { localStorage.setItem(ALERTED_KEY, JSON.stringify(keep)); } catch (_) {}
   }
 
   function _has(pt) { return !!(pt && (pt.text || pt.lat != null)); }
@@ -219,14 +248,12 @@
   // ---------- App 內提醒輪詢（Phase 1；背景通知是 Phase 2） ----------
   function _tickReminders() {
     var due = _dueReminders(_list, Date.now(), _alerted);
+    var now = Date.now();
     due.forEach(function (d) {
-      _alerted[d.key] = 1;
-      var b = d.b;
-      var t = new Date(b.pickupTime), hhmm = _pad(t.getHours()) + ':' + _pad(t.getMinutes());
-      var who = b.name || b.lineName || '';
-      var where = (b.pickup && b.pickup.text) || '';
-      _toast('⏰ ' + d.lead + ' 分後有預約：' + hhmm + ' ' + who + ' ' + where);
+      (d.keys || [d.key]).forEach(function (k) { _alerted[k] = 1; });
+      _toast(_alertText(d.b, now));
     });
+    if (due.length) _saveAlerted();
     try { _updateOnMap(); } catch (_) {}
   }
 
@@ -909,6 +936,7 @@
     ctx = ctx || {};
     if (ctx.testMode) KEY = 'maptrip_bookings_test';
     _loadLocal();
+    _loadAlerted();
     try { _activeBookingId = localStorage.getItem('maptrip_active_booking') || null; } catch (_) {}   // 還原精準綁定（App 重載後）
     _updateBadge();
     if (_tickTimer) clearInterval(_tickTimer);
@@ -934,7 +962,7 @@
     _addDest: _addDest, _rmDest: _rmDest, _moveDest: _moveDest, _reorderDest: _reorderDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
     _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap, _syncRecInfo: _syncRecInfo,
     // 純函式（測試）
-    _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
+    _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders, _alertText: _alertText,
     _dueOnMap: _dueOnMap, _onmapCountdown: _onmapCountdown,
     _navUrl: _navUrl, _statusMeta: _statusMeta, _dayKey: _dayKey, _fmtLead: _fmtLead, _destsOf: _destsOf,
     _cardHtml: _cardHtml, _pickActiveId: _pickActiveId, _reminderText: _reminderText, DEFAULT_REMINDERS: DEFAULT_REMINDERS, _stopsLines: _stopsLines
