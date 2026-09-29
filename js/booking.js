@@ -653,14 +653,27 @@
     if (!_formDests.length) _formDests = [''];
     var rows = _formDests.map(function (t, i) {
       var ph = (i === 0 ? '下車地點（可留空）' : '下車點 ' + (i + 1));
-      var rm = _formDests.length > 1 ? '<button class="bk-dest-x" onclick="MaptripBooking._rmDest(' + i + ')">✕</button>' : '';
-      return '<div class="bk-dest-row"><input id="bk-f-dest-' + i + '" class="bk-in" type="text" placeholder="' + ph + '" value="' + _esc(t) + '">' + rm + '</div>';
+      var n = _formDests.length;
+      var rm = n > 1 ? '<button class="bk-dest-x" onclick="MaptripBooking._rmDest(' + i + ')">✕</button>' : '';
+      // 兩個以上才顯示上下移動（第一個不能再上、最後一個不能再下）
+      var mv = n > 1 ? '<span class="bk-dest-mv">' +
+        '<button class="bk-dest-up"' + (i === 0 ? ' disabled' : '') + ' onclick="MaptripBooking._moveDest(' + i + ',-1)">▲</button>' +
+        '<button class="bk-dest-dn"' + (i === n - 1 ? ' disabled' : '') + ' onclick="MaptripBooking._moveDest(' + i + ',1)">▼</button></span>' : '';
+      return '<div class="bk-dest-row"><input id="bk-f-dest-' + i + '" class="bk-in" type="text" placeholder="' + ph + '" value="' + _esc(t) + '">' + mv + rm + '</div>';
     }).join('');
     var addBtn = _formDests.length < MAX_DESTS
       ? '<button class="bk-adddest" onclick="MaptripBooking._addDest()">＋ 新增下車點</button>' : '';
     el.innerHTML = rows + addBtn;
   }
   function _addDest() { _readDestInputs(); if (_formDests.length < MAX_DESTS) _formDests.push(''); _renderDests(); }
+  // 下車點上下換位（dir=-1 往上、1 往下）；先讀回輸入框目前的字再換，避免打到一半的字不見
+  function _moveDest(i, dir) {
+    _readDestInputs();
+    var j = i + dir;
+    if (j < 0 || j >= _formDests.length) return;
+    var t = _formDests[i]; _formDests[i] = _formDests[j]; _formDests[j] = t;
+    _renderDests();
+  }
   function _rmDest(i) { _readDestInputs(); _formDests.splice(i, 1); if (!_formDests.length) _formDests = ['']; _renderDests(); }
 
   // ---------- 航班查詢（桃園）----------
@@ -746,7 +759,7 @@
     b.pickup = { text: pickup, lat: (b.pickup && b.pickup.lat), lng: (b.pickup && b.pickup.lng) };
     _readDestInputs();
     b.dests = _formDests.map(function (t) { return (t || '').trim(); }).filter(Boolean)
-      .map(function (t, i) { var o = oldDests[i]; return { text: t, lat: (o && o.text === t ? o.lat : undefined), lng: (o && o.text === t ? o.lng : undefined) }; });
+      .map(function (t) { var o = oldDests.filter(function (d) { return d && d.text === t; })[0]; return { text: t, lat: (o ? o.lat : undefined), lng: (o ? o.lng : undefined) }; });   // 依文字對應座標（換位後仍保留）
     delete b.dest;                                         // 改用 dests 陣列
     b.name = ((document.getElementById('bk-f-name') || {}).value || '').trim();
     b.phone = ((document.getElementById('bk-f-phone') || {}).value || '').trim();
@@ -856,7 +869,7 @@
     openFromMap: openFromMap, startFromMap: startFromMap, startFromList: startFromList,
     finishFromList: finishFromList, endFromMap: endFromMap,
     _saveForm: _saveForm, _deleteForm: _deleteForm, _addReminder: _addReminder, _rmReminder: _rmReminder,
-    _addDest: _addDest, _rmDest: _rmDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
+    _addDest: _addDest, _rmDest: _rmDest, _moveDest: _moveDest, _flightLookup: _flightLookup, _flightApply: _flightApply,
     _tickReminders: _tickReminders, _updateBadge: _updateBadge, _updateOnMap: _updateOnMap, _syncRecInfo: _syncRecInfo,
     // 純函式（測試）
     _byDay: _byDay, _upcomingCount: _upcomingCount, _dueReminders: _dueReminders,
