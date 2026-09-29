@@ -71,6 +71,17 @@
   function _switchDecision(prev, uid) {
     return { clear: !!(prev && prev !== uid), pushLocalOK: prev === uid };
   }
+  // 預約本機備份（按帳號分開）：換帳號清本機前先備份，登入後雲端快照再併回。
+  // 這樣即使規則沒部署（預約沒上雲）或離線 backlog，切帳號也不會弄丟預約。
+  function _bkBakKey(uid) { return 'mt_bk_bak_' + (uid || ''); }
+  // 純函式（供測試）：雲端清單 ∪ 本機備份（以 id 去重、雲端優先），並回傳「只在備份、需補回雲端」的那些。
+  function _mergeBk(cloud, bak) {
+    cloud = cloud || []; bak = bak || [];
+    var ids = {}; cloud.forEach(function (b) { if (b && b.id != null) ids[String(b.id)] = 1; });
+    var push = [];
+    bak.forEach(function (b) { if (b && b.id != null && !ids[String(b.id)]) push.push(b); });
+    return { list: cloud.concat(push), push: push };
+  }
   function _clearLocalForSwitch() {
     try { if (window.TripStore && TripStore.clearAll) TripStore.clearAll(); } catch (_) {}
     try { localStorage.removeItem('maptrip_deleted'); } catch (_) {}
@@ -79,6 +90,12 @@
     // 否則會顯示上一個帳號的支出、舊訂閱還在跑（與 v265 行程隔離同一類坑）。
     try { if (window.MaptripFinance && MaptripFinance.resetExpenseSync) MaptripFinance.resetExpenseSync(); } catch (_) {}
     try { if (window.MaptripManual && MaptripManual.clear) MaptripManual.clear(); } catch (_) {}   // 換帳號清手動紀錄快取
+    // 換帳號清預約前，先把「上一個帳號」的預約備份到該帳號專屬 key（切回來或雲端空時可還原，杜絕遺失）
+    try {
+      var _prevUid = _getDataUid();                       // 此時尚未 _setDataUid，仍是上一個帳號
+      var _bkRaw = localStorage.getItem('maptrip_bookings');
+      if (_prevUid && _bkRaw && _bkRaw !== '[]') localStorage.setItem(_bkBakKey(_prevUid), _bkRaw);
+    } catch (_) {}
     try { localStorage.removeItem('maptrip_bookings'); if (window.MaptripBooking && MaptripBooking.clear) MaptripBooking.clear(); } catch (_) {}   // 換帳號清預約
     // 換帳號清共享熱點偏好快取（groupId 屬於帳號；貢獻計數/去重也重來）
     _prefs = null;
@@ -714,7 +731,15 @@
       // 監聽自己的「預約」集合：多裝置即時同步（Phase 1）
       unsubBooking = db.collection('users').doc(user.uid).collection('bookings').onSnapshot(snap => {
         var list = []; snap.forEach(doc => { var b = doc.data() || {}; b.id = doc.id; list.push(b); });
+        // 併入本帳號本機備份：涵蓋「規則未部署→只在本機的預約」與離線 backlog，切帳號不再遺失。
+        try {
+          var bakRaw = localStorage.getItem(_bkBakKey(user.uid));
+          var mg = _mergeBk(list, bakRaw ? (JSON.parse(bakRaw) || []) : []);
+          list = mg.list;
+          mg.push.forEach(function (b) { writeBooking(b); });   // 補回雲端（規則 OK 後即持久）
+        } catch (_) {}
         if (window.MaptripBooking) MaptripBooking.set(list);
+        try { localStorage.setItem(_bkBakKey(user.uid), JSON.stringify(list)); } catch (_) {}   // 更新本帳號備份
       }, err => log('booking snapshot err ' + (err && err.code)));
     } catch (_) {}
     try {
@@ -886,6 +911,6 @@
     createCarTeam: createCarTeam, createTeamInvite: createTeamInvite, joinCarTeam: joinCarTeam, leaveCarTeam: leaveCarTeam,
     contributeHotspot: contributeHotspot, readGroupGrid: readGroupGrid, readGlobalGrid: readGlobalGrid,
     backfillTeamGrid: backfillTeamGrid, backfillGlobalGrid: backfillGlobalGrid,
-    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision,
+    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision, _mergeBk: _mergeBk,
     _teamClaimBlock: _teamClaimBlock, _capTake: _capTake };
 })();

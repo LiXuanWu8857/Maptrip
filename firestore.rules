@@ -80,6 +80,13 @@ service cloud.firestore {
         allow read, write: if isOwner(uid) || isBookkeeper(uid);
       }
 
+      // 預約：Phase 1 只本人讀寫（未開放記帳者）。
+      // ⚠️ 沒有這條＝users/{uid}/bookings 全被預設 deny → 預約寫不上雲、只存在本機，
+      //    換帳號清本機時就永久遺失（使用者回報「切帳號後預約不見了」的根因）。
+      match /bookings/{bookingId} {
+        allow read, write: if isOwner(uid);
+      }
+
       // meta：access/deleted/prefs 只本人；profile 記帳者可讀（顯示司機名）。
       // 共享熱點偏好 users/{uid}/meta/prefs（shareHotspots/groupId/groupName/shareGlobal）即落在此，只本人可讀寫。
       match /meta/{doc} {
