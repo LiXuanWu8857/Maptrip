@@ -434,7 +434,8 @@ html, body {
 .bk-overlay { overflow-x: hidden; }
 .bk-empty { text-align: center; color: #9aa0a6; font-size: 0.9rem; padding: 48px 12px; line-height: 1.8; }
 .bk-fab-add {
-  position: fixed; right: 16px; bottom: 10px;   /* 不再為回主頁 bar 多留空間 */
+  /* v1.1.421 使用者：太靠右下 → 往左 8px、底部抬到 iPhone 回主頁 bar 之上（安全區＋6px，至少 22px） */
+  position: fixed; right: 24px; bottom: max(22px, calc(env(safe-area-inset-bottom, 0px) + 6px));
   padding: 13px 20px; border-radius: 26px; border: none;
   background: #1a73e8; color: #fff; font-size: 0.95rem; font-weight: 700;
   font-family: inherit; cursor: pointer; box-shadow: 0 3px 12px rgba(26,115,232,0.4); z-index: 61;
