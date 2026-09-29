@@ -11,6 +11,8 @@
   var _expEdit = null;     // 支出編輯狀態：null=無／'__new__'=新增中／<id>=編輯該筆
   var _addDay = null;      // 正在新增手動紀錄的日期 'YYYY-MM-DD'（null=無）
   var _month = null;       // 司機檢視目前選的月份 'YYYY-MM'（null=用最近月份）
+  var _payF = 'all';       // 每趟清單篩選：付款方式 'all'|'cash'|'card'
+  var _dayF = null;        // 每趟清單篩選：只看某一天 'YYYY-MM-DD'（null=整個月）
   var _cache = null;       // 某司機的 { days, commissions, expenses, name }
   var _bks = [];           // 目前清單：授權我的記帳者（onclick 只傳 uid、名字查表，杜絕注入）
   var _drivers = [];       // 目前清單：我協助記帳的司機
@@ -101,6 +103,16 @@
       '.bk-chip{flex:none;padding:6px 12px;border-radius:16px;font-size:.82rem;font-family:inherit;cursor:pointer;' +
       'border:.5px solid var(--bk-bd);background:transparent;color:var(--bk-t2)}' +
       '.bk-chip.on{border-color:var(--bk-acc-bd);background:var(--bk-acc-bg);color:var(--bk-acc-t);font-weight:600}' +
+      // ---- 每趟清單篩選列（付款方式 chip＋日期下拉）----
+      '.bk-filter{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:14px 0 8px}' +
+      '.bk-filter .fl{font-size:.78rem;color:var(--bk-t2);margin-right:2px}' +
+      '.bk-filter .bk-chip{padding:5px 11px}' +
+      '.bk-filter select{flex:1 1 140px;min-width:0;padding:6px 8px;border-radius:10px;font-size:.84rem;font-family:inherit;' +
+      'border:.5px solid var(--bk-bd);background:var(--bk-s1);color:var(--bk-text)}' +
+      '.bk-fsum{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:.8rem;color:var(--bk-acc-t);background:var(--bk-acc-bg);' +
+      'border-radius:10px;padding:7px 10px;margin-bottom:8px;font-variant-numeric:tabular-nums}' +
+      '.bk-fsum b{font-weight:600}.bk-fsum button{margin-left:auto;border:none;background:transparent;color:var(--bk-acc-t);' +
+      'font-family:inherit;font-size:.8rem;text-decoration:underline;cursor:pointer;padding:0}' +
       // ---- 小計卡 ----
       '.bk-cards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:12px}' +
       '.bk-card{background:var(--bk-s1);border-radius:12px;padding:12px 14px}' +
@@ -466,12 +478,20 @@
     h += _expensesSection(bkExp);
 
     // 每趟（依選定月份過濾）＋日期分組。欄名置頂一列（時間/付款/車資/抽成/叫車），列內只放數值。
-    var dayKeys = Object.keys(days).filter(function (d) { return String(d).slice(0, 7) === _month; }).sort().reverse();
-    if (dayKeys.some(function (d) { return (days[d] || []).some(function (t) { return t.paymentMethod !== 'other'; }); })) h += _thead();
+    var monthKeys = Object.keys(days).filter(function (d) { return String(d).slice(0, 7) === _month; }).sort().reverse();
+    // 日期下拉只列「當月有載客趟」的日子；選的日子不在清單（換月/資料變動）就回到整月
+    var tripDays = monthKeys.filter(function (d) { return (days[d] || []).some(function (t) { return t.paymentMethod !== 'other'; }); });
+    if (_dayF && tripDays.indexOf(_dayF) < 0) _dayF = null;
+    if (tripDays.length) h += _filterBarHtml(tripDays);
+    // 篩選：付款方式（現金/刷卡）＋日期；只影響下方每趟清單與當日總結，上方淨利卡/月報表維持整月
+    var dayKeys = _dayF ? [_dayF] : monthKeys;
+    var fsum = _filterSum(days, dayKeys, data.commissions, _payF);
+    if (_payF !== 'all' || _dayF) h += _filterSumHtml(fsum);
+    if (fsum.n) h += _thead();
     var any = false;
     dayKeys.forEach(function (day) {
       // 「其他/自用」完全不參與記帳：不列出、不計趟數、不進當日總結
-      var trips = (days[day] || []).filter(function (t) { return t.paymentMethod !== 'other'; })
+      var trips = _filterTrips(days[day], _payF)
         .slice().sort(function (a, b) { return (a.startTime || 0) - (b.startTime || 0); });
       if (!trips.length) return;
       any = true;
@@ -533,10 +553,58 @@
         }
       });
     });
-    if (!any) h += '<div class="bk-empty">' + sm.ym + ' 沒有行程紀錄</div>';
+    if (!any) h += '<div class="bk-empty">' + ((_payF !== 'all' || _dayF) ? '沒有符合篩選條件的紀錄' : (sm.ym + ' 沒有行程紀錄')) + '</div>';
     setBody(h);
     wireDocClose();
   }
+
+  // ---------- 每趟清單篩選（付款方式＋日期） ----------
+  // 純函式：依付款方式篩選一天的趟；「其他/自用」一律排除（與原清單一致）。pay='all'|'cash'|'card'
+  function _filterTrips(trips, pay) {
+    return (trips || []).filter(function (t) {
+      if (!t || t.paymentMethod === 'other') return false;
+      return !pay || pay === 'all' || t.paymentMethod === pay;
+    });
+  }
+  // 純函式：篩選結果合計（趟數／車資含改過的車資／抽成／叫車）
+  function _filterSum(days, dayKeys, commissions, pay) {
+    var n = 0, fare = 0, comm = 0, disp = 0;
+    (dayKeys || []).forEach(function (d) {
+      _filterTrips((days || {})[d], pay).forEach(function (t) {
+        var c = (commissions && commissions[String(t.id)]) || {};
+        n++;
+        fare += (c.fareOverride != null ? c.fareOverride : (t.fare || 0));
+        if (t.paymentMethod !== 'cash') comm += c.commission != null ? c.commission : (t.commission || 0);
+        disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
+      });
+    });
+    return { n: n, fare: fare, comm: comm, disp: disp };
+  }
+  function _filterBarHtml(tripDays) {
+    var pays = [['all', '全部'], ['cash', '現金'], ['card', '刷卡']];
+    var h = '<div class="bk-filter" id="bk-filter"><span class="fl">篩選</span>';
+    pays.forEach(function (p) {
+      h += '<button class="bk-chip' + (_payF === p[0] ? ' on' : '') + '" data-pay="' + p[0] + '" onclick="MaptripBookkeeper.setPayFilter(\'' + p[0] + '\')">' + p[1] + '</button>';
+    });
+    h += '<select id="bk-dayf" onchange="MaptripBookkeeper.setDayFilter(this.value)"><option value="">全部日期</option>' +
+      tripDays.map(function (d) {
+        return '<option value="' + d + '"' + (d === _dayF ? ' selected' : '') + '>' + d.slice(5).replace('-', '/') + ' ' + wdOf(d) + '</option>';
+      }).join('') + '</select></div>';
+    return h;
+  }
+  function _filterSumHtml(fs) {
+    var parts = [];
+    if (_dayF) parts.push(_dayF.slice(5).replace('-', '/') + ' ' + wdOf(_dayF));
+    if (_payF !== 'all') parts.push(_payF === 'cash' ? '現金' : '刷卡');
+    return '<div class="bk-fsum" id="bk-fsum"><span>' + esc(parts.join('・')) + '</span>' +
+      '<span><b>' + fs.n + '</b> 趟</span><span>車資 <b>NT$ ' + nf(fs.fare) + '</b></span>' +
+      (fs.comm ? '<span>抽成 <b>' + nf(fs.comm) + '</b></span>' : '') +
+      (fs.disp ? '<span>叫車 <b>' + nf(fs.disp) + '</b></span>' : '') +
+      '<button onclick="MaptripBookkeeper.clearFilter()">清除篩選</button></div>';
+  }
+  function setPayFilter(p) { _payF = (p === 'cash' || p === 'card') ? p : 'all'; _editId = null; _addDay = null; paintDriver(); }
+  function setDayFilter(d) { _dayF = /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : null; _editId = null; _addDay = null; paintDriver(); }
+  function clearFilter() { _payF = 'all'; _dayF = null; _editId = null; paintDriver(); }
 
   function _drvMenuHtml() {
     var h = '';
@@ -936,15 +1004,15 @@
     _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null;
     renderHome();
   }
-  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name || _drvName(driverUid) }; _editId = null; _expEdit = null; _addDay = null; _month = null; loadDriver(); }
+  function openDriver(driverUid, name) { _view = { driverUid: driverUid, name: name || _drvName(driverUid) }; _editId = null; _expEdit = null; _addDay = null; _month = null; _dayF = null; loadDriver(); }
   function switchDriver(driverUid) {
     var m = document.getElementById('bk-drvmenu'); if (m) m.classList.remove('show');
     if (_view && driverUid === _view.driverUid) return;
     openDriver(driverUid);
   }
   function toggleDrvMenu() { var m = document.getElementById('bk-drvmenu'); if (m) m.classList.toggle('show'); }
-  function setMonth(ym) { _month = ym; _editId = null; _expEdit = null; _addDay = null; paintDriver(); }
-  function back() { _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null; renderHome(); }
+  function setMonth(ym) { _month = ym; _dayF = null; _editId = null; _expEdit = null; _addDay = null; paintDriver(); }
+  function back() { _view = null; _editId = null; _expEdit = null; _addDay = null; _month = null; _dayF = null; _payF = 'all'; renderHome(); }
   function edit(tripId) { var s = String(tripId); _editId = (String(_editId) === s ? null : s); paintDriver(); }
   async function saveComm(tripId) {
     var t = _findTrip(tripId);
@@ -988,6 +1056,7 @@
     copyExcel: copyExcel,
     removeBk: removeBk, unlink: unlink, removeCurrentDriver: removeCurrentDriver,
     openDriver: openDriver, switchDriver: switchDriver, toggleDrvMenu: toggleDrvMenu, setMonth: setMonth,
+    setPayFilter: setPayFilter, setDayFilter: setDayFilter, clearFilter: clearFilter, _filterTrips: _filterTrips, _filterSum: _filterSum,
     back: back, edit: edit, saveComm: saveComm, toggleFareEdit: toggleFareEdit,
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     sheetSave: sheetSave, sheetTest: sheetTest, sheetToggleAuto: sheetToggleAuto,
