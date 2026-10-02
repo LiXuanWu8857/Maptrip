@@ -179,7 +179,10 @@
       '.bk-trow .t{color:var(--bk-t2)}.bk-trow .p{color:var(--bk-muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
       '.bk-trow .f{text-align:left;color:var(--bk-t2)}.bk-trow .f.edited{color:var(--bk-acc-t);font-weight:700}' +
       '.bk-trow .rc{text-align:right;font-weight:600;min-width:44px;color:var(--bk-text);white-space:nowrap}.bk-trow .rc.todo{color:var(--bk-warn-t)}' +
-      '.bk-tedit{display:flex;gap:8px;padding:8px 4px 12px;align-items:center}' +
+      '.bk-tedit{display:flex;flex-wrap:wrap;gap:8px;padding:8px 4px 12px;align-items:center}' +
+      '.bk-tedit-pf{display:flex;gap:8px;align-items:center;flex-basis:100%}' +
+      '.bk-tedit select{flex:1;min-width:0;padding:9px 8px;border:.5px solid var(--bk-bd2);border-radius:8px;font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text)}' +
+      '.bk-trow .p.edited{color:var(--bk-acc-t);font-weight:700}' +
       '.bk-tedit .lb{font-size:.76rem;color:var(--bk-t2)}' +
       '.bk-tedit input{flex:1;min-width:0;box-sizing:border-box;padding:9px 10px;border:.5px solid var(--bk-bd2);border-radius:8px;' +
       'font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text);text-align:right}' +
@@ -388,10 +391,10 @@
   function _fareBtnHtml() {
     var on = !!_myAllowFareEdit;
     return '<button id="bk-faretoggle" class="bk-fare-tg' + (on ? ' on' : '') + '" onclick="MaptripBookkeeper.toggleFareEdit()">' +
-      (on ? '✓ 已允許記帳者修改車資（點一下關閉）' : '🔒 允許記帳者修改車資（目前關閉）') + '</button>';
+      (on ? '✓ 已允許記帳者修改車資與付款方式（點一下關閉）' : '🔒 允許記帳者修改車資與付款方式（目前關閉）') + '</button>';
   }
   function _fareToggleHtml() {
-    return '<div class="bk-note" style="margin-top:14px">進階：授權後，記帳者可以修改你每一趟的車資（改動會同步回你的紀錄）。</div>' +
+    return '<div class="bk-note" style="margin-top:14px">進階：授權後，記帳者可以修改你每一趟的車資與付款方式（現金/刷卡），改動會同步回你的紀錄。</div>' +
       _fareBtnHtml();
   }
   // 司機切換開關：樂觀更新按鈕外觀 + 寫雲端 meta/access；失敗還原。
@@ -402,7 +405,7 @@
     var btn = document.getElementById('bk-faretoggle');
     if (btn) btn.outerHTML = _fareBtnHtml();
     S().setAllowFareEdit(next).then(function () {
-      if (window.toast) toast(next ? '已允許記帳者修改車資' : '已關閉記帳者改車資');
+      if (window.toast) toast(next ? '已允許記帳者修改車資與付款方式' : '已關閉記帳者改車資與付款方式');
     }).catch(function (e) {
       _myAllowFareEdit = !next;
       var b2 = document.getElementById('bk-faretoggle'); if (b2) b2.outerHTML = _fareBtnHtml();
@@ -446,7 +449,8 @@
     if (!_cache) return;
     setTitle('司機：' + (_view.name || ''));
     var data = _cache;
-    var days = _mergeManual(data.days, data.manualTrips);   // 併入手動紀錄後統一顯示/計算
+    // 併入手動紀錄＋套用記帳者改過的車資/付款方式後，統一顯示/計算
+    var days = _resolve(_mergeManual(data.days, data.manualTrips), data.commissions);
     var months = _monthsOf(days);
     var sm = _summary(days, data.commissions, _month);
 
@@ -542,20 +546,20 @@
         var filled = touched || comm > 0 || t.paymentMethod === 'other' || cashLock;
         var pay = t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'cash' ? '現金' : (t.paymentMethod === 'other' ? (t.label || '其他') : ''));
         var cells = _cells(cashLock, filled, comm, disp);
-        // 車資：記帳者改過（fareOverride）優先顯示；改過的加標記
-        var shownFare = (c.fareOverride != null) ? c.fareOverride : t.fare;
-        var fareEdited = c.fareOverride != null && c.fareOverride !== t.fare;
+        // 車資/付款：days 已由 _resolve 套用記帳者改過的值；改過的加標記
+        var shownFare = t.fare || 0;
+        var fareEdited = !!t._fareEd;
         h += '<div class="bk-trow' + (filled ? '' : ' warn') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
           '<span class="t">' + fmtT(t.startTime) + (t._manual ? '<br><span class="man">手動</span>' : '') + '</span>' +
-          '<span class="p">' + esc(pay) + '</span>' +
+          '<span class="p' + (t._payEd ? ' edited' : '') + '">' + esc(pay) + '</span>' +
           '<span class="f' + (fareEdited ? ' edited' : '') + '">' + nf(shownFare) + '</span>' +
           '<span class="rc' + (filled ? '' : ' todo') + '">' + cells.comm + '</span>' +
           '<span class="rc">' + cells.disp + '</span></div>';
         if (String(_editId) === idS) {
-          // 授權時（allowFareEdit）且非手動趟 → 顯示車資可編輯欄
-          var fareEditable = !!(_cache && _cache.allowFareEdit) && !t._manual;
+          // 車資＋付款方式可編輯：GPS 趟需司機授權（allowFareEdit）；手動趟是記帳者自己補登的 → 一律可改
+          var fareEditable = t._manual || !!(_cache && _cache.allowFareEdit);
           h += '<div class="bk-tedit">' +
-            (fareEditable ? '<span class="lb">車資</span><input id="bk-f" type="number" inputmode="numeric" value="' + shownFare + '">' : '') +
+            (fareEditable ? _payFareEditHtml(t.paymentMethod, shownFare) : '') +
             '<span class="lb">抽成</span><input id="bk-c" type="number" inputmode="numeric" value="' + comm + '"' + (cashLock ? ' disabled' : '') + '>' +
             '<span class="lb">叫車</span><input id="bk-d" type="number" inputmode="numeric" value="' + disp + '">' +
             '<button onclick="MaptripBookkeeper.saveComm(\'' + esc(idS) + '\')">存</button>' +
@@ -725,6 +729,37 @@
     });
     return out;
   }
+  // 套用記帳者改過的車資／付款方式（commissions.fareOverride / payOverride）→ 回傳「新的 days map」（不改原物件）。
+  // 司機端 applyCommission 要等司機開 App 才會寫回 days；記帳者這邊先自己套，讓清單、當日總結、
+  // 淨利卡、月報表、篩選、匯出全部用同一份「改後」的值（否則改成刷卡後現金/刷卡小計還算在舊的那邊）。
+  // 改過的趟標 _fareEd / _payEd（顯示用）；payOverride 只接受 cash/card。
+  function _resolve(days, commissions) {
+    var out = {};
+    Object.keys(days || {}).forEach(function (d) {
+      out[d] = (days[d] || []).map(function (t) {
+        var c = t && commissions && commissions[String(t.id)];
+        if (!c) return t;
+        var fo = c.fareOverride, po = c.payOverride;
+        var fareCh = fo != null && fo !== '' && !isNaN(+fo) && +fo !== (t.fare || 0);
+        var payCh = (po === 'cash' || po === 'card') && po !== t.paymentMethod;
+        if (!fareCh && !payCh) return t;
+        var nt = {}; for (var k in t) nt[k] = t[k];
+        if (fareCh) { nt.fare = +fo; nt._fareEd = true; }
+        if (payCh) { nt.paymentMethod = po; nt._payEd = true; }
+        return nt;
+      });
+    });
+    return out;
+  }
+  // 編輯列的「付款＋車資」欄（第一列）；改成現金時抽成欄即時鎖 0（與存檔邏輯一致）
+  function _payFareEditHtml(pm, fare) {
+    return '<div class="bk-tedit-pf">' +
+      '<span class="lb">付款</span><select id="bk-p" onchange="var c=document.getElementById(\'bk-c\');if(c){c.disabled=this.value===\'cash\';if(c.disabled)c.value=0;}">' +
+        '<option value="cash"' + (pm === 'cash' ? ' selected' : '') + '>現金</option>' +
+        '<option value="card"' + (pm === 'card' ? ' selected' : '') + '>刷卡</option></select>' +
+      '<span class="lb">車資</span><input id="bk-f" type="number" inputmode="numeric" value="' + (fare || 0) + '">' +
+      '</div>';
+  }
   // 表格化：欄名置頂（時間/付款/車資/抽成/叫車），每列只放數值、不重複欄名。
   // 抽成／叫車兩欄的「值」：現金抽成不適用→「-」；刷卡未填→「待填」；0→「-」；否則數字。
   function _cells(cashLock, filled, comm, disp) {
@@ -795,7 +830,7 @@
   // 從併入手動後的 days 找某趟（給 saveComm 判斷是否現金）
   function _findTrip(id) {
     if (!_cache) return null;
-    var days = _mergeManual(_cache.days, _cache.manualTrips), found = null;
+    var days = _resolve(_mergeManual(_cache.days, _cache.manualTrips), _cache.commissions), found = null;
     Object.keys(days).forEach(function (d) {
       (days[d] || []).forEach(function (t) { if (String(t.id) === String(id)) found = t; });
     });
@@ -812,7 +847,7 @@
   function _uploadDay(day) {
     if (!(window.MaptripSheetSync && MaptripSheetSync.autoOn())) return;
     if (!_cache || !_view) return;
-    var days = _mergeManual(_cache.days, _cache.manualTrips);
+    var days = _resolve(_mergeManual(_cache.days, _cache.manualTrips), _cache.commissions);
     var dayTrips = days[day] || [];
     var trips = dayTrips.filter(function (t) { return t.paymentMethod !== 'other'; });
     if (!trips.length) return;   // 沒有載客趟 → 不上傳
@@ -1038,28 +1073,53 @@
   function edit(tripId) { var s = String(tripId); _editId = (String(_editId) === s ? null : s); paintDriver(); }
   async function saveComm(tripId) {
     var t = _findTrip(tripId);
-    var cashLock = !!(t && t.paymentMethod === 'cash');   // 現金：抽成強制 0
+    // 付款方式＋車資：bk-p/bk-f 只在可編輯時存在（GPS 趟需授權 allowFareEdit；手動趟一律可改）
+    var payEl = document.getElementById('bk-p'), fareEl = document.getElementById('bk-f');
+    var canPF = !!(t && (t._manual || (_cache && _cache.allowFareEdit)));
+    var newPay = null, newFare = null;
+    if (canPF && payEl && (payEl.value === 'cash' || payEl.value === 'card')) newPay = payEl.value;
+    if (canPF && fareEl) { var v = parseInt(fareEl.value, 10); if (!isNaN(v) && v >= 0) newFare = v; }
+    var pm = newPay || (t && t.paymentMethod);
+    var cashLock = pm === 'cash';   // 現金：抽成強制 0（依「改後」的付款方式）
     var comm = cashLock ? 0 : (parseInt((document.getElementById('bk-c') || {}).value) || 0);
     var disp = parseInt((document.getElementById('bk-d') || {}).value) || 0;
-    // 授權時可改車資（#3）：只有 bk-f 存在（授權且非手動）且數值有效才帶 fareOverride
-    var extra, newFare = null;
-    var fareEl = document.getElementById('bk-f');
-    if (fareEl && _cache && _cache.allowFareEdit && t && !t._manual) {
-      var v = parseInt(fareEl.value);
-      if (!isNaN(v) && v >= 0) { newFare = v; extra = { fareOverride: v }; }
-    }
+    var payCh = newPay != null && t && newPay !== t.paymentMethod;
+    var fareCh = newFare != null && t && newFare !== (t.fare || 0);
     try {
-      await S().writeCommission(_view.driverUid, tripId, comm, disp, extra);
+      if (t && t._manual) {
+        // 手動趟：記帳者自己的紀錄 → 直接改 manualTrips 本身（不用 override）
+        if (payCh || fareCh) {
+          var m = null;
+          (_cache.manualTrips || []).forEach(function (x) { if (String(x.id) === String(tripId)) m = x; });
+          var rec = { id: String(tripId), fare: fareCh ? newFare : (t.fare || 0), paymentMethod: pm,
+            startTime: (m && m.startTime) || t.startTime, day: (m && m.day) || '', label: (m && m.label) || t.label || '' };
+          await S().writeManualTrip(_view.driverUid, rec);
+          if (m) { m.fare = rec.fare; m.paymentMethod = rec.paymentMethod; }
+        }
+        await S().writeCommission(_view.driverUid, tripId, comm, disp);
+      } else {
+        // GPS 趟：寫 commissions 覆蓋值（司機 App 的 applyCommission 會套回 days）
+        var extra;
+        if (payCh || fareCh) {
+          extra = {};
+          if (fareCh) extra.fareOverride = newFare;
+          if (payCh) extra.payOverride = newPay;
+        }
+        await S().writeCommission(_view.driverUid, tripId, comm, disp, extra);
+      }
       if (_cache) {
         var prev = _cache.commissions[String(tripId)] || {};
         prev.commission = comm; prev.dispatch = disp;
-        if (newFare != null) prev.fareOverride = newFare;   // 樂觀更新：畫面立刻顯示新車資
+        if (t && !t._manual) {   // 樂觀更新：畫面立刻顯示新車資/付款
+          if (fareCh) prev.fareOverride = newFare;
+          if (payCh) prev.payOverride = newPay;
+        }
         _cache.commissions[String(tripId)] = prev;
       }
       _editId = null;
       paintDriver();
-      if (window.toast) toast(newFare != null ? '已更新抽成與車資' : '已更新抽成');
-    } catch (e) { if (window.toast) toast('更新失敗：' + ((e && e.message) || e)); }
+      if (window.toast) toast((payCh || fareCh) ? '已更新' + (payCh ? '付款方式' : '') + (payCh && fareCh ? '、' : '') + (fareCh ? '車資' : '') : '已更新抽成');
+    } catch (e) { if (window.toast) toast('更新失敗：' + ((e && (e.code || e.message)) || e)); }
   }
 
   // 匯出目前司機的記帳資料成 TSV → 複製到剪貼簿（貼進 Excel 自動分欄）。ym=''＝全部。
@@ -1067,7 +1127,7 @@
     if (!_cache) { if (window.toast) toast('尚未載入資料'); return; }
     if (!window.MaptripExport) { if (window.toast) toast('匯出模組未載入'); return; }
     MaptripExport.copyReport({
-      days: _cache.days, commissions: _cache.commissions,
+      days: _resolve(_cache.days, _cache.commissions), commissions: _cache.commissions,   // 付款方式改過的也反映
       manualTrips: _cache.manualTrips, expenses: _bkExpOnly(_cache.expenses),  // 只帶營業成本（加油/洗車/保養）
       name: _view && _view.name
     }, ym || null);
@@ -1084,7 +1144,7 @@
     sheetSave: sheetSave, sheetTest: sheetTest, sheetToggleAuto: sheetToggleAuto,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
-    _summary: _summary, _mergeManual: _mergeManual, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
+    _summary: _summary, _mergeManual: _mergeManual, _resolve: _resolve, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
     _bkExpOnly: _bkExpOnly, _cats: _cats, _scopeCss: _scopeCss, BK_EXP_CATS: BK_EXP_CATS
   };
   window.openBookkeeper = open;

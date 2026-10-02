@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.425**（2026-09-29）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.426**（2026-10-02）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -379,6 +379,12 @@
   **v1.1.418 加「叫車」篩選**：`_dispF` 開關 chip，可與現金/刷卡疊加（只留叫車費>0 的趟，commissions.dispatch 覆蓋優先）。
   `_filterTrips(trips,pay,disp,commissions)`；**坑**：`_filterSum` 參數曾與區域變數 `disp` 同名被遮蔽（已改 `dispOnly`）。
   測試 `bkfilter.js` 26 項全過零 pageerror。
+  **v1.1.426 記帳者可改付款方式＋車資**：每趟 inline 編輯列加「付款（現金/刷卡）＋車資」。GPS 趟需司機開「允許記帳者修改
+  車資與付款方式」（`allowFareEdit`，沿用既有開關＋既有規則，**Firestore 規則不用改**），寫 `commissions.payOverride/fareOverride`
+  （**只在有改動時才帶**，沒改＝不觸發規則授權條件）；手動補登趟（記帳者自己的）一律可改、直接 `writeManualTrip` 同 id 覆寫。
+  新純函式 `_resolve(days,commissions)` 在記帳者端先套 override（不改原物件、標 `_fareEd/_payEd`），清單/當日總結/淨利卡/月報表/
+  篩選/匯出/Sheets 上傳全用改後值（否則司機開 App 前，改成刷卡的那趟小計仍算在現金）。改成現金→抽成強制 0、下拉即時鎖抽成欄。
+  司機端 `applyCommission` 本來就會套 payOverride。測試 `bkpayedit.js` 23 項（舊版重現失敗）全過零 pageerror。
   **v1.1.419 修 `.bk-` 撞名漏到預約面板（血淚）**：記帳者樣式是動態注入的全域 `<style id=bk-css>`，其中
   `.bk-copy/.bk-sec/.bk-card/.bk-chip(s)/.bk-empty/.bk-mini/.bk-note` 與預約（booking.js）同名 → **開過一次記帳者面板後**，
   預約卡「複製訊息」被 `.bk-copy{width:100%}` 撐滿、「標記已確認/直接完成」被擠出畫面、`.bk-sec` margin 讓按鈕列歪（使用者截圖回報）。
