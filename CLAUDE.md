@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.427**（2026-10-02）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.428**（2026-10-02）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -388,6 +388,13 @@
   **v1.1.427 未授權時顯示提示**：使用者回報「看不到編輯」＝司機沒開開關時車資/付款欄整個藏起來、沒任何說明。編輯列加
   `#bk-lockhint`（🔒 請司機在「🧾 記帳者」面板→「授權我的記帳者」開「允許記帳者修改車資與付款方式」，再返回重新點進司機——
   `allowFareEdit` 只在 loadDriver 讀一次）。`bkpayedit.js` 25 項全過。
+  **v1.1.428 開關在記帳者端從沒生效（血淚，v328 起）**：使用者司機帳號已開開關、記帳者仍顯示🔒。根因＝Firestore 規則
+  `meta/{doc}` 只讓記帳者讀 `profile`，`readDriverData` 讀 `meta/access` 被 permission-denied、又被 `soft()` 靜默吞掉
+  → `allowFareEdit` 永遠 false。修法（**不改規則**）：`setAllowFareEdit` 同時鏡像 `profile.allowFareEdit`；司機端
+  `processInviteClaims`（登入 1.5s 後＋開記帳者面板）呼叫 `_mirrorFareFlag` 補寫舊資料；記帳者用純函式
+  `_fareFlag(profile,access)`（讀得到 access 以它為準、否則看 profile）。寫入授權仍由規則用 `get(access)` 把關，
+  profile 只有司機本人可寫＝記帳者無法偽造。測試 `fareflag.js` 9 項（假 Firestore 照真規則：重現/補寫/關閉同步/
+  偽造被拒；舊版重現失敗）。
   **v1.1.419 修 `.bk-` 撞名漏到預約面板（血淚）**：記帳者樣式是動態注入的全域 `<style id=bk-css>`，其中
   `.bk-copy/.bk-sec/.bk-card/.bk-chip(s)/.bk-empty/.bk-mini/.bk-note` 與預約（booking.js）同名 → **開過一次記帳者面板後**，
   預約卡「複製訊息」被 `.bk-copy{width:100%}` 撐滿、「標記已確認/直接完成」被擠出畫面、`.bk-sec` margin 讓按鈕列歪（使用者截圖回報）。

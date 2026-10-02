@@ -230,6 +230,11 @@
       });
       if (changed) { await accessRef.set({ bookkeepers: bk }, { merge: true }); updateUI(); }
     } catch (_) {}
+    // 開關鏡像獨立於邀請處理（invites 查詢失敗也要補寫）
+    try {
+      var as2 = await db.collection('users').doc(user.uid).collection('meta').doc('access').get();
+      await _mirrorFareFlag(as2.exists ? as2.data() : null);
+    } catch (_) {}
   }
   // 司機：目前授權的記帳者清單
   async function listBookkeepers() {
@@ -291,7 +296,7 @@
       soft(base.collection('commissions').get()),
       soft(base.collection('expenses').get()),
       soft(base.collection('manualTrips').get()),
-      soft(base.collection('meta').doc('access').get())   // 授權改車資開關（#3）
+      soft(base.collection('meta').doc('access').get())   // 授權改車資開關（#3）；記帳者通常讀不到（規則只放 profile）
     ]);
     var p = r[0], q = r[1], cq = r[2], eq = r[3], mq = r[4], ac = r[5];
     if (p && p.exists) res.name = (p.data().name) || '';
@@ -299,7 +304,7 @@
     if (cq) cq.forEach(function (doc) { res.commissions[doc.id] = doc.data() || {}; });
     if (eq) eq.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; res.expenses.push(e); });
     if (mq) mq.forEach(function (doc) { var m = doc.data() || {}; m.id = doc.id; res.manualTrips.push(m); });
-    if (ac && ac.exists) res.allowFareEdit = !!(ac.data() || {}).allowFareEdit;
+    res.allowFareEdit = _fareFlag(p && p.exists ? p.data() : null, ac && ac.exists ? ac.data() : null);
     return res;
   }
   // 司機本人或記帳者：寫某司機某趟的抽成（extra 可帶 {fareOverride, payOverride}＝記帳者改車資，#3）。
@@ -334,10 +339,29 @@
     return { bookkeepers: d.bookkeepers || {}, allowFareEdit: !!d.allowFareEdit };
   }
   // 司機本人：設定「允許記帳者修改車資」開關。
+  // 血淚（v1.1.428）：規則只讓記帳者讀 meta/profile、讀 meta/access 被拒 → readDriverData 一律讀成「沒開」，
+  // 開關從 v328 起在記帳者端從沒生效過。修法：真正的授權仍在 access（規則用 get() 檢查寫入），
+  // 另鏡像一份到 profile.allowFareEdit 讓記帳者「看得到」；profile 只有司機本人可寫，記帳者無法偽造。
   async function setAllowFareEdit(on) {
     if (!ready || !user) throw new Error('尚未登入');
-    await db.collection('users').doc(user.uid).collection('meta').doc('access')
-      .set({ allowFareEdit: !!on }, { merge: true });
+    var meta = db.collection('users').doc(user.uid).collection('meta');
+    await meta.doc('access').set({ allowFareEdit: !!on }, { merge: true });
+    try { await meta.doc('profile').set({ allowFareEdit: !!on }, { merge: true }); } catch (_) {}
+  }
+  // 純函式：記帳者端判斷開關。讀得到 access（司機本人/規則放行）以 access 為準；否則看 profile 鏡像。
+  function _fareFlag(profile, access) {
+    if (access && typeof access.allowFareEdit === 'boolean') return access.allowFareEdit;
+    return !!(profile && profile.allowFareEdit === true);
+  }
+  // 司機端開機：access 的開關若與 profile 鏡像不一致就補寫（修好「已經開過、但鏡像還不存在」的舊資料）
+  async function _mirrorFareFlag(accData) {
+    if (!ready || !user) return;
+    var want = !!(accData && accData.allowFareEdit);
+    var pref = db.collection('users').doc(user.uid).collection('meta').doc('profile');
+    var ps = await pref.get();
+    var have = ps.exists ? (ps.data() || {}).allowFareEdit : undefined;
+    if (have === want || (!want && have === undefined)) return;
+    await pref.set({ allowFareEdit: want }, { merge: true });
   }
 
   // ── 支出（expenses）：司機本人或記帳者皆可讀寫某司機的支出集合 ──
@@ -945,6 +969,6 @@
     createCarTeam: createCarTeam, createTeamInvite: createTeamInvite, joinCarTeam: joinCarTeam, leaveCarTeam: leaveCarTeam,
     contributeHotspot: contributeHotspot, readGroupGrid: readGroupGrid, readGlobalGrid: readGlobalGrid,
     backfillTeamGrid: backfillTeamGrid, backfillGlobalGrid: backfillGlobalGrid,
-    _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision, _mergeBk: _mergeBk, _cleanBk: _cleanBk,
+    _fareFlag: _fareFlag, _claimBlock: _claimBlock, _shouldAuthorize: _shouldAuthorize, _switchDecision: _switchDecision, _mergeBk: _mergeBk, _cleanBk: _cleanBk,
     _teamClaimBlock: _teamClaimBlock, _capTake: _capTake };
 })();
