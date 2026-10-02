@@ -181,6 +181,7 @@
       '.bk-trow .rc{text-align:right;font-weight:600;min-width:44px;color:var(--bk-text);white-space:nowrap}.bk-trow .rc.todo{color:var(--bk-warn-t)}' +
       '.bk-tedit{display:flex;flex-wrap:wrap;gap:8px;padding:8px 4px 12px;align-items:center}' +
       '.bk-tedit-pf{display:flex;gap:8px;align-items:center;flex-basis:100%}' +
+      '.bk-tedit-lock{flex-basis:100%;font-size:.78rem;line-height:1.5;color:var(--bk-t2);background:var(--bk-s1);border-radius:8px;padding:8px 10px}' +
       '.bk-tedit select{flex:1;min-width:0;padding:9px 8px;border:.5px solid var(--bk-bd2);border-radius:8px;font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text)}' +
       '.bk-trow .p.edited{color:var(--bk-acc-t);font-weight:700}' +
       '.bk-tedit .lb{font-size:.76rem;color:var(--bk-t2)}' +
@@ -565,6 +566,8 @@
             '<button onclick="MaptripBookkeeper.saveComm(\'' + esc(idS) + '\')">存</button>' +
             '<button class="gh" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">取消</button>' +
             (t._manual ? '<button class="del" onclick="MaptripBookkeeper.delTrip(\'' + day + '\',\'' + esc(idS) + '\')">刪</button>' : '') +
+            // 沒授權時講清楚「為什麼不能改車資/付款、要去哪裡開」（否則記帳者找不到功能）
+            (fareEditable ? '' : '<div class="bk-tedit-lock" id="bk-lockhint">🔒 要改車資／付款方式：請司機在自己 App 的「🧾 記帳者」面板 →「授權我的記帳者」按「允許記帳者修改車資與付款方式」，然後這邊按 ‹ 返回 再重新點進司機。</div>') +
             '</div>';
         }
       });
