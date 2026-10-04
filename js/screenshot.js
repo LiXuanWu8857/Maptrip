@@ -355,25 +355,37 @@ function _monthWorkDays(raw, ym) {
 // 陣列 min/max（避免 Math.max(...大陣列) 在整月上千點時爆 call stack）
 function _bounds(nums) { let mn = Infinity, mx = -Infinity; for (let i = 0; i < nums.length; i++) { const v = nums[i]; if (v < mn) mn = v; if (v > mx) mx = v; } return [mn, mx]; }
 
-// ---- 區名反向地理編碼（單趟截圖用：出發/目的地的行政區）----
-// 快取在 localStorage maptrip_distcache（key＝座標小數 3 位≈100m 網格；空字串也快取避免重打）。
-// Nominatim reverse zoom=14 取行政區；台灣的「區」多落在 city_district/suburb/town。
-function _distCacheGet(k) { try { return JSON.parse(localStorage.getItem('maptrip_distcache') || '{}')[k]; } catch (_) { return undefined; } }
-function _distCacheSet(k, v) { try { const m = JSON.parse(localStorage.getItem('maptrip_distcache') || '{}'); m[k] = v; localStorage.setItem('maptrip_distcache', JSON.stringify(m)); } catch (_) {} }
-async function _districtOf(lat, lng) {
+// ---- 地點反向地理編碼（單趟截圖用：出發/目的地，地標優先、退回行政區）----
+// 使用者要「起訖點在地標（如桃園機場）時顯示地標名、越精確越好」。
+// 做法：Nominatim reverse zoom=18（建物/設施級），先從 address 掃「地標類鍵」——那是
+// 「點所在的那個命名設施範圍」（如機場 aeroway、車站 railway、校園/醫院 amenity…），
+// 抓得到就用地標名；抓不到才退回行政區（city_district/suburb/town…）。
+// 快取在 localStorage maptrip_placecache（key＝座標小數 4 位≈11m；空字串也快取避免重打）。
+var _LANDMARK_KEYS = ['aeroway', 'railway', 'aerialway', 'tourism', 'historic', 'leisure', 'man_made', 'amenity', 'shop'];
+function _placeFromAddress(a) {
+  if (!a) return '';
+  for (var i = 0; i < _LANDMARK_KEYS.length; i++) {
+    var k = _LANDMARK_KEYS[i];
+    if (a[k] && typeof a[k] === 'string') return a[k];          // 地標：點所在的命名設施
+  }
+  return a.city_district || a.suburb || a.town || a.village || a.neighbourhood ||
+         a.quarter || a.district || a.county || a.city || '';   // 退回行政區
+}
+function _placeCacheGet(k) { try { return JSON.parse(localStorage.getItem('maptrip_placecache') || '{}')[k]; } catch (_) { return undefined; } }
+function _placeCacheSet(k, v) { try { const m = JSON.parse(localStorage.getItem('maptrip_placecache') || '{}'); m[k] = v; localStorage.setItem('maptrip_placecache', JSON.stringify(m)); } catch (_) {} }
+async function _placeOf(lat, lng) {
   if (typeof lat !== 'number' || typeof lng !== 'number') return '';
-  const key = lat.toFixed(3) + ',' + lng.toFixed(3);
-  const hit = _distCacheGet(key);
+  const key = lat.toFixed(4) + ',' + lng.toFixed(4);
+  const hit = _placeCacheGet(key);
   if (hit !== undefined) return hit;                     // 命中（含空字串）→ 不再打網路
   try {
-    const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1' +
+    const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1' +
       '&accept-language=zh-TW&lat=' + lat + '&lon=' + lng;
     const res = await fetch(url, { signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
     if (!res.ok) throw 0;
-    const a = (await res.json()).address || {};
-    const dist = a.city_district || a.suburb || a.town || a.village || a.district || a.county || a.city || '';
-    _distCacheSet(key, dist);
-    return dist;
+    const label = _placeFromAddress((await res.json()).address || {});
+    _placeCacheSet(key, label);
+    return label;
   } catch (_) { return ''; }
 }
 // 地圖上的半透明膠囊標籤（置中於 cx，頂端 topY）：出發/目的地區名用。
@@ -434,10 +446,10 @@ async function captureSingleTripScreenshot(trip) {
   const rX = 16, rY = 88, rW = W - 32, rH = 310;
   const pts = (trip.roadCoords || trip.coords || []).map(p => [p.lat, p.lng]);
   let sPix = null, ePix = null;   // 起/迄點在畫布上的座標（畫完路線後貼區名標籤用）
-  // 出發/目的地區名（反向地理編碼，與圖磚載入並行；畫完路線後再貼標籤）
+  // 出發/目的地地點名（地標優先、退回區名；反向地理編碼，與圖磚載入並行；畫完路線後再貼標籤）
   const _geoP = (pts.length > 1)
-    ? Promise.all([_districtOf(pts[0][0], pts[0][1]),
-                   _districtOf(pts[pts.length - 1][0], pts[pts.length - 1][1])])
+    ? Promise.all([_placeOf(pts[0][0], pts[0][1]),
+                   _placeOf(pts[pts.length - 1][0], pts[pts.length - 1][1])])
     : Promise.resolve(['', '']);
 
   if (pts.length > 1) {
@@ -695,7 +707,8 @@ function _fullDateLabel(ts) {
     saveImageToPhotos: saveImageToPhotos,
     closeScreenshotPreview: closeScreenshotPreview,
     _latlngToWorldPx: _latlngToWorldPx,
-    _shareOpts: _shareOpts
+    _shareOpts: _shareOpts,
+    _placeFromAddress: _placeFromAddress
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

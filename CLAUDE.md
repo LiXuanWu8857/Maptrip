@@ -432,11 +432,19 @@
     反向地理編碼查出發/目的地區名，**直接貼在地圖上的起點與迄點旁邊**（使用者要求：不要頂端一條膠囊，要區名直接出現在
     出發點和結束點旁）。起點畫**綠色**圓點＋綠字膠囊、迄點畫**紅色**圓點＋紅字膠囊（路線仍藍色）。`_drawPointLabel(c,px,py,
     text,dotColor,rX,rY,rW,rH)` 純繪製：預設貼點的右上，右邊放不下就翻左、上方放不下就翻下、一律夾在地圖框內不溢出。
-    `_districtOf(lat,lng)` 反向地理編碼（Nominatim reverse `zoom=14&accept-language=zh-TW`，取
-    `city_district/suburb/town/village/district/county/city`），快取 localStorage `maptrip_distcache`（key＝座標小數
-    3 位≈100m，含空字串快取避免重打）；與圖磚載入並行、畫完路線後貼標籤（`sPix/ePix` 起迄畫布座標）。查不到該端就不畫該標。
-    v391 曾用頂端置中膠囊 `_drawMapCaption`（已棄用、函式移除）。驗證：Playwright 實算單趟卡起點「中山區」（綠）、
-    迄點「松山區」（紅）標籤位置正確、零 pageerror。
+    與圖磚載入並行、畫完路線後貼標籤（`sPix/ePix` 起迄畫布座標）。查不到該端就不畫該標。
+    v391 曾用頂端置中膠囊 `_drawMapCaption`（已棄用、函式移除）。
+    - **地標優先（v1.1.429，使用者要「起訖在地標如桃園機場時顯示地標名、越精確越好」）**：原 `_districtOf` 只取行政區
+      （Nominatim reverse `zoom=14`）→ 升級成 `_placeOf`：reverse **`zoom=18`**（建物/設施級），先用純函式
+      `_placeFromAddress(address)` 掃「地標類鍵」`_LANDMARK_KEYS=[aeroway, railway, aerialway, tourism, historic,
+      leisure, man_made, amenity, shop]`——那是「點所在的那個**命名設施範圍**」（機場 aeroway、車站 railway、
+      校園/醫院 amenity…；reverse address 只含「包住該點」的上層命名區，不會塞附近無關的小店，故不誤標）；
+      抓不到才退回行政區（`city_district/suburb/town/village/neighbourhood/quarter/district/county/city`）。
+      快取改 **`maptrip_placecache`**（key＝座標小數 **4 位≈11m**，比舊 3 位精細；空字串也快取）。舊 `maptrip_distcache`
+      已無人用（不刪、無害）。`_placeFromAddress` 匯出於 `MaptripShot` 供測試。**限制**：只認「點落在設施範圍內」的地標
+      （reverse 的 containment），點在設施外幾十公尺仍顯示區名——若要「附近 N 公尺內最近地標」需另接 Overpass（未做）。
+    驗證：`placename.js` 13 項純函式（機場/車站/觀光/校園/百貨優先、無地標退區、優先序、null/非字串防禦）全過；
+    Playwright 實算單趟卡（預置 placecache）迄點「臺灣桃園國際機場」紅標、起點「八里區」綠標位置正確、零 pageerror。
 - **月結截圖（v1.1.349，v1.1.350 修數字）** `screenshot.js` `captureMonthScreenshot(ym, stats)`：歷史「每月」標題列
   加「📷 月結」鈕。畫當月所有載客路線（單色半透明疊加＝跑車熱度感、趟數多不編號）＋右上角「XXXX年X月」＋當月總金額
   （hero 綠字）＋三欄總工時/出車天數/平均時薪＋底部趟數·里程。重用截圖引擎的 canvas 工具＋預覽/分享基礎設施。
