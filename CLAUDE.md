@@ -434,16 +434,17 @@
     text,dotColor,rX,rY,rW,rH)` 純繪製：預設貼點的右上，右邊放不下就翻左、上方放不下就翻下、一律夾在地圖框內不溢出。
     與圖磚載入並行、畫完路線後貼標籤（`sPix/ePix` 起迄畫布座標）。查不到該端就不畫該標。
     v391 曾用頂端置中膠囊 `_drawMapCaption`（已棄用、函式移除）。
-    - **地標優先（v1.1.429，使用者要「起訖在地標如桃園機場時顯示地標名、越精確越好」）**：原 `_districtOf` 只取行政區
-      （Nominatim reverse `zoom=14`）→ 升級成 `_placeOf`：reverse **`zoom=18`**（建物/設施級），先用純函式
-      `_placeFromAddress(address)` 掃「地標類鍵」`_LANDMARK_KEYS=[aeroway, railway, aerialway, tourism, historic,
-      leisure, man_made, amenity, shop]`——那是「點所在的那個**命名設施範圍**」（機場 aeroway、車站 railway、
-      校園/醫院 amenity…；reverse address 只含「包住該點」的上層命名區，不會塞附近無關的小店，故不誤標）；
-      抓不到才退回行政區（`city_district/suburb/town/village/neighbourhood/quarter/district/county/city`）。
-      快取改 **`maptrip_placecache`**（key＝座標小數 **4 位≈11m**，比舊 3 位精細；空字串也快取）。舊 `maptrip_distcache`
-      已無人用（不刪、無害）。`_placeFromAddress` 匯出於 `MaptripShot` 供測試。**限制**：只認「點落在設施範圍內」的地標
-      （reverse 的 containment），點在設施外幾十公尺仍顯示區名——若要「附近 N 公尺內最近地標」需另接 Overpass（未做）。
-    驗證：`placename.js` 13 項純函式（機場/車站/觀光/校園/百貨優先、無地標退區、優先序、null/非字串防禦）全過；
+    - **地標優先（v1.1.429 加入；v1.1.430 收斂成「只機場」）**：原 `_districtOf` 只取行政區（Nominatim reverse
+      `zoom=14`）→ 升級成 `_placeOf`：reverse **`zoom=18`**（建物/設施級），先用純函式 `_placeFromAddress(address)`
+      掃「地標類鍵」`_LANDMARK_KEYS`，抓得到就用設施名、抓不到退回行政區
+      （`city_district/suburb/town/village/neighbourhood/quarter/district/county/city`）。
+      **v1.1.430：使用者「只要機場，其他不用」→ `_LANDMARK_KEYS=['aeroway']`**（v429 原含 railway/tourism/
+      amenity/shop… 已移除）。即車站/醫院/校園/百貨一律顯示行政區，只有點落在**機場範圍內**才顯示機場名。
+      reverse address 的 `aeroway`＝「包住該點」的機場命名區（不是附近無關 POI，故不誤標）。
+      快取 **`maptrip_placecache`**（key＝座標小數 **4 位≈11m**；空字串也快取）；舊 `maptrip_distcache` 無人用（不刪）。
+      `_placeFromAddress` 匯出於 `MaptripShot` 供測試。**限制**：只認「點落在機場範圍內」，點在機場外數十公尺仍顯示區名。
+      要擴充其他地標只需加回 `_LANDMARK_KEYS` 的鍵。
+    驗證：`placename.js` 13 項純函式（**機場唯一地標**、車站/觀光/校園/百貨改退回區、無地標退區、null/非字串防禦）全過；
     Playwright 實算單趟卡（預置 placecache）迄點「臺灣桃園國際機場」紅標、起點「八里區」綠標位置正確、零 pageerror。
 - **月結截圖（v1.1.349，v1.1.350 修數字）** `screenshot.js` `captureMonthScreenshot(ym, stats)`：歷史「每月」標題列
   加「📷 月結」鈕。畫當月所有載客路線（單色半透明疊加＝跑車熱度感、趟數多不編號）＋右上角「XXXX年X月」＋當月總金額

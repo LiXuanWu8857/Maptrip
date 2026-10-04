@@ -358,15 +358,15 @@ function _bounds(nums) { let mn = Infinity, mx = -Infinity; for (let i = 0; i < 
 // ---- 地點反向地理編碼（單趟截圖用：出發/目的地，地標優先、退回行政區）----
 // 使用者要「起訖點在地標（如桃園機場）時顯示地標名、越精確越好」。
 // 做法：Nominatim reverse zoom=18（建物/設施級），先從 address 掃「地標類鍵」——那是
-// 「點所在的那個命名設施範圍」（如機場 aeroway、車站 railway、校園/醫院 amenity…），
-// 抓得到就用地標名；抓不到才退回行政區（city_district/suburb/town…）。
+// 「點所在的那個命名設施範圍」。使用者只要「機場」特例顯示設施名，其他（車站/醫院/百貨…）
+// 一律顯示行政區 → 白名單只留 aeroway。抓不到機場才退回行政區（city_district/suburb/town…）。
 // 快取在 localStorage maptrip_placecache（key＝座標小數 4 位≈11m；空字串也快取避免重打）。
-var _LANDMARK_KEYS = ['aeroway', 'railway', 'aerialway', 'tourism', 'historic', 'leisure', 'man_made', 'amenity', 'shop'];
+var _LANDMARK_KEYS = ['aeroway'];   // 只認機場；其餘地標使用者不要，一律退回行政區
 function _placeFromAddress(a) {
   if (!a) return '';
   for (var i = 0; i < _LANDMARK_KEYS.length; i++) {
     var k = _LANDMARK_KEYS[i];
-    if (a[k] && typeof a[k] === 'string') return a[k];          // 地標：點所在的命名設施
+    if (a[k] && typeof a[k] === 'string') return a[k];          // 地標：點所在的命名設施（目前只機場）
   }
   return a.city_district || a.suburb || a.town || a.village || a.neighbourhood ||
          a.quarter || a.district || a.county || a.city || '';   // 退回行政區
