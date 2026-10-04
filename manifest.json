@@ -1,0 +1,21 @@
+{
+  "name": "Maptrip 行程紀錄",
+  "short_name": "Maptrip",
+  "start_url": "/Maptrip/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/app-icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/app-icon-new.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    }
+  ]
+}

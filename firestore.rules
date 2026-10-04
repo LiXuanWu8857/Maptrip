@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- 共用判斷式 ----------
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    function isBookkeeper(driverUid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(driverUid)/meta/access)
+        && get(/databases/$(database)/documents/users/$(driverUid)/meta/access)
+             .data.bookkeepers[request.auth.uid] != null;
+    }
+    function allowsFareEdit(driverUid) {
+      return exists(/databases/$(database)/documents/users/$(driverUid)/meta/access)
+        && get(/databases/$(database)/documents/users/$(driverUid)/meta/access).data.allowFareEdit == true;
+    }
+    function fareOverrideUnchanged() {
+      return !('fareOverride' in request.resource.data)
+        || (resource != null && request.resource.data.fareOverride == resource.data.fareOverride);
+    }
+    function payOverrideUnchanged() {
+      return !('payOverride' in request.resource.data)
+        || (resource != null && request.resource.data.payOverride == resource.data.payOverride);
+    }
+    function isMember(gid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/groups/$(gid)/members/$(request.auth.uid));
+    }
+
+    // ===== 使用者資料（記帳者模式）=====
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /days/{day} {
+        allow read:  if isOwner(uid) || isBookkeeper(uid);
+        allow write: if isOwner(uid);
+      }
+
+      match /commissions/{tripId} {
+        allow read:  if isOwner(uid) || isBookkeeper(uid);
+        allow write: if isOwner(uid)
+          || ( isBookkeeper(uid)
+               && ( (fareOverrideUnchanged() && payOverrideUnchanged()) || allowsFareEdit(uid) ) );
+      }
+
+      match /expenses/{expId} {
+        allow read, write: if isOwner(uid) || isBookkeeper(uid);
+      }
+
+      match /manualTrips/{tripId} {
+        allow read, write: if isOwner(uid) || isBookkeeper(uid);
+      }
+
+      // 預約：Phase 1 只本人讀寫（未開放記帳者）。
+      // ⚠️ 沒有這條＝users/{uid}/bookings 全被預設 deny → 預約寫不上雲、只存在本機，
+      //    換帳號清本機時就永久遺失（「切帳號後預約不見了」的根因）。
+      match /bookings/{bookingId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /meta/{doc} {
+        allow read:  if isOwner(uid) || (doc == 'profile' && isBookkeeper(uid));
+        allow write: if isOwner(uid);
+      }
+
+      match /linkedDrivers/{driverUid} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ===== 記帳者邀請碼 =====
+    match /invites/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.driverUid == request.auth.uid;
+      allow update: if signedIn() && (
+        ( (resource.data.claimedBy == null || resource.data.claimedBy == request.auth.uid)
+          && request.resource.data.claimedBy == request.auth.uid
+          && request.resource.data.driverUid == resource.data.driverUid )
+        || ( resource.data.driverUid == request.auth.uid )
+      );
+      allow delete: if signedIn() && resource.data.driverUid == request.auth.uid;
+    }
+
+    // ===== 共享熱點 Phase 1：車隊 =====
+    match /groups/{gid} {
+      allow read:   if isMember(gid);
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberCount == 1;
+      allow update: if isMember(gid);
+      allow delete: if false;
+
+      match /members/{muid} {
+        allow read:   if isMember(gid);
+        allow create: if signedIn() && muid == request.auth.uid;
+        allow update: if signedIn() && muid == request.auth.uid;
+        allow delete: if signedIn() && muid == request.auth.uid;
+      }
+
+      match /grid/{cellId} {
+        allow read:   if isMember(gid);
+        allow create: if isMember(gid)
+          && request.resource.data.count is number && request.resource.data.count >= 1;
+        allow update: if isMember(gid)
+          && request.resource.data.count > resource.data.count;
+        allow delete: if false;
+      }
+    }
+
+    // 車隊邀請碼
+    match /groupInvites/{code} {
+      allow read:   if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.by == request.auth.uid
+        && isMember(request.resource.data.groupId);
+      allow update: if signedIn() && resource.data.by == request.auth.uid;
+      allow delete: if signedIn() && resource.data.by == request.auth.uid;
+    }
+
+    // ===== 共享熱點 Phase 2：全體去識別化池 =====
+    match /hotspotGrid/{cellId} {
+      allow read:   if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.count is number && request.resource.data.count >= 1;
+      allow update: if signedIn()
+        && request.resource.data.count > resource.data.count;
+      allow delete: if false;
+    }
+  }
+}
