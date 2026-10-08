@@ -942,7 +942,7 @@ textarea.bk-in { resize: vertical; }
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 
 .history-day {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 10px 18px 4px; font-size: 0.75rem; font-weight: 600; color: #1a73e8; letter-spacing: 0.04em;
   cursor: pointer;
   /* iOS：禁止選字/長按選單/點擊高亮 → 避免點日期列時高亮/選取被合成位移到下一列 */
@@ -951,9 +951,12 @@ textarea.bk-in { resize: vertical; }
 }
 /* 不用 :active（iOS 會把它畫到相鄰列＝顯示錯位）；點按會展開該日＝已有回饋 */
 .day-caret { font-size: 0.65rem; color: #9aa0a6; flex-shrink: 0; width: 12px; }
-.day-info { flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.day-info-top { font-size: 0.75rem; font-weight: 600; }
-.day-info-bot { font-size: 0.68rem; font-weight: 400; color: #5f6368; letter-spacing: 0.02em; }
+.day-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+/* 總計一律一行不換行（使用者規則：有跨行就改成單行）；文字吃滿整行寬度 */
+.day-info-top { font-size: 0.75rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-info-bot { font-size: 0.68rem; font-weight: 400; color: #5f6368; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 地圖/抽成/回放 整組掉到自己一排、靠右，讓上面文字能用整行寬度 */
+.day-acts { flex: 1 1 100%; display: flex; justify-content: flex-end; gap: 6px; padding-top: 2px; }
 .history-day .replay-btn { flex-shrink: 0; }
 .day-rows.collapsed { display: none; }
 
@@ -970,8 +973,8 @@ textarea.bk-in { resize: vertical; }
 .month-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .month-title { font-size: 0.95rem; font-weight: 800; color: #202124; }
 .month-sub { font-size: 0.72rem; color: #5f6368; font-weight: 600; }
-.month-fare { font-size: 0.68rem; }
-.month-fare .fl-card, .month-fare .fl-cash, .month-fare .fl-total { margin-right: 10px; }
+.month-fare { font-size: 0.62rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-fare .fl-card, .month-fare .fl-cash, .month-fare .fl-total { margin-right: 7px; }
 .month-days.collapsed { display: none; }
 @media (prefers-color-scheme: dark) {
   .history-month { background: #1c1c1e; border-top-color: rgba(255,255,255,0.06); }

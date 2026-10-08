@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.430';
+const APP_VERSION  = '1.1.431';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1740,9 +1740,11 @@ function renderHistorySheet(keepState) {
       return `<div class="history-day" data-row="D${day}" onclick="toggleDay('${day}')">
           <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
           <span class="day-info"><span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : ''}</span>
-          <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
-          <button class="commission-btn" onclick="event.stopPropagation();openCommissionBatch('${day}')">抽成</button>
-          <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
+          <div class="day-acts">
+            <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
+            <button class="commission-btn" onclick="event.stopPropagation();openCommissionBatch('${day}')">抽成</button>
+            <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
+          </div>
         </div>
         <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
     }).join('');
