@@ -942,7 +942,7 @@ textarea.bk-in { resize: vertical; }
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 
 .history-day {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; flex-direction: column; gap: 2px;
   padding: 10px 18px 4px; font-size: 0.75rem; font-weight: 600; color: #1a73e8; letter-spacing: 0.04em;
   cursor: pointer;
   /* iOS：禁止選字/長按選單/點擊高亮 → 避免點日期列時高亮/選取被合成位移到下一列 */
@@ -950,13 +950,15 @@ textarea.bk-in { resize: vertical; }
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 /* 不用 :active（iOS 會把它畫到相鄰列＝顯示錯位）；點按會展開該日＝已有回饋 */
+/* 第一排：展開箭頭＋日期列（吃整行寬度，完整顯示不截斷）*/
+.day-head { display: flex; align-items: center; gap: 8px; }
 .day-caret { font-size: 0.65rem; color: #9aa0a6; flex-shrink: 0; width: 12px; }
-.day-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-/* 日期列一行不換行；文字吃滿整行寬度 */
-.day-info-top { font-size: 0.75rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 總計那行：刷卡／現金 第一行、總計／每小時收入 第二行（使用者要求） */
-.day-info-bot { font-size: 0.68rem; font-weight: 400; color: #5f6368; letter-spacing: 0.02em; line-height: 1.55; }
-/* 地圖/抽成/回放 放在右側，與左邊「刷卡/現金、總計」文字平行（同一排、垂直置中）*/
+.day-info-top { flex: 1 1 auto; min-width: 0; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+/* 第二排：左邊總計文字（兩行）＋右邊按鈕，縮排對齊日期文字（讓過箭頭寬度）*/
+.day-body { display: flex; align-items: center; gap: 8px; padding-left: 20px; }
+/* 總計那行：刷卡／現金 第一行、總計／每小時收入 第二行（使用者要求）*/
+.day-info-bot { flex: 1 1 auto; min-width: 0; font-size: 0.68rem; font-weight: 400; color: #5f6368; letter-spacing: 0.02em; line-height: 1.55; }
+/* 地圖/抽成/回放 放在總計文字右側（同第二排，垂直置中）*/
 .day-acts { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
 .history-day .replay-btn { flex-shrink: 0; }
 .day-rows.collapsed { display: none; }
