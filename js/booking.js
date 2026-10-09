@@ -18,6 +18,9 @@
   var _alerted = {};     // 已提醒 key 集合（id:lead），避免重複跳；存 localStorage（App 重開/冷啟動 reload 不再重跳）
   var ALERTED_KEY = 'maptrip_bk_alerted';
   var _tickTimer = null;
+  var _resumeWired = false;
+  var _onmapShownId = '';   // 黑盒子用：上次記錄的地圖卡狀態（只在變化時記，避免洗版）
+  function _blog(m) { try { if (typeof global.__mtLog === 'function') global.__mtLog('booking:' + m); } catch (_) {} }
   var _editId = null;    // 表單目前編輯中的 id（null=新增）
   var _formReminders = [];   // 表單暫存的提醒分鐘陣列
   var _formDests = [''];      // 表單暫存的下車點文字（可多個，最多 4）
@@ -404,9 +407,11 @@
   }
   function openFromMap(id) { open(); }
 
+  // 黑盒子：地圖卡狀態有變才記（show:<ids> / blocked / hide），真機不跳時可用數據判讀
+  function _onmapState(st) { if (st !== _onmapShownId) { _onmapShownId = st; _blog('onmap ' + (st || 'hide')); } }
   function _updateOnMap() {
     var el = _ensureOnMapDom();
-    if (_onMapBlocked()) { el.style.display = 'none'; _onmapSig = ''; return; }
+    if (_onMapBlocked()) { el.style.display = 'none'; _onmapSig = ''; if (_dueOnMap(_list, Date.now()).length) _onmapState('blocked'); return; }
     var now = Date.now();
     var rec = _isRecording();
     var rb = document.getElementById('rec-banner');
@@ -428,7 +433,7 @@
     }
 
     var due = _dueOnMap(_list, now);
-    if (!due.length) { if (el.style.display !== 'none') el.style.display = 'none'; el.innerHTML = ''; _onmapSig = ''; return; }
+    if (!due.length) { if (el.style.display !== 'none') el.style.display = 'none'; el.innerHTML = ''; _onmapSig = ''; _onmapState(''); return; }
 
     // (B) 跑車中但不是從預約開始 → 原藍條照顯示、預約縮成小條掛上方
     if (rec) {
@@ -450,6 +455,7 @@
     }
     el.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 64px)';
     if (el.style.display !== 'block') el.style.display = 'block';
+    _onmapState('show:' + due.map(function (b) { return b.id; }).join(','));
   }
 
   // ---------- UI：滿版清單 ----------
@@ -941,7 +947,16 @@
     _updateBadge();
     if (_tickTimer) clearInterval(_tickTimer);
     _tickReminders();   // 內含 _updateOnMap()
-    _tickTimer = setInterval(_tickReminders, 30000);
+    _tickTimer = setInterval(_tickReminders, 15000);   // v1.1.435：30s→15s（成本極低，簽章沒變不動 DOM）
+    // v1.1.435 使用者：「App 開著、不重新整理預約卡不會自己跳出來」。iOS 在 App 進背景（螢幕鎖定、切去 LINE/導航）
+    // 會暫停 JS 計時器，回到前景後要等那個被暫停的計時器才重算 → 卡片遲遲不出現。→ 回前景／取得焦點就立刻重算一次。
+    if (!_resumeWired && typeof document !== 'undefined') {
+      _resumeWired = true;
+      var onResume = function () { if (document.visibilityState !== 'hidden') { _blog('resume'); try { _tickReminders(); } catch (_) {} } };
+      document.addEventListener('visibilitychange', onResume);
+      global.addEventListener('focus', onResume);
+      global.addEventListener('pageshow', onResume);
+    }
     // 原生本地通知：加點通知監聽、要權限、依現況排程（未裝外掛/瀏覽器時安全 no-op）
     try {
       if (global.MaptripBookingNotify) {
