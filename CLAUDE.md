@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.435**（2026-10-09）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.436**（2026-10-21）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -430,6 +430,12 @@
   計時器才重算。修法：`visibilitychange/focus/pageshow` 回前景立刻 `_tickReminders()`（`_resumeWired` 只綁一次）；間隔 30s→15s；
   黑盒子記 `booking:resume`、`booking:onmap show:<ids>|blocked|hide`（只在變化時記）。測試 `bkclock.js` 6（模擬背景：牆鐘跳 29 分、
   計時器未跑→回前景；舊版重現 2 失敗）。
+- **搜尋連線失敗診斷（v1.1.436）** 使用者回報「搜尋連不上伺服器」。程式自 v399 未變、SW 不攔 Overpass → 判定外部伺服器
+  （Overpass 4 鏡像全掛/限流）。沙箱網路政策擋 Overpass/Nominatim、無法實連。修：`nearby.js fetchOverpass` 黑盒子記
+  `nearby:ok <host> <ms>`／`nearby:fail <host>:http429|http504|timeout|net|json …`（逐台原因）；`addr-search.js geocode`
+  連線失敗回 null 記 `addr:fail <why>`，toast 改「地址服務暫時無法連線」（原本誤報「找不到「X」」）。注意 `oneway.js`
+  （單行道開著時每移動 300m 對 4 鏡像各打一次）與 `hotspots.js` 共用同一批 Overpass，可能吃掉 per-IP 限額（429）。
+  測試 `searchdiag.js` 9 項。詳見 `docs/搜尋-功能與交接.md`
 - **歷史行程**：月/日收合清單、日預覽（白底黑線＋編號）、回放、刪除、休息時間設定
 - **回放**：今日或歷史日，鏡頭跟隨、速度調整；回放中所有自動運鏡讓路
 - **截圖**：單趟/全日，含日期時間、金額、「其他」顯示備註；分享／儲存合一

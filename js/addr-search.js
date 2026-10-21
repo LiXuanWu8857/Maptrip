@@ -18,11 +18,18 @@
   function geocode(q) {
     var url = GEO + '?format=jsonv2&limit=1&countrycodes=tw&accept-language=zh-TW&q=' + encodeURIComponent(q);
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+    var timedOut = false;
+    var timer = setTimeout(function () { timedOut = true; if (ctrl) ctrl.abort(); }, 15000);
     var opt = {}; if (ctrl) opt.signal = ctrl.signal;
     return fetch(url, opt).then(function (r) {
-      clearTimeout(timer); if (!r || !r.ok) throw new Error('http'); return r.json();
-    }).catch(function () { clearTimeout(timer); return null; });
+      clearTimeout(timer); if (!r || !r.ok) throw new Error('http' + (r && r.status)); return r.json();
+    }).catch(function (e) {
+      clearTimeout(timer);
+      var m = String(e && e.message || '');
+      var why = timedOut ? 'timeout' : /^http/.test(m) ? m : 'net';
+      try { if (typeof window.__mtLog === 'function') window.__mtLog('addr:fail ' + why); } catch (_) {}
+      return null;                                     // null＝連線失敗；[]＝真的查無結果（兩者要分開提示）
+    });
   }
 
   var CSS =
@@ -84,7 +91,8 @@
     _busy = true; say('搜尋地址中…');
     geocode(q).then(function (arr) {
       _busy = false;
-      if (!arr || !arr.length) { say('找不到「' + q + '」，換個關鍵字試試'); return; }
+      if (!arr) { say('地址服務暫時無法連線，稍後再試'); return; }
+      if (!arr.length) { say('找不到「' + q + '」，換個關鍵字試試'); return; }
       var r = arr[0], lat = +r.lat, lng = +r.lon, name = _short(r.display_name);
       if (!isFinite(lat) || !isFinite(lng)) { say('地址結果異常，稍後再試'); return; }
       close();

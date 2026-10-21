@@ -109,26 +109,40 @@
     return s;
   }
 
+  function _blog(m) { try { if (typeof window.__mtLog === 'function') window.__mtLog('nearby:' + m); } catch (_) {} }
+  function _host(u) { try { return new URL(u).hostname; } catch (_) { return String(u); } }
+  // 失敗原因分類：http<狀態碼>／timeout（15 秒逾時）／json（回應不是 JSON）／net（網路斷、DNS、CORS 擋）
+  function _why(e, timedOut) {
+    if (timedOut) return 'timeout';
+    var m = String(e && e.message || '');
+    if (/^http/.test(m)) return m;
+    if (e && e.name === 'SyntaxError') return 'json';
+    return 'net';
+  }
+
   // 兩個鏡像「並行競速」，誰先成功用誰（舊版是序列：第一個卡住要等 20 秒才換 → 特別慢）。
   function fetchOverpass(centers, sels) {
     var body = _overpassBody(centers, sels);
     return new Promise(function (resolve) {
-      var pending = MIRRORS.length, settled = false;
+      var pending = MIRRORS.length, settled = false, t0 = Date.now(), fails = [];
       MIRRORS.forEach(function (url) {
         var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-        var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+        var timedOut = false;
+        var timer = setTimeout(function () { timedOut = true; if (ctrl) ctrl.abort(); }, 15000);
         var opt = { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body };
         if (ctrl) opt.signal = ctrl.signal;
         fetch(url, opt).then(function (r) {
           clearTimeout(timer);
-          if (!r || !r.ok) throw new Error('http ' + (r && r.status));
+          if (!r || !r.ok) throw new Error('http' + (r && r.status));
           return r.json();
         }).then(function (data) {
-          if (!settled) { settled = true; resolve(data); }         // 先到先用
-        }).catch(function () {
+          if (!settled) { settled = true; _blog('ok ' + _host(url) + ' ' + (Date.now() - t0) + 'ms'); resolve(data); }  // 先到先用
+        }).catch(function (e) {
           clearTimeout(timer);
+          fails.push(_host(url) + ':' + _why(e, timedOut));
           pending--;
-          if (pending <= 0 && !settled) { settled = true; resolve(null); }   // 兩個都掛才算失敗
+          // 全部都掛才算失敗；黑盒子記每台的失敗原因（http429＝限流、timeout＝逾時、net＝連不上/CORS）
+          if (pending <= 0 && !settled) { settled = true; _blog('fail ' + fails.join(' ')); resolve(null); }
         });
       });
     });
@@ -249,6 +263,6 @@
     run: run, close: close, clearMap: clearMap, CATS: CATS, AUTO_MS_DEFAULT: 120000, hasResults: hasResults,
     _haversine: _haversine, _fmtDist: _fmtDist, _name: _name, _toilet: _toilet,
     _parse: _parse, _overpassBody: _overpassBody, _note: _note, _drawMap: drawMap, _setAutoMs: _setAutoMs,
-    _fetchOverpass: fetchOverpass, _mirrors: MIRRORS
+    _fetchOverpass: fetchOverpass, _mirrors: MIRRORS, _why: _why
   };
 })();
