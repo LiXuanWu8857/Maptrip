@@ -94,23 +94,36 @@
     if (min > 0) r[dayKey] = min; else delete r[dayKey];
     localStorage.setItem(REST_KEY, JSON.stringify(r));
   }
+  // 趟與趟之間空檔 ≥ 此門檻（分）＝自動判定為休息、整段從工時扣掉（v1.1.436，使用者選 90 分）。
+  // 短空檔（等客/排班）仍算工時；長空檔（吃飯/回家/午休）自動扣，免手動填休息。
+  var GAP_REST_MIN = 90;
   function workMs(trips, restMin) {
     if (!trips || !trips.length) return 0;
-    // 工時＝當日最早開始 → 最晚結束。排除「其他」付款（自用/非載客）與完全無時間的趟；
-    // 但「只有 startTime、無 endTime」的手動補登趟改為計入端點（缺 endTime 用 startTime 補），
-    // 讓排在當天最早/最晚的手動趟能撐開工時起點/終點（排中間則天然不影響）。
-    // 用 min(start)/max(end||start) 而非陣列頭尾位置：手動趟排最後時位置取 endTime 會是 undefined。
-    let minStart = Infinity, maxEnd = -Infinity, has = false;
+    // 工時＝當日最早開始 → 最晚結束，再扣掉「過長的趟間空檔」與手動休息。
+    // 排除「其他」付款（自用/非載客）與完全無 startTime 的趟；手動補登趟缺 endTime 用 startTime 補。
+    // 先蒐集合格趟的 [start,end] 再依 start 排序，才能正確算連續趟之間的空檔（陣列順序不保證）。
+    const segs = [];
     for (let i = 0; i < trips.length; i++) {
       const x = trips[i];
       if (!x || x.paymentMethod === 'other' || !x.startTime) continue;
-      const end = x.endTime || x.startTime;
-      if (x.startTime < minStart) minStart = x.startTime;
-      if (end > maxEnd) maxEnd = end;
-      has = true;
+      segs.push({ s: x.startTime, e: x.endTime || x.startTime });
     }
-    if (!has) return 0;
-    return Math.max(0, (maxEnd - minStart) - (restMin || 0) * 60000);
+    if (!segs.length) return 0;
+    segs.sort((a, b) => a.s - b.s);
+    const minStart = segs[0].s;
+    let maxEnd = -Infinity, runEnd = -Infinity, autoRest = 0;
+    const gapMs = GAP_REST_MIN * 60000;
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      // 與「目前已覆蓋到的最晚結束」比空檔（處理重疊趟）；空檔 ≥ 門檻就整段扣掉
+      if (runEnd > -Infinity) {
+        const gap = g.s - runEnd;
+        if (gap >= gapMs) autoRest += gap;
+      }
+      if (g.e > runEnd) runEnd = g.e;
+      if (g.e > maxEnd) maxEnd = g.e;
+    }
+    return Math.max(0, (maxEnd - minStart) - autoRest - (restMin || 0) * 60000);
   }
 
   // 初始化：對齊 app.js 的 TEST_MODE_ON，決定 REST_KEY
@@ -125,7 +138,8 @@
     fmtDist: fmtDist, fmtDur: fmtDur, fmtWork: fmtWork, fmtTime: fmtTime,
     _payTag: _payTag, _otherTag: _otherTag, _extraTag: _extraTag,
     _fareStats: _fareStats, _fareLineHtml: _fareLineHtml,
-    getRestMin: getRestMin, setRestMin: setRestMin, workMs: workMs
+    getRestMin: getRestMin, setRestMin: setRestMin, workMs: workMs,
+    GAP_REST_MIN: GAP_REST_MIN
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
