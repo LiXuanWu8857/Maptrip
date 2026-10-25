@@ -407,6 +407,27 @@
   }
   function openFromMap(id) { open(); }
 
+  // v1.1.438 使用者：「預約即將到來時，地圖頁下方的預約方塊不見了」。開著遮蓋面板（預約清單/表單、今日行程、
+  // 歷史、收支、單趟/整日預覽、找客熱區）時地圖卡會藏起來，但**關掉面板後沒人叫它回來**，要等下一次 15 秒定時檢查
+  // （iOS 計時器還可能更晚）→ 這段時間地圖頁就是沒有預約卡。→ 自家面板關閉時直接重畫；別人的面板用
+  // MutationObserver 只盯那幾個元素的 style（不盯整棵 DOM，避免地圖動畫狂觸發），一關就立刻重畫。
+  var _blockerObs = null, _blockerSeen = {};
+  var EXT_BLOCKERS = ['solo-bar', 'day-preview-bar', 'hs-panel', 'sheet-overlay'];
+  function _watchBlockers() {
+    if (_blockerObs || typeof MutationObserver === 'undefined' || typeof document === 'undefined' || !document.body) return;
+    var kick = function () { try { _updateOnMap(); } catch (_) {} };
+    _blockerObs = new MutationObserver(kick);
+    var attach = function () {
+      EXT_BLOCKERS.forEach(function (id) {
+        var e = document.getElementById(id);
+        if (e && !_blockerSeen[id]) { _blockerSeen[id] = 1; _blockerObs.observe(e, { attributes: true, attributeFilter: ['style'] }); }
+      });
+    };
+    attach();
+    // hs-panel 是用到才建立的 → 盯 body 的直接子節點（不含子樹），出現就掛上
+    new MutationObserver(function () { if (EXT_BLOCKERS.some(function (id) { return !_blockerSeen[id]; })) attach(); })
+      .observe(document.body, { childList: true });
+  }
   // 黑盒子：地圖卡狀態有變才記（show:<ids> / blocked / hide），真機不跳時可用數據判讀
   function _onmapState(st) { if (st !== _onmapShownId) { _onmapShownId = st; _blog('onmap ' + (st || 'hide')); } }
   function _updateOnMap() {
@@ -482,7 +503,7 @@
     document.body.appendChild(ov);
   }
   function open() { _ensureListDom(); _renderList(); document.getElementById('bk-list').style.display = 'flex'; }
-  function close() { var el = document.getElementById('bk-list'); if (el) el.style.display = 'none'; }
+  function close() { var el = document.getElementById('bk-list'); if (el) el.style.display = 'none'; try { _updateOnMap(); } catch (_) {} }   // 關清單立刻補回地圖卡
 
   function toggleDay(k) { _collapsed[k] = !_collapsed[k]; _renderList(); }
 
@@ -626,7 +647,7 @@
     _renderForm(b);
     document.getElementById('bk-form').style.display = 'flex';
   }
-  function closeForm() { var el = document.getElementById('bk-form'); if (el) el.style.display = 'none'; _editId = null; }
+  function closeForm() { var el = document.getElementById('bk-form'); if (el) el.style.display = 'none'; _editId = null; try { _updateOnMap(); } catch (_) {} }
 
   function _dtStr(d) {
     return d.getFullYear() + '-' + _pad(d.getMonth() + 1) + '-' + _pad(d.getDate()) + 'T' + _pad(d.getHours()) + ':' + _pad(d.getMinutes());
@@ -950,6 +971,7 @@
     _tickTimer = setInterval(_tickReminders, 15000);   // v1.1.435：30s→15s（成本極低，簽章沒變不動 DOM）
     // v1.1.435 使用者：「App 開著、不重新整理預約卡不會自己跳出來」。iOS 在 App 進背景（螢幕鎖定、切去 LINE/導航）
     // 會暫停 JS 計時器，回到前景後要等那個被暫停的計時器才重算 → 卡片遲遲不出現。→ 回前景／取得焦點就立刻重算一次。
+    _watchBlockers();
     if (!_resumeWired && typeof document !== 'undefined') {
       _resumeWired = true;
       var onResume = function () { if (document.visibilityState !== 'hidden') { _blog('resume'); try { _tickReminders(); } catch (_) {} } };
