@@ -83,10 +83,16 @@ window.MaptripExport = (function () {
     Object.keys(resolved).forEach(function (d) { months[String(d).slice(0, 7)] = true; });
     (expenses || []).forEach(function (e) { if (e.day) months[String(e.day).slice(0, 7)] = true; });
     var list = Object.keys(months).sort();
-    var rows = [SUM_HEAD.slice()];
-    list.forEach(function (m) {
-      var r = F.monthReport(resolved, commissions, expenses, m);
-      rows.push([m, r.fare, r.cash, r.card, r.comm, r.disp, r.expTotal, r.net, r.trips, km(r.dist)]);
+    var reps = list.map(function (m) { return F.monthReport(resolved, commissions, expenses, m); });
+    // 紙本簽單（v1.1.442）：任何一個月有簽單才在「刷卡」後加「簽單」欄（沒有就不顯示，表格與以前一樣）
+    var hasV = reps.some(function (r) { return (r.voucher || 0) > 0; });
+    var head = SUM_HEAD.slice();
+    if (hasV) head.splice(4, 0, '簽單');
+    var rows = [head];
+    reps.forEach(function (r, i) {
+      var row = [list[i], r.fare, r.cash, r.card, r.comm, r.disp, r.expTotal, r.net, r.trips, km(r.dist)];
+      if (hasV) row.splice(4, 0, r.voucher || 0);
+      rows.push(row);
     });
     return rows;
   }

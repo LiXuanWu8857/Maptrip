@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.440**（2026-11-01）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.442**（2026-11-01）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -115,8 +115,12 @@
   沒有簽單就不顯示：`util._fareStats`（回 voucher）/`_fareLineHtml`（簽單欄夾在刷卡與現金之間，因歷史清單在「現金」後換行）/
   `_payTag`、`finance.monthReport.voucher`、`bookkeeper._daySummary.voucher`、export-excel/trash 標籤。
   **長按坑**：觸控後瀏覽器補發的模擬 mousedown（1 秒內）要忽略、長按後 700ms 內的 click 要忽略（否則放手誤存檔）；
-  iOS 加 `-webkit-touch-callout:none`。**未做**：記帳者付款篩選/改付款下拉無簽單選項；月彙總 Excel 無簽單欄。
-  測試 `voucher.js` 23 項（CDP 真觸控長按＋補發 click、滑鼠長按、舊版重現 5 失敗）
+  iOS 加 `-webkit-touch-callout:none`。測試 `voucher.js` 23 項（CDP 真觸控長按＋補發 click、滑鼠長按、舊版重現 5 失敗）。
+  **v1.1.442 記帳者＋Excel**：`bookkeeper.js` 篩選列「簽單」chip（**當月有簽單才出現**）、`_resolve`/`saveComm` 接受
+  `payOverride='voucher'`（改付款下拉＋補登下拉加「紙本簽單」；簽單不鎖抽成，只有現金鎖）；`export-excel.js summaryRows`
+  **任一月有簽單才在「刷卡」後插「簽單」欄**（沒有＝欄位同以前）。司機端 `applyCommission` 本來就接受任何 payOverride、
+  Firestore 規則不限值 → 不用改規則。**未做**：Google Sheets 每日上傳（sheet-sync pushDay）未另傳簽單欄（總計已含）。
+  測試 `bkvoucher.js` 17 項全過零 pageerror。
 - **收支報表** `js/finance.js`：月營收（排除「其他」）、淨收入＝營收−抽成/叫車−支出、
   時段/星期分析、支出 CRUD（localStorage maptrip_expenses）
   - **v290 長條圖長按看金額**：分析頁「各時段營收／各星期營收」長條圖手機看不到金額（`title` 只在桌面 hover）。

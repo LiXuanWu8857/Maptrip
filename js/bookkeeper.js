@@ -11,7 +11,7 @@
   var _expEdit = null;     // 支出編輯狀態：null=無／'__new__'=新增中／<id>=編輯該筆
   var _addDay = null;      // 正在新增手動紀錄的日期 'YYYY-MM-DD'（null=無）
   var _month = null;       // 司機檢視目前選的月份 'YYYY-MM'（null=用最近月份）
-  var _payF = 'all';       // 每趟清單篩選：付款方式 'all'|'cash'|'card'
+  var _payF = 'all';       // 每趟清單篩選：付款方式 'all'|'cash'|'card'|'voucher'（紙本簽單，v1.1.442）
   var _dayF = null;        // 每趟清單篩選：只看某一天 'YYYY-MM-DD'（null=整個月）
   var _dispF = false;      // 每趟清單篩選：只看有叫車費的趟（可與現金/刷卡疊加）
   var _cache = null;       // 某司機的 { days, commissions, expenses, name }
@@ -518,7 +518,10 @@
     // 日期下拉只列「當月有載客趟」的日子；選的日子不在清單（換月/資料變動）就回到整月
     var tripDays = monthKeys.filter(function (d) { return (days[d] || []).some(function (t) { return t.paymentMethod !== 'other'; }); });
     if (_dayF && tripDays.indexOf(_dayF) < 0) _dayF = null;
-    if (tripDays.length) h += _filterBarHtml(tripDays);
+    // 當月有紙本簽單才出現「簽單」篩選鈕（沒有就不顯示）
+    var hasVoucher = monthKeys.some(function (d) { return (days[d] || []).some(function (t) { return t.paymentMethod === 'voucher'; }); });
+    if (_payF === 'voucher' && !hasVoucher) _payF = 'all';
+    if (tripDays.length) h += _filterBarHtml(tripDays, hasVoucher);
     // 篩選：付款方式（現金/刷卡）＋日期；只影響下方每趟清單與當日總結，上方淨利卡/月報表維持整月
     var dayKeys = _dayF ? [_dayF] : monthKeys;
     var fsum = _filterSum(days, dayKeys, data.commissions, _payF, _dispF);
@@ -634,8 +637,9 @@
     });
     return { n: n, fare: fare, comm: comm, disp: disp, tip: tip };
   }
-  function _filterBarHtml(tripDays) {
+  function _filterBarHtml(tripDays, hasVoucher) {
     var pays = [['all', '全部'], ['cash', '現金'], ['card', '刷卡']];
+    if (hasVoucher) pays.push(['voucher', '簽單']);
     var h = '<div class="bk-filter" id="bk-filter"><span class="fl">篩選</span>';
     pays.forEach(function (p) {
       h += '<button class="bk-chip' + (_payF === p[0] ? ' on' : '') + '" data-pay="' + p[0] + '" onclick="MaptripBookkeeper.setPayFilter(\'' + p[0] + '\')">' + p[1] + '</button>';
@@ -650,7 +654,7 @@
   function _filterSumHtml(fs) {
     var parts = [];
     if (_dayF) parts.push(_dayF.slice(5).replace('-', '/') + ' ' + wdOf(_dayF));
-    if (_payF !== 'all') parts.push(_payF === 'cash' ? '現金' : '刷卡');
+    if (_payF !== 'all') parts.push(_payF === 'cash' ? '現金' : (_payF === 'voucher' ? '紙本簽單' : '刷卡'));
     if (_dispF) parts.push('有叫車');
     return '<div class="bk-fsum" id="bk-fsum"><span>' + esc(parts.join('・')) + '</span>' +
       '<span><b>' + fs.n + '</b> 趟</span><span>車資 <b>NT$ ' + nf(fs.fare) + '</b></span>' +
@@ -659,7 +663,7 @@
       (fs.disp ? '<span>叫車 <b>' + nf(fs.disp) + '</b></span>' : '') +
       '<button onclick="MaptripBookkeeper.clearFilter()">清除篩選</button></div>';
   }
-  function setPayFilter(p) { _payF = (p === 'cash' || p === 'card') ? p : 'all'; _editId = null; _addDay = null; paintDriver(); }
+  function setPayFilter(p) { _payF = (p === 'cash' || p === 'card' || p === 'voucher') ? p : 'all'; _editId = null; _addDay = null; paintDriver(); }
   function setDayFilter(d) { _dayF = /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : null; _editId = null; _addDay = null; paintDriver(); }
   function toggleDispFilter() { _dispF = !_dispF; _editId = null; _addDay = null; paintDriver(); }
   function clearFilter() { _payF = 'all'; _dayF = null; _dispF = false; _editId = null; paintDriver(); }
@@ -764,7 +768,7 @@
   // 套用記帳者改過的車資／付款方式（commissions.fareOverride / payOverride）→ 回傳「新的 days map」（不改原物件）。
   // 司機端 applyCommission 要等司機開 App 才會寫回 days；記帳者這邊先自己套，讓清單、當日總結、
   // 淨利卡、月報表、篩選、匯出全部用同一份「改後」的值（否則改成刷卡後現金/刷卡小計還算在舊的那邊）。
-  // 改過的趟標 _fareEd / _payEd（顯示用）；payOverride 只接受 cash/card。
+  // 改過的趟標 _fareEd / _payEd（顯示用）；payOverride 只接受 cash/card/voucher。
   function _resolve(days, commissions) {
     var out = {};
     Object.keys(days || {}).forEach(function (d) {
@@ -773,7 +777,7 @@
         if (!c) return t;
         var fo = c.fareOverride, po = c.payOverride;
         var fareCh = fo != null && fo !== '' && !isNaN(+fo) && +fo !== (t.fare || 0);
-        var payCh = (po === 'cash' || po === 'card') && po !== t.paymentMethod;
+        var payCh = (po === 'cash' || po === 'card' || po === 'voucher') && po !== t.paymentMethod;
         if (!fareCh && !payCh) return t;
         var nt = {}; for (var k in t) nt[k] = t[k];
         if (fareCh) { nt.fare = +fo; nt._fareEd = true; }
@@ -788,7 +792,8 @@
     return '<div class="bk-tedit-pf">' +
       '<span class="lb">付款</span><select id="bk-p" onchange="var c=document.getElementById(\'bk-c\');if(c){c.disabled=this.value===\'cash\';if(c.disabled)c.value=0;}">' +
         '<option value="cash"' + (pm === 'cash' ? ' selected' : '') + '>現金</option>' +
-        '<option value="card"' + (pm === 'card' ? ' selected' : '') + '>刷卡</option></select>' +
+        '<option value="card"' + (pm === 'card' ? ' selected' : '') + '>刷卡</option>' +
+        '<option value="voucher"' + (pm === 'voucher' ? ' selected' : '') + '>紙本簽單</option></select>' +
       '<span class="lb">車資</span><input id="bk-f" type="number" inputmode="numeric" value="' + (fare || 0) + '">' +
       '</div>';
   }
@@ -855,7 +860,7 @@
         '<input id="bk-nt" type="time" value="' + hh + ':' + mm + '">' +
       '</div>' +
       '<div class="tf-row">' +
-        '<select id="bk-np"><option value="cash">現金</option><option value="card">刷卡</option></select>' +
+        '<select id="bk-np"><option value="cash">現金</option><option value="card">刷卡</option><option value="voucher">紙本簽單</option></select>' +
         '<button onclick="MaptripBookkeeper.saveTrip(\'' + day + '\')">新增</button>' +
         '<button class="gh" onclick="MaptripBookkeeper.addTrip(\'' + day + '\')">取消</button>' +
       '</div></div>';
@@ -1132,7 +1137,7 @@
     var payEl = document.getElementById('bk-p'), fareEl = document.getElementById('bk-f');
     var canPF = !!(t && (t._manual || (_cache && _cache.allowFareEdit)));
     var newPay = null, newFare = null;
-    if (canPF && payEl && (payEl.value === 'cash' || payEl.value === 'card')) newPay = payEl.value;
+    if (canPF && payEl && (payEl.value === 'cash' || payEl.value === 'card' || payEl.value === 'voucher')) newPay = payEl.value;
     if (canPF && fareEl) { var v = parseInt(fareEl.value, 10); if (!isNaN(v) && v >= 0) newFare = v; }
     var pm = newPay || (t && t.paymentMethod);
     var cashLock = pm === 'cash';   // 現金：抽成強制 0（依「改後」的付款方式）
