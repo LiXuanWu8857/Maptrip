@@ -184,6 +184,8 @@
       '.bk-tedit-lock{flex-basis:100%;font-size:.78rem;line-height:1.5;color:var(--bk-t2);background:var(--bk-s1);border-radius:8px;padding:8px 10px}' +
       '.bk-tedit select{flex:1;min-width:0;padding:9px 8px;border:.5px solid var(--bk-bd2);border-radius:8px;font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text)}' +
       '.bk-trow .p.edited{color:var(--bk-acc-t);font-weight:700}' +
+      '.bk-trow .f .tip{font-size:.72rem;color:#188038;font-weight:600}' +
+      '.bk-daygrp .dg-sum .dg-tip b{color:#188038}' +
       '.bk-tedit .lb{font-size:.76rem;color:var(--bk-t2)}' +
       '.bk-tedit input{flex:1;min-width:0;box-sizing:border-box;padding:9px 10px;border:.5px solid var(--bk-bd2);border-radius:8px;' +
       'font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text);text-align:right}' +
@@ -530,6 +532,7 @@
           '<span>刷卡 <b>' + nf(sm2.card) + '</b></span>' +
           '<span>抽成 <b>' + nf(sm2.comm) + '</b></span>' +
           '<span>叫車 <b>' + nf(sm2.disp) + '</b></span>' +
+          (sm2.tip ? '<span class="dg-tip">小費 <b>' + nf(sm2.tip) + '</b></span>' : '') +
           '<span class="dg-total">總計 <b>NT$ ' + nf(sm2.total) + '</b></span>' +
         '</div>' +
         '</div>';
@@ -553,7 +556,7 @@
         h += '<div class="bk-trow' + (filled ? '' : ' warn') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
           '<span class="t">' + fmtT(t.startTime) + (t._manual ? '<br><span class="man">手動</span>' : '') + '</span>' +
           '<span class="p' + (t._payEd ? ' edited' : '') + '">' + esc(pay) + '</span>' +
-          '<span class="f' + (fareEdited ? ' edited' : '') + '">' + nf(shownFare) + '</span>' +
+          '<span class="f' + (fareEdited ? ' edited' : '') + '">' + nf(shownFare) + _tipTag(t) + '</span>' +
           '<span class="rc' + (filled ? '' : ' todo') + '">' + cells.comm + '</span>' +
           '<span class="rc">' + cells.disp + '</span></div>';
         if (String(_editId) === idS) {
@@ -591,20 +594,27 @@
       return true;
     });
   }
+  // 每趟車資下方的小費小標（「+小費 50 現」）；沒小費回空字串。小費已算進當日現金/刷卡小計。
+  function _tipTag(t) {
+    var tip = (t && t.tip) || 0;
+    if (!(tip > 0)) return '';
+    return '<br><span class="tip">+小費 ' + nf(tip) + ((t.tipMethod === 'card') ? ' 刷' : ' 現') + '</span>';
+  }
   function _filterOn() { return _payF !== 'all' || !!_dayF || _dispF; }
   // 純函式：篩選結果合計（趟數／車資含改過的車資／抽成／叫車）
   function _filterSum(days, dayKeys, commissions, pay, dispOnly) {
-    var n = 0, fare = 0, comm = 0, disp = 0;
+    var n = 0, fare = 0, comm = 0, disp = 0, tip = 0;
     (dayKeys || []).forEach(function (d) {
       _filterTrips((days || {})[d], pay, dispOnly, commissions).forEach(function (t) {
         var c = (commissions && commissions[String(t.id)]) || {};
         n++;
         fare += (c.fareOverride != null ? c.fareOverride : (t.fare || 0));
+        tip += t.tip || 0;
         if (t.paymentMethod !== 'cash') comm += c.commission != null ? c.commission : (t.commission || 0);
         disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
       });
     });
-    return { n: n, fare: fare, comm: comm, disp: disp };
+    return { n: n, fare: fare, comm: comm, disp: disp, tip: tip };
   }
   function _filterBarHtml(tripDays) {
     var pays = [['all', '全部'], ['cash', '現金'], ['card', '刷卡']];
@@ -626,6 +636,7 @@
     if (_dispF) parts.push('有叫車');
     return '<div class="bk-fsum" id="bk-fsum"><span>' + esc(parts.join('・')) + '</span>' +
       '<span><b>' + fs.n + '</b> 趟</span><span>車資 <b>NT$ ' + nf(fs.fare) + '</b></span>' +
+      (fs.tip ? '<span>小費 <b>' + nf(fs.tip) + '</b></span>' : '') +
       (fs.comm ? '<span>抽成 <b>' + nf(fs.comm) + '</b></span>' : '') +
       (fs.disp ? '<span>叫車 <b>' + nf(fs.disp) + '</b></span>' : '') +
       '<button onclick="MaptripBookkeeper.clearFilter()">清除篩選</button></div>';
@@ -790,7 +801,7 @@
   // 當日總結（供每日標題）：現金/刷卡各自加總、抽成/叫車、總計＝現金＋刷卡−抽成−叫車。
   // 現金/刷卡只算各自付款方式的車資（「其他/自用」不計）；抽成/叫車與逐趟顯示同口徑（commissions 優先）。
   function _daySummary(trips, commissions) {
-    var cash = 0, card = 0, comm = 0, disp = 0;
+    var cash = 0, card = 0, comm = 0, disp = 0, tips = 0;
     (trips || []).forEach(function (t) {
       if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與（不計車資/抽成/叫車）
       var c = (commissions && commissions[String(t.id)]) || {};
@@ -798,11 +809,12 @@
       if (t.paymentMethod === 'cash') cash += f;
       else if (t.paymentMethod === 'card') card += f;
       var tip = t.tip || 0;   // 小費/加收：依小費付款方式分流
-      if (tip) { if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
+      if (tip) { tips += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
       comm += c.commission != null ? c.commission : (t.commission || 0);
       disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
     });
-    return { cash: cash, card: card, comm: comm, disp: disp, total: cash + card - comm - disp };
+    // tip＝當日小費合計（已含在 cash/card 裡，僅供顯示「其中小費多少」）
+    return { cash: cash, card: card, comm: comm, disp: disp, tip: tips, total: cash + card - comm - disp };
   }
   // 「已完成紀錄」收折狀態：記在本機（依司機分開）。回傳/切換某日是否已完成（＝收折）。
   function _doneKey() { return 'bk_done_' + ((_view && _view.driverUid) || ''); }
@@ -1147,7 +1159,7 @@
     sheetSave: sheetSave, sheetTest: sheetTest, sheetToggleAuto: sheetToggleAuto,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
-    _summary: _summary, _mergeManual: _mergeManual, _resolve: _resolve, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
+    _tipTag: _tipTag, _summary: _summary, _mergeManual: _mergeManual, _resolve: _resolve, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
     _bkExpOnly: _bkExpOnly, _cats: _cats, _scopeCss: _scopeCss, BK_EXP_CATS: BK_EXP_CATS
   };
   window.openBookkeeper = open;

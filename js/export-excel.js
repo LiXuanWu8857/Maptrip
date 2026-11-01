@@ -91,7 +91,7 @@ window.MaptripExport = (function () {
   }
 
   // ② 逐趟明細：所有月份、每趟一列（排除「其他/自用」，與帳務一致）。ym 非空則只出該月。
-  var TRIP_HEAD = ['日期', '星期', '時間', '付款', '車資', '抽成', '叫車', '里程(km)', '來源', '備註'];
+  var TRIP_HEAD = ['日期', '星期', '時間', '付款', '車資', '小費', '抽成', '叫車', '里程(km)', '來源', '備註'];
   function tripRows(days, commissions, manualTrips, ym) {
     var merged = _mergeManual(days, manualTrips);
     var month = ym ? String(ym).slice(0, 7) : null;
@@ -105,7 +105,7 @@ window.MaptripExport = (function () {
         var f = _tripFields(t, commissions);
         rows.push([
           day, wd(day), hm(t.startTime), payLabel(t),
-          f.fare, f.comm, f.disp, km(t.totalDist),
+          f.fare, (t.tip || 0), f.comm, f.disp, km(t.totalDist),   // 小費另列一欄（月彙總營收已含小費）
           t._manual ? '手動' : 'GPS', t.label || ''
         ]);
       });
