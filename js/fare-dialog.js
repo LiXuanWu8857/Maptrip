@@ -62,6 +62,40 @@
     if (wrap) wrap.style.display = show ? '' : 'none';
   }
 
+  // ---- 現金鈕「按兩下」切換紙本簽單（v1.1.440）----
+  // 單擊＝用目前模式存檔（現金或紙本簽單）；按兩下（DBL_MS 內第二下）＝切換 現金 ⇄ 紙本簽單、不存檔。
+  // 為了分辨單擊/雙擊，單擊存檔會延後 DBL_MS 才執行（第二下來了就取消）。
+  // 紙本簽單＝paymentMethod 'voucher'，與現金/刷卡分開統計。
+  const DBL_MS = 300;
+  let _cashMode = 'cash';     // 'cash' | 'voucher'
+  let _cashTimer = null;
+  function _updateCashBtn(btn) {
+    btn = btn || document.getElementById('fare-cash');
+    if (!btn) return;
+    const v = _cashMode === 'voucher';
+    btn.textContent = v ? '紙本簽單' : '現金';
+    btn.classList.toggle('voucher', v);
+    btn.title = '按兩下切換 現金／紙本簽單';
+  }
+  function _cashModeOf() { return _cashMode; }
+  // 綁定現金鈕：onSave(paymentMethod) 由呼叫端提供（完成對話框或編輯對話框）
+  function bindCashButton(btn, initialMode, onSave) {
+    if (!btn) return;
+    _cashMode = initialMode === 'voucher' ? 'voucher' : 'cash';
+    if (_cashTimer) { clearTimeout(_cashTimer); _cashTimer = null; }
+    _updateCashBtn(btn);
+    btn.ondblclick = null;
+    btn.onclick = () => {
+      if (_cashTimer) {                 // 第二下 → 切換模式，不存檔
+        clearTimeout(_cashTimer); _cashTimer = null;
+        _cashMode = _cashMode === 'voucher' ? 'cash' : 'voucher';
+        _updateCashBtn(btn);
+        return;
+      }
+      _cashTimer = setTimeout(() => { _cashTimer = null; onSave(_cashMode); }, DBL_MS);
+    };
+  }
+
   function showFareDialog(trip) {
     document.getElementById('fs-start').textContent  = fmtTime(trip.startTime);
     document.getElementById('fs-end').textContent    = fmtTime(trip.endTime);
@@ -89,7 +123,7 @@
       finalizeSavedTrip(trip, fare, paymentMethod, label || '', ex.commission, ex.dispatch, tp.tip, tp.tipMethod);
     };
 
-    cashBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'cash');
+    bindCashButton(cashBtn, 'cash', (pm) => save(parseInt(document.getElementById('fare-input').value) || 0, pm));
     cardBtn.onclick = () => save(parseInt(document.getElementById('fare-input').value) || 0, 'card');
     // 其他：輸入名稱（如「騎腳踏車」），不需金額，時間照算進工作時間
     skipBtn.onclick = () => {
@@ -108,7 +142,10 @@
     _readTip: _readTip,
     _setTip: _setTip,
     _showCommissionField: _showCommissionField,
-    showFareDialog: showFareDialog
+    showFareDialog: showFareDialog,
+    bindCashButton: bindCashButton,
+    _cashModeOf: _cashModeOf,
+    DBL_MS: DBL_MS
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

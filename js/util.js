@@ -44,6 +44,7 @@
   function _payTag(pm) {
     if (pm === 'cash') return '<span class="pay-tag pay-cash">現金</span>';
     if (pm === 'card') return '<span class="pay-tag pay-card">刷卡</span>';
+    if (pm === 'voucher') return '<span class="pay-tag pay-voucher">簽單</span>';
     return '';
   }
   function _otherTag(t) {
@@ -58,22 +59,25 @@
     return s;
   }
   function _fareStats(trips) {
-    let card = 0, cash = 0, total = 0;
+    let card = 0, cash = 0, voucher = 0, total = 0;
     trips.forEach(t => {
       const f = t.fare || 0; total += f;
       if (t.paymentMethod === 'card') card += f;
       else if (t.paymentMethod === 'cash') cash += f;
+      else if (t.paymentMethod === 'voucher') voucher += f;   // 紙本簽單：單獨記錄（計入總計）
       // 小費/加收：計入總計，並依「小費付款方式」分流到刷卡/現金
       const tip = t.tip || 0;
       if (tip) { total += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
     });
-    return { card, cash, total };
+    return { card, cash, voucher, total };
   }
   // 傳入 workMsVal（實際工作時長 ms）且 > 0 時，在總計旁加上每小時金額 $X/hr（v1.1.254）。
   function _fareLineHtml(trips, workMsVal) {
-    const { card, cash, total } = _fareStats(trips);
+    const { card, cash, voucher, total } = _fareStats(trips);
     if (!total) return '';
+    // 紙本簽單：沒有就不顯示；放在刷卡與現金之間（歷史清單在「現金」後換行，順序不能放現金之後）
     let html = `<span class="fl-card">刷卡：${card.toLocaleString()}</span>` +
+           (voucher ? `<span class="fl-voucher">簽單：${voucher.toLocaleString()}</span>` : '') +
            `<span class="fl-cash">現金：${cash.toLocaleString()}</span>` +
            `<span class="fl-total">總計：${total.toLocaleString()}</span>`;
     if (workMsVal && workMsVal > 0) {

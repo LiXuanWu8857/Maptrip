@@ -17,6 +17,7 @@ window.MaptripExport = (function () {
   function payLabel(t) {
     if (t.paymentMethod === 'card') return '刷卡';
     if (t.paymentMethod === 'cash') return '現金';
+    if (t.paymentMethod === 'voucher') return '紙本簽單';
     return t.label || '其他';
   }
 

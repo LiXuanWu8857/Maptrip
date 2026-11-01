@@ -1192,7 +1192,7 @@ function editFare(e, idx) {
     renderTripSheet();
   };
 
-  cashBtn.onclick = () => saveEdit('cash');
+  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 按兩下切換 現金／紙本簽單
   cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
 }
@@ -1259,7 +1259,7 @@ function editHistoryFare(e, day, idx) {
     renderHistorySheet(true);   // 保留目前展開的月/日與捲動位置，不跳回最新那天
   };
 
-  cashBtn.onclick = () => saveEdit('cash');
+  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 按兩下切換 現金／紙本簽單
   cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
 }
@@ -1297,7 +1297,7 @@ function openCommissionBatch(day) {
   const body = document.getElementById('cb-body');
   body.innerHTML = trips.map((t, i) => {
     const pay = t.paymentMethod === 'other' ? '其他'
-      : (t.fare ? `NT$ ${t.fare} ${t.paymentMethod === 'card' ? '刷卡' : '現金'}` : '未填金額');
+      : (t.fare ? `NT$ ${t.fare} ${t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'voucher' ? '簽單' : '現金')}` : '未填金額');
     return `<div class="cb-row">
         <span class="cb-num">${i + 1}</span>
         <div class="cb-mid"><div class="cb-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</div>
@@ -1909,7 +1909,7 @@ function captureMonthShot(ym) {
   const fs = MaptripUtil._fareStats(mTrips);          // {card, cash, total}（含小費、含手動趟；與列表總計一致）
   const mWork = mDays.reduce((s, d) => s + workMs(mergedByDay[d], getRestMin(d)), 0);
   return MaptripShot.captureMonthScreenshot(ym, {
-    fare: fs.total, cash: fs.cash, card: fs.card,
+    fare: fs.total, cash: fs.cash, card: fs.card, voucher: fs.voucher,
     workMs: mWork, workDays: _workDaysCount(mDays.map(d => mergedByDay[d])),
     trips: mTrips.length, dist: mTrips.reduce((s, t) => s + (t.totalDist || 0), 0)
   });

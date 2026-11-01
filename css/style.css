@@ -977,7 +977,7 @@ textarea.bk-in { resize: vertical; }
 .month-title { font-size: 0.95rem; font-weight: 800; color: #202124; }
 .month-sub { font-size: 0.72rem; color: #5f6368; font-weight: 600; }
 .month-fare { font-size: 0.68rem; line-height: 1.55; }
-.month-fare .fl-card, .month-fare .fl-cash, .month-fare .fl-total { margin-right: 8px; }
+.month-fare .fl-card, .month-fare .fl-voucher, .month-fare .fl-cash, .month-fare .fl-total { margin-right: 8px; }
 .month-days.collapsed { display: none; }
 @media (prefers-color-scheme: dark) {
   .history-month { background: #1c1c1e; border-top-color: rgba(255,255,255,0.06); }
@@ -1143,6 +1143,11 @@ textarea.bk-in { resize: vertical; }
 #fare-cash  { background: #34a853; }
 #fare-card  { background: #1a73e8; }
 #fare-cash:active, #fare-card:active { opacity: 0.85; }
+/* 現金鈕按兩下 → 紙本簽單（v1.1.440）；touch-action 防 iOS 雙擊放大 */
+#fare-cash { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+#fare-cash.voucher { background: #8e5b2a; }
+.pay-voucher { background: rgba(142,91,42,0.14); color: #8e5b2a; }
+@media (prefers-color-scheme: dark) { .pay-voucher { background: rgba(214,163,110,0.18); color: #d6a36e; } }
 .pay-tag { display: inline-block; font-size: 0.68rem; font-weight: 600;
   padding: 1px 5px; border-radius: 5px; margin-left: 4px; vertical-align: middle; }
 .pay-cash { background: rgba(52,168,83,0.12); color: #34a853; }
@@ -1164,6 +1169,9 @@ textarea.bk-in { resize: vertical; }
 .ds-top { display: flex; gap: 12px; align-items: center; }
 .ds-top .screenshot-btn { margin-left: auto; }
 .ds-bot { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
+/* 有紙本簽單時多一欄 → 允許換行、每項不拆字（v1.1.440） */
+.ds-bot { flex-wrap: wrap; row-gap: 4px; }
+.ds-bot > span { white-space: nowrap; }
 .ds-time { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
 .ds-time b { color: #202124; font-weight: 700; }
 .rest-wrap { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
@@ -1184,9 +1192,10 @@ textarea.bk-in { resize: vertical; }
 }
 .fl-card  { color: #1a73e8; font-weight: 700; }
 .fl-cash  { color: #34a853; font-weight: 700; }
+.fl-voucher { color: #8e5b2a; font-weight: 700; }
 .fl-total { color: #202124; font-weight: 700; margin-left: auto; }
 .fl-rate  { color: #e8710a; font-weight: 700; margin-left: 10px; }
-.day-info-bot .fl-card, .day-info-bot .fl-cash, .day-info-bot .fl-total {
+.day-info-bot .fl-card, .day-info-bot .fl-voucher, .day-info-bot .fl-cash, .day-info-bot .fl-total {
   margin-right: 10px; font-weight: 600;
 }
 /* 第二行：總計與每小時收入之間留間距（gap 由 fl-total 的 margin-right 提供）*/
@@ -1371,6 +1380,7 @@ textarea.bk-in { resize: vertical; }
   .day-summary { background: #222; border-bottom-color: rgba(255,255,255,0.05); color: #9aa0a6; }
   .fl-card { color: #6ab4ff; }
   .fl-cash { color: #6fcf80; }
+  .fl-voucher { color: #d6a36e; }
   .fl-total { color: #e8eaed; }
   .fl-rate { color: #f9ab00; }
   .history-day { color: #6ab4ff; }

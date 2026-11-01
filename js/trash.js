@@ -141,7 +141,7 @@
     var m = Math.max(1, Math.floor(ms / 60000)); return m + ' 分鐘後永久刪除';
   }
   function _fmtTime(ts) { try { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); } catch (_) { return ''; } }
-  function _payTag(t) { if (!t) return ''; if (t.paymentMethod === 'card') return '刷卡'; if (t.paymentMethod === 'cash') return '現金'; return t.label || '其他'; }
+  function _payTag(t) { if (!t) return ''; if (t.paymentMethod === 'card') return '刷卡'; if (t.paymentMethod === 'cash') return '現金'; if (t.paymentMethod === 'voucher') return '簽單'; return t.label || '其他'; }
   function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
   function openPanel() {

@@ -101,7 +101,7 @@
   //   - 淨利 = 營收 − 抽成 − 叫車 − 支出
   function monthReport(days, commissions, expenses, ym) {
     var month = ym ? String(ym).slice(0, 7) : curMonth();
-    var fare = 0, cash = 0, card = 0, dist = 0, trips = 0, comm = 0, disp = 0;
+    var fare = 0, cash = 0, card = 0, voucher = 0, dist = 0, trips = 0, comm = 0, disp = 0;
     Object.keys(days || {}).forEach(function (day) {
       if (String(day).slice(0, 7) !== month) return;
       (days[day] || []).forEach(function (t) {
@@ -110,7 +110,9 @@
         var c = commissions && commissions[String(t.id)];
         comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
         disp += (c && c.dispatch != null) ? c.dispatch : (t.dispatch || 0);
-        if (t.paymentMethod === 'card') card += f; else cash += f;
+        if (t.paymentMethod === 'card') card += f;
+        else if (t.paymentMethod === 'voucher') voucher += f;   // 紙本簽單：單獨記錄（計入營收）
+        else cash += f;
         // 小費/加收（同一筆、付款方式可與主車資不同，例如刷卡車資＋現金小費）
         var tip = t.tip || 0;
         if (tip) { fare += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
@@ -118,7 +120,7 @@
     });
     var expTotal = 0;
     (expenses || []).forEach(function (e) { if (String(e.day || '').slice(0, 7) === month) expTotal += e.amount || 0; });
-    return { month: month, fare: fare, cash: cash, card: card, dist: dist, trips: trips,
+    return { month: month, fare: fare, cash: cash, card: card, voucher: voucher, dist: dist, trips: trips,
       comm: comm, disp: disp, expTotal: expTotal, net: fare - comm - disp - expTotal };
   }
 
@@ -134,7 +136,7 @@
       if (monthOf(day) !== month) return;
       if (window.workMs && window.getRestMin) workMs += workMs0(raw[day] || [], getRestMin(day));
     });
-    return { fare: rep.fare, cash: rep.cash, card: rep.card, dist: rep.dist, trips: rep.trips, workMs: workMs, comm: rep.comm, disp: rep.disp };
+    return { fare: rep.fare, cash: rep.cash, card: rep.card, voucher: rep.voucher, dist: rep.dist, trips: rep.trips, workMs: workMs, comm: rep.comm, disp: rep.disp };
   }
   function workMs0(arr, restMin) { try { return workMs(arr, restMin); } catch (_) { return 0; } }
 
@@ -492,6 +494,7 @@
     h += '<div class="fin-net"><div class="lbl">淨收入（營收 − 抽成 − 支出）</div>' +
       '<div class="val">NT$ ' + nf(net) + '</div>' +
       '<div class="sub"><span>現金 ' + nf(rev.cash) + '</span><span>刷卡 ' + nf(rev.card) + '</span>' +
+      (rev.voucher ? '<span>簽單 ' + nf(rev.voucher) + '</span>' : '') +   // 沒有簽單就不顯示
       '<span>' + rev.trips + ' 趟</span></div></div>';
     h += '<div class="fin-row2">' +
       '<div class="fin-card"><div class="lbl">營收</div><div class="val rev">' + nf(rev.fare) + '</div></div>' +

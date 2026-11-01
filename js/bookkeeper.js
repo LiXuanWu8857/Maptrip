@@ -530,6 +530,7 @@
         '<div class="dg-sum">' +
           '<span>現金 <b>' + nf(sm2.cash) + '</b></span>' +
           '<span>刷卡 <b>' + nf(sm2.card) + '</b></span>' +
+          (sm2.voucher ? '<span>簽單 <b>' + nf(sm2.voucher) + '</b></span>' : '') +
           '<span>抽成 <b>' + nf(sm2.comm) + '</b></span>' +
           '<span>叫車 <b>' + nf(sm2.disp) + '</b></span>' +
           (sm2.tip ? '<span class="dg-tip">小費 <b>' + nf(sm2.tip) + '</b></span>' : '') +
@@ -548,7 +549,7 @@
         var disp = c.dispatch != null ? c.dispatch : (t.dispatch || 0);
         // 「其他（自用）」與「現金」不需填抽成 → 不標待填
         var filled = touched || comm > 0 || t.paymentMethod === 'other' || cashLock;
-        var pay = t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'cash' ? '現金' : (t.paymentMethod === 'other' ? (t.label || '其他') : ''));
+        var pay = t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'cash' ? '現金' : t.paymentMethod === 'voucher' ? '簽單' : (t.paymentMethod === 'other' ? (t.label || '其他') : ''));
         var cells = _cells(cashLock, filled, comm, disp);
         // 車資/付款：days 已由 _resolve 套用記帳者改過的值；改過的加標記
         var shownFare = t.fare || 0;
@@ -801,20 +802,21 @@
   // 當日總結（供每日標題）：現金/刷卡各自加總、抽成/叫車、總計＝現金＋刷卡−抽成−叫車。
   // 現金/刷卡只算各自付款方式的車資（「其他/自用」不計）；抽成/叫車與逐趟顯示同口徑（commissions 優先）。
   function _daySummary(trips, commissions) {
-    var cash = 0, card = 0, comm = 0, disp = 0, tips = 0;
+    var cash = 0, card = 0, voucher = 0, comm = 0, disp = 0, tips = 0;
     (trips || []).forEach(function (t) {
       if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與（不計車資/抽成/叫車）
       var c = (commissions && commissions[String(t.id)]) || {};
       var f = t.fare || 0;
       if (t.paymentMethod === 'cash') cash += f;
       else if (t.paymentMethod === 'card') card += f;
+      else if (t.paymentMethod === 'voucher') voucher += f;   // 紙本簽單
       var tip = t.tip || 0;   // 小費/加收：依小費付款方式分流
       if (tip) { tips += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
       comm += c.commission != null ? c.commission : (t.commission || 0);
       disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
     });
     // tip＝當日小費合計（已含在 cash/card 裡，僅供顯示「其中小費多少」）
-    return { cash: cash, card: card, comm: comm, disp: disp, tip: tips, total: cash + card - comm - disp };
+    return { cash: cash, card: card, voucher: voucher, comm: comm, disp: disp, tip: tips, total: cash + card + voucher - comm - disp };
   }
   // 「已完成紀錄」收折狀態：記在本機（依司機分開）。回傳/切換某日是否已完成（＝收折）。
   function _doneKey() { return 'bk_done_' + ((_view && _view.driverUid) || ''); }
