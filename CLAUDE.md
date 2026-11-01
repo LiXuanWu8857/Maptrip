@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.439**（2026-11-01）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.440**（2026-11-01）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -110,6 +110,13 @@
 - **批次編輯抽成（v249）** `app.js openCommissionBatch/saveCommissionBatch`：歷史每日標題列
   新增「抽成」鈕，開底部 sheet 列出當日各趟（時間／車資），各自填不同抽成、一次「全部儲存」，
   逐筆 `_pushCommission` 上雲並 `syncDays`。純 DOM 面板（`#commission-sheet`，樣式在 style.css）
+- **紙本簽單（v1.1.440）** `fare-dialog.js bindCashButton`：行程完成/編輯對話框的「現金」鈕**長按 500ms**切換
+  現金⇄紙本簽單（咖啡色、震動回饋），單擊立即用目前模式存檔。簽單＝`paymentMethod 'voucher'`，**單獨統計、計入總計/營收**，
+  沒有簽單就不顯示：`util._fareStats`（回 voucher）/`_fareLineHtml`（簽單欄夾在刷卡與現金之間，因歷史清單在「現金」後換行）/
+  `_payTag`、`finance.monthReport.voucher`、`bookkeeper._daySummary.voucher`、export-excel/trash 標籤。
+  **長按坑**：觸控後瀏覽器補發的模擬 mousedown（1 秒內）要忽略、長按後 700ms 內的 click 要忽略（否則放手誤存檔）；
+  iOS 加 `-webkit-touch-callout:none`。**未做**：記帳者付款篩選/改付款下拉無簽單選項；月彙總 Excel 無簽單欄。
+  測試 `voucher.js` 23 項（CDP 真觸控長按＋補發 click、滑鼠長按、舊版重現 5 失敗）
 - **收支報表** `js/finance.js`：月營收（排除「其他」）、淨收入＝營收−抽成/叫車−支出、
   時段/星期分析、支出 CRUD（localStorage maptrip_expenses）
   - **v290 長條圖長按看金額**：分析頁「各時段營收／各星期營收」長條圖手機看不到金額（`title` 只在桌面 hover）。
