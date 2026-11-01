@@ -1145,9 +1145,16 @@ textarea.bk-in { resize: vertical; }
 #fare-cash:active, #fare-card:active { opacity: 0.85; }
 /* 現金鈕長按 → 紙本簽單（v1.1.440）；關掉 iOS 長按選取/放大鏡/選單 */
 #fare-cash { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-#fare-cash.voucher { background: #8e5b2a; }
-.pay-voucher { background: rgba(142,91,42,0.14); color: #8e5b2a; }
-@media (prefers-color-scheme: dark) { .pay-voucher { background: rgba(214,163,110,0.18); color: #d6a36e; } }
+#fare-cash.voucher { background: #d93025; }
+.pay-voucher { background: #d93025; color: #fff; }
+/* 紙本簽單（算在刷卡）：整列紅框顯著標示（v1.1.443）。inset box-shadow 不改版面高度 */
+.trip-row.voucher-row { box-shadow: inset 0 0 0 2px #d93025; border-radius: 10px; background: rgba(217,48,37,0.06);
+  margin: 4px 6px; padding-left: 12px; padding-right: 12px; }   /* 外距 6＋內距 12＝原本 18 → 內容寬度不變、不換行 */
+.trip-row.manual-row.voucher-row { background: rgba(217,48,37,0.06); }
+@media (prefers-color-scheme: dark) {
+  .trip-row.voucher-row { box-shadow: inset 0 0 0 2px #f28b82; background: rgba(242,139,130,0.10); }
+  .pay-voucher { background: #f28b82; color: #202124; }
+}
 .pay-tag { display: inline-block; font-size: 0.68rem; font-weight: 600;
   padding: 1px 5px; border-radius: 5px; margin-left: 4px; vertical-align: middle; }
 .pay-cash { background: rgba(52,168,83,0.12); color: #34a853; }

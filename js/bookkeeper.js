@@ -176,6 +176,9 @@
       '.bk-trow{border-bottom:.5px solid var(--bk-bd);padding:10px 8px;cursor:pointer;display:grid;' +
       'grid-template-columns:52px 38px 1fr auto auto;align-items:center;gap:8px;font-size:.86rem;font-variant-numeric:tabular-nums}' +
       '.bk-trow.warn{background:var(--bk-warn-bg);border-radius:8px}' +
+      // 紙本簽單（算在刷卡）：整列紅框顯著標示（v1.1.443）
+      '.bk-trow.voucher{border:2px solid #d93025;border-radius:8px;background:rgba(217,48,37,.07);margin:3px 0}' +
+      '.bk-trow.voucher .p{color:#d93025;font-weight:700}' +
       '.bk-trow .t{color:var(--bk-t2)}.bk-trow .p{color:var(--bk-muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
       '.bk-trow .f{text-align:left;color:var(--bk-t2)}.bk-trow .f.edited{color:var(--bk-acc-t);font-weight:700}' +
       '.bk-trow .rc{text-align:right;font-weight:600;min-width:44px;color:var(--bk-text);white-space:nowrap}.bk-trow .rc.todo{color:var(--bk-warn-t)}' +
@@ -550,7 +553,6 @@
         '<div class="dg-sum">' +
           '<span>現金 <b>' + nf(sm2.cash) + '</b></span>' +
           '<span>刷卡 <b>' + nf(sm2.card) + '</b></span>' +
-          (sm2.voucher ? '<span>簽單 <b>' + nf(sm2.voucher) + '</b></span>' : '') +
           '<span>抽成 <b>' + nf(sm2.comm) + '</b></span>' +
           '<span>叫車 <b>' + nf(sm2.disp) + '</b></span>' +
           (sm2.tip ? '<span class="dg-tip">小費 <b>' + nf(sm2.tip) + '</b></span>' : '') +
@@ -574,7 +576,7 @@
         // 車資/付款：days 已由 _resolve 套用記帳者改過的值；改過的加標記
         var shownFare = t.fare || 0;
         var fareEdited = !!t._fareEd;
-        h += '<div class="bk-trow' + (filled ? '' : ' warn') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
+        h += '<div class="bk-trow' + (filled ? '' : ' warn') + (t.paymentMethod === 'voucher' ? ' voucher' : '') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
           '<span class="t">' + fmtT(t.startTime) + (t._manual ? '<br><span class="man">手動</span>' : '') + '</span>' +
           '<span class="p' + (t._payEd ? ' edited' : '') + '">' + esc(pay) + '</span>' +
           '<span class="f' + (fareEdited ? ' edited' : '') + '">' + nf(shownFare) + _tipTag(t) + '</span>' +
@@ -831,14 +833,14 @@
       var f = t.fare || 0;
       if (t.paymentMethod === 'cash') cash += f;
       else if (t.paymentMethod === 'card') card += f;
-      else if (t.paymentMethod === 'voucher') voucher += f;   // 紙本簽單
+      else if (t.paymentMethod === 'voucher') { card += f; voucher += f; }   // 紙本簽單：算進刷卡（voucher＝其中簽單）
       var tip = t.tip || 0;   // 小費/加收：依小費付款方式分流
       if (tip) { tips += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
       comm += c.commission != null ? c.commission : (t.commission || 0);
       disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
     });
     // tip＝當日小費合計（已含在 cash/card 裡，僅供顯示「其中小費多少」）
-    return { cash: cash, card: card, voucher: voucher, comm: comm, disp: disp, tip: tips, total: cash + card + voucher - comm - disp };
+    return { cash: cash, card: card, voucher: voucher, comm: comm, disp: disp, tip: tips, total: cash + card - comm - disp };
   }
   // 「已完成紀錄」收折狀態：記在本機（依司機分開）。回傳/切換某日是否已完成（＝收折）。
   function _doneKey() { return 'bk_done_' + ((_view && _view.driverUid) || ''); }

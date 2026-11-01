@@ -1095,7 +1095,7 @@ function renderTripSheet() {
     if (t._manual) return _manualRowHtml(t, i + 1);
     const oi = todayTrips.indexOf(t);                // GPS 趟：用真實索引呼叫既有 handler
     return `
-    <div class="trip-row" data-row="t${i}" onclick="showSoloTripFromToday(${oi}); closeSheet()">
+    <div class="trip-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="t${i}" onclick="showSoloTripFromToday(${oi}); closeSheet()">
       <div class="trip-num">${i + 1}</div>
       <div class="trip-meta">
         <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
@@ -1115,7 +1115,7 @@ function renderTripSheet() {
 function _manualRowHtml(t, n) {
   const fareTag = t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t);
   return `
-    <div class="trip-row manual-row">
+    <div class="trip-row manual-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}">
       <div class="trip-num">${n}</div>
       <div class="trip-meta">
         <div class="trip-time">${fmtTime(t.startTime)}　<span class="manual-badge">手動</span></div>
@@ -1725,7 +1725,7 @@ function renderHistorySheet(keepState) {
         if (t._manual) return sep + _manualRowHtml(t, i + 1);
         const oi = (raw[day] || []).indexOf(t);        // GPS 趟：用真實索引呼叫既有 handler
         return sep + `
-        <div class="trip-row" data-row="h${i}" onclick="showHistoryTrip('${day}',${oi})">
+        <div class="trip-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="h${i}" onclick="showHistoryTrip('${day}',${oi})">
 
           <div class="trip-num">${i + 1}</div>
           <div class="trip-meta">

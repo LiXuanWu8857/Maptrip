@@ -111,7 +111,7 @@
         comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
         disp += (c && c.dispatch != null) ? c.dispatch : (t.dispatch || 0);
         if (t.paymentMethod === 'card') card += f;
-        else if (t.paymentMethod === 'voucher') voucher += f;   // 紙本簽單：單獨記錄（計入營收）
+        else if (t.paymentMethod === 'voucher') { card += f; voucher += f; }   // 紙本簽單：算進刷卡（voucher＝其中簽單）
         else cash += f;
         // 小費/加收（同一筆、付款方式可與主車資不同，例如刷卡車資＋現金小費）
         var tip = t.tip || 0;
@@ -494,7 +494,6 @@
     h += '<div class="fin-net"><div class="lbl">淨收入（營收 − 抽成 − 支出）</div>' +
       '<div class="val">NT$ ' + nf(net) + '</div>' +
       '<div class="sub"><span>現金 ' + nf(rev.cash) + '</span><span>刷卡 ' + nf(rev.card) + '</span>' +
-      (rev.voucher ? '<span>簽單 ' + nf(rev.voucher) + '</span>' : '') +   // 沒有簽單就不顯示
       '<span>' + rev.trips + ' 趟</span></div></div>';
     h += '<div class="fin-row2">' +
       '<div class="fin-card"><div class="lbl">營收</div><div class="val rev">' + nf(rev.fare) + '</div></div>' +

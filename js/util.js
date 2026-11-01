@@ -64,7 +64,7 @@
       const f = t.fare || 0; total += f;
       if (t.paymentMethod === 'card') card += f;
       else if (t.paymentMethod === 'cash') cash += f;
-      else if (t.paymentMethod === 'voucher') voucher += f;   // 紙本簽單：單獨記錄（計入總計）
+      else if (t.paymentMethod === 'voucher') { card += f; voucher += f; }   // 紙本簽單：算進刷卡（v1.1.443）；voucher＝其中簽單多少
       // 小費/加收：計入總計，並依「小費付款方式」分流到刷卡/現金
       const tip = t.tip || 0;
       if (tip) { total += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
@@ -73,11 +73,10 @@
   }
   // 傳入 workMsVal（實際工作時長 ms）且 > 0 時，在總計旁加上每小時金額 $X/hr（v1.1.254）。
   function _fareLineHtml(trips, workMsVal) {
-    const { card, cash, voucher, total } = _fareStats(trips);
+    const { card, cash, total } = _fareStats(trips);
     if (!total) return '';
-    // 紙本簽單：沒有就不顯示；放在刷卡與現金之間（歷史清單在「現金」後換行，順序不能放現金之後）
+    // 紙本簽單已算進「刷卡」（v1.1.443），不另列；簽單趟在清單用紅框標示
     let html = `<span class="fl-card">刷卡：${card.toLocaleString()}</span>` +
-           (voucher ? `<span class="fl-voucher">簽單：${voucher.toLocaleString()}</span>` : '') +
            `<span class="fl-cash">現金：${cash.toLocaleString()}</span>` +
            `<span class="fl-total">總計：${total.toLocaleString()}</span>`;
     if (workMsVal && workMsVal > 0) {
