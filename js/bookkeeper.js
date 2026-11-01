@@ -419,10 +419,24 @@
   // ---------- 某司機檢視（記帳者）：載入 + 繪製分離（月份切換/編輯免重抓） ----------
   async function loadDriver() {
     setTitle('司機：' + (_view.name || ''));
-    setBody('<button class="bk-back" onclick="MaptripBookkeeper.back()">‹ 返回</button><div class="bk-empty">載入中…</div>');
+    var uid = _view.driverUid;
+    var painted = false;
+    // 1) 先用本機快取「秒畫」（stale-while-revalidate）：重度司機不必每次等雲端全撈。
+    var cached = _loadDataCache(uid);
+    if (cached && cached.days) {
+      _cache = cached;
+      var cms = _monthsOf(cached.days);
+      if (!_month || cms.indexOf(_month) < 0) _month = cms[0] || _monthNow();
+      paintDriver();
+      painted = true;
+    } else {
+      setBody('<button class="bk-back" onclick="MaptripBookkeeper.back()">‹ 返回</button><div class="bk-empty">載入中…</div>');
+    }
+    // 2) 背景抓最新 → 更新快取並重畫
     var data;
-    try { data = await S().readDriverData(_view.driverUid); }
+    try { data = await S().readDriverData(uid); }
     catch (e) {
+      if (painted) return;   // 已有快取畫面就留著，不要用錯誤蓋掉（雲端暫時讀不到時仍可看）
       var code = (e && (e.code || e.message)) || '未知錯誤';
       var perm = /permission|denied|insufficient|missing/i.test(String(code));
       var msg = perm
@@ -432,7 +446,10 @@
         '<div class="bk-empty" style="text-align:left;line-height:1.7">' + msg + '</div>');
       return;
     }
+    // 期間使用者可能已切到別的司機 / 返回首頁 → 丟棄這次結果，不要蓋畫面
+    if (!_view || _view.driverUid !== uid) return;
     _cache = data;
+    _saveDataCache(uid, data);
     if (data.name && data.name !== _view.name) { _view.name = data.name; }
     if (!_drivers.length) { try { _drivers = (await S().listLinkedDrivers()) || []; } catch (_) {} }
     // 預設月份＝資料裡最近的月份（沒有就用當月）
@@ -935,6 +952,27 @@
   function _today() { try { return (window.todayKey && todayKey()) || new Date().toISOString().slice(0, 10); } catch (_) { return new Date().toISOString().slice(0, 10); } }
   function _monthNow() { return _today().slice(0, 7); }
 
+  // ---- 司機資料本機快取（stale-while-revalidate：開司機時先用快取秒畫，再背景抓最新重畫）----
+  // key 綁「記帳者自己的 uid」＝換帳號不會看到上一個帳號快取的司機資料（安全）。
+  function _myUid() { try { return (S() && S().myUid && S().myUid()) || ''; } catch (_) { return ''; } }
+  function _dataKey(driverUid) { var me = _myUid(); return me ? ('bk_data_' + me + '_' + driverUid) : ''; }
+  function _loadDataCache(driverUid) {
+    var k = _dataKey(driverUid); if (!k) return null;
+    try { var s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch (_) { return null; }
+  }
+  function _saveDataCache(driverUid, data) {
+    var k = _dataKey(driverUid); if (!k || !data) return;
+    try { localStorage.setItem(k, JSON.stringify(data)); } catch (_) {}   // 滿了就跳過，不影響功能
+  }
+  // 換帳號清掉所有 bk_data_* 快取（由 sync._clearLocalForSwitch 呼叫）
+  function clearDataCache() {
+    try {
+      var rm = [];
+      for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('bk_data_') === 0) rm.push(k); }
+      rm.forEach(function (k) { try { localStorage.removeItem(k); } catch (_) {} });
+    } catch (_) {}
+  }
+
   function _expForm(e) {
     var cat = e ? (e.cat || 'fuel') : 'fuel';
     var opts = _cats().map(function (c) {
@@ -1157,6 +1195,7 @@
     openDriver: openDriver, switchDriver: switchDriver, toggleDrvMenu: toggleDrvMenu, setMonth: setMonth,
     setPayFilter: setPayFilter, setDayFilter: setDayFilter, clearFilter: clearFilter, toggleDispFilter: toggleDispFilter, _filterTrips: _filterTrips, _filterSum: _filterSum,
     back: back, edit: edit, saveComm: saveComm, toggleFareEdit: toggleFareEdit,
+    clearDataCache: clearDataCache, _dataKey: _dataKey, _loadDataCache: _loadDataCache, _saveDataCache: _saveDataCache,
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     sheetSave: sheetSave, sheetTest: sheetTest, sheetToggleAuto: sheetToggleAuto,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,

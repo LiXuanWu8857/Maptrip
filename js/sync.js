@@ -114,6 +114,7 @@
     // 否則會顯示上一個帳號的支出、舊訂閱還在跑（與 v265 行程隔離同一類坑）。
     try { if (window.MaptripFinance && MaptripFinance.resetExpenseSync) MaptripFinance.resetExpenseSync(); } catch (_) {}
     try { if (window.MaptripManual && MaptripManual.clear) MaptripManual.clear(); } catch (_) {}   // 換帳號清手動紀錄快取
+    try { if (window.MaptripBookkeeper && MaptripBookkeeper.clearDataCache) MaptripBookkeeper.clearDataCache(); } catch (_) {}   // 換帳號清記帳者的司機資料快取（避免看到上一個帳號快取）
     // 換帳號清預約前，先把「上一個帳號」的預約備份到該帳號專屬 key（切回來或雲端空時可還原，杜絕遺失）
     try {
       var _prevUid = _getDataUid();                       // 此時尚未 _setDataUid，仍是上一個帳號
@@ -281,6 +282,16 @@
     try { await db.collection('users').doc(user.uid).collection('linkedDrivers').doc(driverUid).delete(); } catch (_) {}
   }
   // 記帳者：讀某司機的行程 + 抽成 + 名稱
+  // 記帳者用不到 GPS 路徑：剝掉 coords/roadCoords，其餘欄位（車資/付款/時間/抽成/叫車/小費…）全留。
+  function _slimTripForBk(t) {
+    if (!t || typeof t !== 'object') return t;
+    var o = {};
+    for (var k in t) {
+      if (k === 'coords' || k === 'roadCoords') continue;
+      if (Object.prototype.hasOwnProperty.call(t, k)) o[k] = t[k];
+    }
+    return o;
+  }
   async function readDriverData(driverUid) {
     var res = { days: {}, commissions: {}, expenses: [], manualTrips: [], name: '', allowFareEdit: false };
     if (!ready || !user) return res;
@@ -300,7 +311,10 @@
     ]);
     var p = r[0], q = r[1], cq = r[2], eq = r[3], mq = r[4], ac = r[5];
     if (p && p.exists) res.name = (p.data().name) || '';
-    q.forEach(function (doc) { res.days[doc.id] = (doc.data() || {}).trips || []; });
+    // 效能：記帳者只看車資/付款/時間，用不到 GPS 路徑。下載回來的每趟仍帶 coords/roadCoords
+    // （貼路路徑，重度司機累積起來很肥）→ 讀進來當下就剝掉，省記憶體＋後續處理（_resolve/
+    // _summary/paint）＋讓本機快取小到可安全存 localStorage。只剝這兩個欄位，其餘全留。
+    q.forEach(function (doc) { res.days[doc.id] = ((doc.data() || {}).trips || []).map(_slimTripForBk); });
     if (cq) cq.forEach(function (doc) { res.commissions[doc.id] = doc.data() || {}; });
     if (eq) eq.forEach(function (doc) { var e = doc.data() || {}; e.id = doc.id; res.expenses.push(e); });
     if (mq) mq.forEach(function (doc) { var m = doc.data() || {}; m.id = doc.id; res.manualTrips.push(m); });
@@ -957,7 +971,7 @@
     createInvite: createInvite, redeemInvite: redeemInvite, processInviteClaims: processInviteClaims,
     listBookkeepers: listBookkeepers, removeBookkeeper: removeBookkeeper,
     listLinkedDrivers: listLinkedDrivers, unlinkDriver: unlinkDriver,
-    readDriverData: readDriverData, writeCommission: writeCommission, pullCommissions: pullCommissions,
+    readDriverData: readDriverData, _slimTripForBk: _slimTripForBk, writeCommission: writeCommission, pullCommissions: pullCommissions,
     getAccess: getAccess, setAllowFareEdit: setAllowFareEdit,
     readExpenses: readExpenses, writeExpense: writeExpense, deleteExpense: deleteExpense, listenExpenses: listenExpenses,
     writeManualTrip: writeManualTrip, deleteManualTrip: deleteManualTrip,
