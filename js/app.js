@@ -1192,7 +1192,7 @@ function editFare(e, idx) {
     renderTripSheet();
   };
 
-  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 按兩下切換 現金／紙本簽單
+  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 長按切換 現金／紙本簽單
   cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
 }
@@ -1259,7 +1259,7 @@ function editHistoryFare(e, day, idx) {
     renderHistorySheet(true);   // 保留目前展開的月/日與捲動位置，不跳回最新那天
   };
 
-  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 按兩下切換 現金／紙本簽單
+  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 長按切換 現金／紙本簽單
   cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
 }

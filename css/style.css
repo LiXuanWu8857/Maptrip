@@ -1143,8 +1143,8 @@ textarea.bk-in { resize: vertical; }
 #fare-cash  { background: #34a853; }
 #fare-card  { background: #1a73e8; }
 #fare-cash:active, #fare-card:active { opacity: 0.85; }
-/* 現金鈕按兩下 → 紙本簽單（v1.1.440）；touch-action 防 iOS 雙擊放大 */
-#fare-cash { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+/* 現金鈕長按 → 紙本簽單（v1.1.440）；關掉 iOS 長按選取/放大鏡/選單 */
+#fare-cash { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 #fare-cash.voucher { background: #8e5b2a; }
 .pay-voucher { background: rgba(142,91,42,0.14); color: #8e5b2a; }
 @media (prefers-color-scheme: dark) { .pay-voucher { background: rgba(214,163,110,0.18); color: #d6a36e; } }

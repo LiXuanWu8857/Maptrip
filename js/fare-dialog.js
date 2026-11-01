@@ -62,38 +62,61 @@
     if (wrap) wrap.style.display = show ? '' : 'none';
   }
 
-  // ---- 現金鈕「按兩下」切換紙本簽單（v1.1.440）----
-  // 單擊＝用目前模式存檔（現金或紙本簽單）；按兩下（DBL_MS 內第二下）＝切換 現金 ⇄ 紙本簽單、不存檔。
-  // 為了分辨單擊/雙擊，單擊存檔會延後 DBL_MS 才執行（第二下來了就取消）。
+  // ---- 現金鈕「長按」切換紙本簽單（v1.1.440）----
+  // 單擊＝立即用目前模式存檔（現金或紙本簽單）；長按 LONG_MS＝切換 現金 ⇄ 紙本簽單、不存檔。
   // 紙本簽單＝paymentMethod 'voucher'，與現金/刷卡分開統計。
-  const DBL_MS = 300;
+  const LONG_MS = 500;
   let _cashMode = 'cash';     // 'cash' | 'voucher'
-  let _cashTimer = null;
+  let _lpTimer = null, _lpFired = false, _lpAt = 0;   // _lpAt＝長按切換的時間（之後 700ms 內的 click 全忽略）
   function _updateCashBtn(btn) {
     btn = btn || document.getElementById('fare-cash');
     if (!btn) return;
     const v = _cashMode === 'voucher';
     btn.textContent = v ? '紙本簽單' : '現金';
     btn.classList.toggle('voucher', v);
-    btn.title = '按兩下切換 現金／紙本簽單';
+    btn.title = '長按切換 現金／紙本簽單';
   }
   function _cashModeOf() { return _cashMode; }
+  function _lpCancel() { if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; } }
+  // 長按事件只綁一次（同一顆 DOM 鈕），存檔動作每次開對話框換新 → 存在 btn._mtOnSave
+  function _wireLongPress(btn) {
+    if (btn._mtLpWired) return;
+    btn._mtLpWired = true;
+    const start = () => {
+      _lpFired = false; _lpCancel();
+      _lpTimer = setTimeout(() => {
+        _lpTimer = null; _lpFired = true; _lpAt = Date.now();
+        _cashMode = _cashMode === 'voucher' ? 'cash' : 'voucher';
+        _updateCashBtn(btn);
+        try { if (navigator.vibrate) navigator.vibrate(30); } catch (_) {}
+      }, LONG_MS);
+    };
+    let sx = 0, sy = 0, lastTouch = 0;
+    btn.addEventListener('touchstart', (e) => { lastTouch = Date.now(); const t = e.touches[0]; sx = t.clientX; sy = t.clientY; start(); }, { passive: true });
+    btn.addEventListener('touchmove', (e) => { const t = e.touches[0]; if (Math.abs(t.clientX - sx) > 10 || Math.abs(t.clientY - sy) > 10) _lpCancel(); }, { passive: true });
+    btn.addEventListener('touchend', () => { lastTouch = Date.now(); _lpCancel(); });
+    btn.addEventListener('touchcancel', _lpCancel);
+    // 電腦滑鼠；觸控後瀏覽器補發的模擬 mousedown 要忽略（否則會把「已長按」旗標清掉→放手時誤存檔）
+    btn.addEventListener('mousedown', (e) => { if (e.button === 0 && Date.now() - lastTouch > 1000) start(); });
+    btn.addEventListener('mouseup', _lpCancel);
+    btn.addEventListener('mouseleave', _lpCancel);
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());   // 長按不跳系統選單
+    btn.addEventListener('click', () => {
+      _lpCancel();
+      // 長按切換後放手產生的 click（瀏覽器可能補發不只一次）→ 不存檔
+      if (_lpFired || Date.now() - _lpAt < 700) { _lpFired = false; return; }
+      if (btn._mtOnSave) btn._mtOnSave(_cashMode);
+    });
+  }
   // 綁定現金鈕：onSave(paymentMethod) 由呼叫端提供（完成對話框或編輯對話框）
   function bindCashButton(btn, initialMode, onSave) {
     if (!btn) return;
     _cashMode = initialMode === 'voucher' ? 'voucher' : 'cash';
-    if (_cashTimer) { clearTimeout(_cashTimer); _cashTimer = null; }
+    _lpCancel(); _lpFired = false; _lpAt = 0;
+    btn.onclick = null;
+    btn._mtOnSave = onSave;
+    _wireLongPress(btn);
     _updateCashBtn(btn);
-    btn.ondblclick = null;
-    btn.onclick = () => {
-      if (_cashTimer) {                 // 第二下 → 切換模式，不存檔
-        clearTimeout(_cashTimer); _cashTimer = null;
-        _cashMode = _cashMode === 'voucher' ? 'cash' : 'voucher';
-        _updateCashBtn(btn);
-        return;
-      }
-      _cashTimer = setTimeout(() => { _cashTimer = null; onSave(_cashMode); }, DBL_MS);
-    };
   }
 
   function showFareDialog(trip) {
@@ -145,7 +168,7 @@
     showFareDialog: showFareDialog,
     bindCashButton: bindCashButton,
     _cashModeOf: _cashModeOf,
-    DBL_MS: DBL_MS
+    LONG_MS: LONG_MS
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
