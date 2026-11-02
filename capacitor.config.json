@@ -1,0 +1,12 @@
+{
+  "appId": "com.maptrip.app",
+  "appName": "Maptrip",
+  "webDir": "www",
+  "server": {
+    "url": "https://lixuanwu8857.github.io/Maptrip/",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "never"
+  }
+}
