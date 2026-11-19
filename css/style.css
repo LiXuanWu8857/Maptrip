@@ -967,7 +967,7 @@ textarea.bk-in { resize: vertical; }
 .trip-go { color: #c3c7cc; font-size: 1rem; padding: 4px 0 4px 2px; flex-shrink: 0; width: 16px; text-align: center; }
 /* 號碼造型 D（極簡大數字，無圈灰色）＋ 資訊向右填滿：時間在左、時長推到最右，右邊保留 ‹ 箭頭位 */
 .trip-swipe .trip-num {
-  width: auto; min-width: 20px; height: auto; flex-shrink: 0;
+  width: 26px; min-width: 26px; height: auto; flex-shrink: 0;   /* 固定寬：1 位/2 位數字都對齊，後面欄位不跑位 */
   background: none; border-radius: 0; color: #9aa0a6;
   font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums;
   display: block; text-align: center; line-height: 1;
@@ -975,6 +975,14 @@ textarea.bk-in { resize: vertical; }
 .trip-swipe .trip-time { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .trip-swipe .trip-trange { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trip-swipe .trip-dur { flex-shrink: 0; white-space: nowrap; }
+/* 第二行固定欄位：里程 / 車資 / 付款 / 加收，各自固定位置、上下對齊，不隨長度跑位 */
+.trip-swipe .trip-stats {
+  display: grid; grid-template-columns: 58px 76px 46px 1fr;
+  align-items: center; column-gap: 6px; margin-top: 4px;
+}
+.trip-swipe .trip-stats > span { min-width: 0; white-space: nowrap; overflow: hidden; }
+.trip-swipe .ts-km { font-variant-numeric: tabular-nums; }
+.trip-swipe .ts-extra { overflow: visible; }
 .trip-row.swipeable.manual-row .trip-time { justify-content: flex-start; gap: 6px; }   /* 手動列：手動標籤留在時間旁、不推到最右 */
 @media (prefers-color-scheme: dark) { .trip-swipe .trip-num { color: #8a8f98; } }
 /* 手動列底色改掛在滑動層（不透明底才蓋得住後面的動作鈕）*/

@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.446';
+const APP_VERSION  = '1.1.447';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1064,6 +1064,17 @@ function goHome() {
 // 心法：手指「起手的列」（touchstart target）永遠正確（真機黑盒子證實），故點按改由該列直接觸發，
 // 並 preventDefault 擋掉可能被 iOS 位移的原生 click；回饋高亮也加在正確那列。
 
+// 每趟第二行＝固定欄位（里程／車資／付款／加收），不隨文字長度跑位、上下對齊整齊
+function _statsCells(t) {
+  const km = (!t._manual && t.totalDist != null) ? fmtDist(t.totalDist) : '';
+  const fareInner = t.fare ? `<span class="trip-fare-tag">NT$ ${t.fare}</span>` : '';
+  const payInner = t.fare ? _payTag(t.paymentMethod) : _otherTag(t);   // 「其他」放付款欄
+  return `<span class="ts-km">${km}</span>`
+       + `<span class="ts-fare">${fareInner}</span>`
+       + `<span class="ts-pay">${payInner}</span>`
+       + `<span class="ts-extra">${_extraTag(t)}</span>`;
+}
+
 function renderTripSheet() {
   if (window.MaptripRowSwipe) MaptripRowSwipe.reset();   // 列表重畫 → 清掉舊的「已滑開」狀態
   const body = document.getElementById('sheet-body');
@@ -1106,10 +1117,7 @@ function renderTripSheet() {
         <div class="trip-num">${i + 1}</div>
         <div class="trip-meta">
           <div class="trip-time"><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-          <div class="trip-stats">
-            ${fmtDist(t.totalDist)}
-            ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}
-          </div>
+          <div class="trip-stats">${_statsCells(t)}</div>
         </div>
         <span class="trip-go">‹</span>
       </div>
@@ -1129,7 +1137,7 @@ function _manualRowHtml(t, n) {
         <div class="trip-num">${n}</div>
         <div class="trip-meta">
           <div class="trip-time">${fmtTime(t.startTime)}　<span class="manual-badge">手動</span></div>
-          <div class="trip-stats">${fareTag}${_extraTag(t)}</div>
+          <div class="trip-stats">${_statsCells(t)}</div>
         </div>
         <span class="trip-go">‹</span>
       </div>
@@ -1746,7 +1754,7 @@ function renderHistorySheet(keepState) {
             <div class="trip-num">${i + 1}</div>
             <div class="trip-meta">
               <div class="trip-time"><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-              <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
+              <div class="trip-stats">${_statsCells(t)}</div>
             </div>
             <span class="trip-go">‹</span>
           </div>
