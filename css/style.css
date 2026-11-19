@@ -964,7 +964,19 @@ textarea.bk-in { resize: vertical; }
 .swa.shot { background: #5f6368; }
 .swa.del  { background: #ea4335; }
 .swa:active { filter: brightness(0.9); }
-.trip-go { color: #c3c7cc; font-size: 1rem; padding: 4px 0 4px 2px; flex-shrink: 0; }
+.trip-go { color: #c3c7cc; font-size: 1rem; padding: 4px 0 4px 2px; flex-shrink: 0; width: 16px; text-align: center; }
+/* 號碼造型 D（極簡大數字，無圈灰色）＋ 資訊向右填滿：時間在左、時長推到最右，右邊保留 ‹ 箭頭位 */
+.trip-swipe .trip-num {
+  width: auto; min-width: 20px; height: auto; flex-shrink: 0;
+  background: none; border-radius: 0; color: #9aa0a6;
+  font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums;
+  display: block; text-align: center; line-height: 1;
+}
+.trip-swipe .trip-time { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.trip-swipe .trip-trange { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trip-swipe .trip-dur { flex-shrink: 0; white-space: nowrap; }
+.trip-row.swipeable.manual-row .trip-time { justify-content: flex-start; gap: 6px; }   /* 手動列：手動標籤留在時間旁、不推到最右 */
+@media (prefers-color-scheme: dark) { .trip-swipe .trip-num { color: #8a8f98; } }
 /* 手動列底色改掛在滑動層（不透明底才蓋得住後面的動作鈕）*/
 .trip-row.swipeable.manual-row { background: transparent; box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(245,124,0,0.18); }
 .trip-row.swipeable.manual-row .trip-swipe { background-image: linear-gradient(rgba(245,124,0,0.06), rgba(245,124,0,0.06)); }
@@ -987,8 +999,8 @@ textarea.bk-in { resize: vertical; }
 /* 桌面（細指標、可 hover）：沒有左滑手勢 → 動作鈕直接內嵌右側（維持舊操作、不靠滑動）*/
 @media (hover: hover) and (pointer: fine) {
   .trip-row.swipeable { display: flex; align-items: center; overflow: visible; }
-  .trip-swipe { flex: 1; transform: none !important; }
-  .trip-actions { position: static; opacity: 1; }   /* 桌面不靠手勢 → 動作一直顯示 */
+  .trip-swipe { flex: 1; transform: none !important; order: 1; }
+  .trip-actions { position: static; opacity: 1; order: 2; }   /* 桌面不靠手勢 → 動作一直顯示在右側 */
   .swa { width: auto; flex-direction: row; gap: 4px; padding: 6px 10px; background: transparent !important; }
   .swa span { font-size: 0.95rem; } .swa small { display: none; }
   .swa.edit { color: #1a73e8; } .swa.del { color: #ea4335; } .swa.shot { color: #9aa0a6; }

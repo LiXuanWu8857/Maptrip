@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.445';
+const APP_VERSION  = '1.1.446';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1105,7 +1105,7 @@ function renderTripSheet() {
       <div class="trip-swipe" onclick="showSoloTripFromToday(${oi}); closeSheet()">
         <div class="trip-num">${i + 1}</div>
         <div class="trip-meta">
-          <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
+          <div class="trip-time"><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
           <div class="trip-stats">
             ${fmtDist(t.totalDist)}
             ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}
@@ -1745,7 +1745,7 @@ function renderHistorySheet(keepState) {
           <div class="trip-swipe" onclick="showHistoryTrip('${day}',${oi})">
             <div class="trip-num">${i + 1}</div>
             <div class="trip-meta">
-              <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
+              <div class="trip-time"><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
               <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
             </div>
             <span class="trip-go">‹</span>
