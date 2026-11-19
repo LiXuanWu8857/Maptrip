@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.443';
+const APP_VERSION  = '1.1.444';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1065,6 +1065,7 @@ function goHome() {
 // 並 preventDefault 擋掉可能被 iOS 位移的原生 click；回饋高亮也加在正確那列。
 
 function renderTripSheet() {
+  if (window.MaptripRowSwipe) MaptripRowSwipe.reset();   // 列表重畫 → 清掉舊的「已滑開」狀態
   const body = document.getElementById('sheet-body');
   const dk = todayKey();
   // 併入記帳者補登的手動紀錄（顯示層，不進 days）：依 startTime 排序
@@ -1095,18 +1096,23 @@ function renderTripSheet() {
     if (t._manual) return _manualRowHtml(t, i + 1);
     const oi = todayTrips.indexOf(t);                // GPS 趟：用真實索引呼叫既有 handler
     return `
-    <div class="trip-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="t${i}" onclick="showSoloTripFromToday(${oi}); closeSheet()">
-      <div class="trip-num">${i + 1}</div>
-      <div class="trip-meta">
-        <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-        <div class="trip-stats">
-          ${fmtDist(t.totalDist)}
-          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}
-          <button class="fare-edit-btn" onclick="editFare(event,${oi})">${(t.fare || t.paymentMethod === 'other') ? '✏' : '＋金額'}</button>
-        </div>
+    <div class="trip-row swipeable${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="t${i}">
+      <div class="trip-actions">
+        <button class="swa edit" onclick="editFare(event,${oi})"><span>✏</span><small>${(t.fare || t.paymentMethod === 'other') ? '編輯' : '金額'}</small></button>
+        <button class="swa shot" onclick="captureTodayTripShot(event,${oi})"><span>📷</span><small>截圖</small></button>
+        <button class="swa del" onclick="deleteTodayTrip(event,${oi})"><span>🗑</span><small>刪除</small></button>
       </div>
-      <span class="trip-shot" onclick="captureTodayTripShot(event,${oi})">📷</span>
-      <span class="trip-del" onclick="deleteTodayTrip(event,${oi})">🗑</span>
+      <div class="trip-swipe" onclick="showSoloTripFromToday(${oi}); closeSheet()">
+        <div class="trip-num">${i + 1}</div>
+        <div class="trip-meta">
+          <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
+          <div class="trip-stats">
+            ${fmtDist(t.totalDist)}
+            ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}
+          </div>
+        </div>
+        <span class="trip-go">‹</span>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1115,13 +1121,18 @@ function renderTripSheet() {
 function _manualRowHtml(t, n) {
   const fareTag = t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t);
   return `
-    <div class="trip-row manual-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}">
-      <div class="trip-num">${n}</div>
-      <div class="trip-meta">
-        <div class="trip-time">${fmtTime(t.startTime)}　<span class="manual-badge">手動</span></div>
-        <div class="trip-stats">${fareTag}${_extraTag(t)}</div>
+    <div class="trip-row swipeable manual-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}">
+      <div class="trip-actions">
+        <button class="swa del" onclick="deleteManualRow(event,'${String(t.id).replace(/'/g, "\\'")}')"><span>🗑</span><small>刪除</small></button>
       </div>
-      <span class="trip-del" onclick="deleteManualRow(event,'${String(t.id).replace(/'/g, "\\'")}')">🗑</span>
+      <div class="trip-swipe" style="cursor:default">
+        <div class="trip-num">${n}</div>
+        <div class="trip-meta">
+          <div class="trip-time">${fmtTime(t.startTime)}　<span class="manual-badge">手動</span></div>
+          <div class="trip-stats">${fareTag}${_extraTag(t)}</div>
+        </div>
+        <span class="trip-go">‹</span>
+      </div>
     </div>`;
 }
 
@@ -1670,6 +1681,7 @@ if (typeof window !== 'undefined') window._workDaysCount = _workDaysCount;
 
 
 function renderHistorySheet(keepState) {
+  if (window.MaptripRowSwipe) MaptripRowSwipe.reset();   // 列表重畫 → 清掉舊的「已滑開」狀態
   // keepState：保留目前展開的月/日與捲動位置（編輯/刪除/補抽成後用），避免跳回最新那天
   const _snap = keepState ? _historySnapshot() : null;
   const body = document.getElementById('history-body');
@@ -1725,16 +1737,19 @@ function renderHistorySheet(keepState) {
         if (t._manual) return sep + _manualRowHtml(t, i + 1);
         const oi = (raw[day] || []).indexOf(t);        // GPS 趟：用真實索引呼叫既有 handler
         return sep + `
-        <div class="trip-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="h${i}" onclick="showHistoryTrip('${day}',${oi})">
-
-          <div class="trip-num">${i + 1}</div>
-          <div class="trip-meta">
-            <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-            <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
+        <div class="trip-row swipeable${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="h${i}">
+          <div class="trip-actions">
+            <button class="swa edit" onclick="editHistoryFare(event,'${day}',${oi})"><span>✏</span><small>編輯</small></button>
+            <button class="swa del" onclick="deleteHistoryTrip(event,'${day}',${oi})"><span>🗑</span><small>刪除</small></button>
           </div>
-          <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${oi})">✏</span>
-          <span class="trip-del" onclick="deleteHistoryTrip(event,'${day}',${oi})">🗑</span>
-          <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
+          <div class="trip-swipe" onclick="showHistoryTrip('${day}',${oi})">
+            <div class="trip-num">${i + 1}</div>
+            <div class="trip-meta">
+              <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
+              <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
+            </div>
+            <span class="trip-go">‹</span>
+          </div>
         </div>`;
       }).join('');
       return `<div class="history-day" data-row="D${day}" onclick="toggleDay('${day}')">
