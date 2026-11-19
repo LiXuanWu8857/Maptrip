@@ -48,6 +48,7 @@
     var sw = _swipe(r);
     _setTx(sw, 0, true);
     r.classList.remove('swipe-open');
+    r.classList.remove('swiping');
     if (openRow === r) openRow = null;
   }
   function closeAll() { if (openRow) close(openRow); }
@@ -59,6 +60,7 @@
     var w = act ? act.offsetWidth : 0;
     _setTx(sw, -w, true);
     r.classList.add('swipe-open');
+    r.classList.remove('swiping');
     openRow = r;
   }
 
@@ -81,8 +83,10 @@
     var dx = t.clientX - startX, dy = t.clientY - startY;
     if (!mode) {
       if (Math.abs(dx) < DIR_THRESHOLD && Math.abs(dy) < DIR_THRESHOLD) return;   // 還沒明顯方向
-      mode = (Math.abs(dx) > Math.abs(dy)) ? 'h' : 'v';
+      // 偏向「垂直」：要明顯水平（水平量 > 垂直量 ×1.2）才接管，避免上下拖時誤開、底部露出色塊
+      mode = (Math.abs(dx) > Math.abs(dy) * 1.2) ? 'h' : 'v';
       if (mode === 'v') { row = null; return; }   // 垂直 → 放掉，交給 sheet-drag/捲動
+      if (row) row.classList.add('swiping');       // 進入左滑 → 顯示動作（平常隱藏，杜絕幽靈色塊）
     }
     if (mode !== 'h') return;
     // 水平：本模組接管這段手勢
@@ -102,7 +106,7 @@
     if (mode === 'h') {
       // 吸附：滑超過動作寬度 OPEN_RATIO 就打開，否則收回
       if (curTx < -actionsW * OPEN_RATIO) { open(r); }
-      else { _setTx(sw, 0, true); r.classList.remove('swipe-open'); if (openRow === r) openRow = null; }
+      else { _setTx(sw, 0, true); r.classList.remove('swipe-open'); r.classList.remove('swiping'); if (openRow === r) openRow = null; }
       swipedAt = Date.now();
     } else {
       // 純點按（沒滑）：若點在「已打開的那一列」→ 收起、並吞掉這次 click（不開該趟）

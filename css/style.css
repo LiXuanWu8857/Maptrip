@@ -930,46 +930,55 @@ textarea.bk-in { resize: vertical; }
 .trip-edit:active { opacity: 1; }
 
 /* ===== 行程列「向左滑顯示動作」（iPhone 式，v1.1.444）===== */
-.trip-row.swipeable {
+.trip-row.swipeable {               /* 圓角卡片：邊角圓弧、每列之間留空、不用底線分隔 */
   display: block; position: relative; overflow: hidden;
-  padding: 0; gap: 0; border-bottom: 1px solid rgba(0,0,0,0.05);
+  padding: 0; gap: 0; border-bottom: none;
+  margin: 6px 10px; border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
 }
 .trip-swipe {
-  display: flex; align-items: center; gap: 12px; padding: 12px 18px;
-  background: #fff; position: relative; z-index: 1;
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  background: #fff; position: relative; z-index: 1; border-radius: inherit;
   transition: transform 0.22s cubic-bezier(0.2,0.8,0.2,1); will-change: transform;
   -webkit-user-select: none; user-select: none;
   /* manipulation（不設 pan-y）：水平左滑由本模組非被動 preventDefault 接管，
      垂直仍讓 sheet-drag 能 preventDefault 拖曳 sheet（pan-y 會擋掉垂直 preventDefault）*/
   touch-action: manipulation;
 }
-.trip-actions {               /* 藏在內容後面（右側），滑開才露出 */
+.trip-actions {               /* 藏在內容後面（右側）；平常隱藏，左滑/打開才顯示 → 杜絕上下拖時底部露出色塊 */
   position: absolute; top: 0; right: 0; bottom: 0; z-index: 0;
   display: flex; align-items: stretch;
+  opacity: 0; transition: opacity 0.12s;
 }
+.trip-row.swipeable.swiping .trip-actions,
+.trip-row.swipeable.swipe-open .trip-actions { opacity: 1; }
 .swa {
-  border: none; margin: 0; padding: 0 2px; width: 72px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  font-family: inherit; font-size: 1.1rem; line-height: 1; color: #fff; cursor: pointer;
+  border: none; margin: 0; padding: 0 2px; width: 74px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;   /* 圖與字拉開 */
+  font-family: inherit; line-height: 1; color: #fff; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.swa small { font-size: 0.62rem; font-weight: 600; }
+.swa span  { font-size: 1.3rem; }
+.swa small { font-size: 0.64rem; font-weight: 600; }
 .swa.edit { background: #1a73e8; }
 .swa.shot { background: #5f6368; }
 .swa.del  { background: #ea4335; }
 .swa:active { filter: brightness(0.9); }
 .trip-go { color: #c3c7cc; font-size: 1rem; padding: 4px 0 4px 2px; flex-shrink: 0; }
 /* 手動列底色改掛在滑動層（不透明底才蓋得住後面的動作鈕）*/
-.trip-row.swipeable.manual-row { background: transparent; }
+.trip-row.swipeable.manual-row { background: transparent; box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(245,124,0,0.18); }
 .trip-row.swipeable.manual-row .trip-swipe { background-image: linear-gradient(rgba(245,124,0,0.06), rgba(245,124,0,0.06)); }
-/* 簽單紅框改掛在滑動層（隨內容一起滑），列本身不再畫 */
-.trip-row.swipeable.voucher-row { box-shadow: none; background: transparent; margin: 0; border-radius: 0; padding: 0; }
+/* 簽單紅框改掛在滑動層（隨內容一起滑、吃圓角）；卡片外框維持 */
+.trip-row.swipeable.voucher-row { background: transparent; margin: 6px 10px; border-radius: 14px; padding: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04); }
 .trip-row.swipeable.voucher-row .trip-swipe {
   box-shadow: inset 0 0 0 2px #d93025;
   background-image: linear-gradient(rgba(217,48,37,0.06), rgba(217,48,37,0.06));
 }
 @media (prefers-color-scheme: dark) {
-  .trip-swipe { background: #1a1a1a; }
+  .trip-row.swipeable { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); }
+  .trip-swipe { background: #242424; }
+  .trip-row.swipeable.manual-row { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(245,124,0,0.25); }
   .trip-row.swipeable.voucher-row .trip-swipe {
     box-shadow: inset 0 0 0 2px #f28b82;
     background-image: linear-gradient(rgba(242,139,130,0.10), rgba(242,139,130,0.10));
@@ -979,9 +988,9 @@ textarea.bk-in { resize: vertical; }
 @media (hover: hover) and (pointer: fine) {
   .trip-row.swipeable { display: flex; align-items: center; overflow: visible; }
   .trip-swipe { flex: 1; transform: none !important; }
-  .trip-actions { position: static; }
-  .swa { width: auto; flex-direction: row; gap: 4px; padding: 6px 10px; font-size: 0.9rem; background: transparent !important; }
-  .swa small { display: none; }
+  .trip-actions { position: static; opacity: 1; }   /* 桌面不靠手勢 → 動作一直顯示 */
+  .swa { width: auto; flex-direction: row; gap: 4px; padding: 6px 10px; background: transparent !important; }
+  .swa span { font-size: 0.95rem; } .swa small { display: none; }
   .swa.edit { color: #1a73e8; } .swa.del { color: #ea4335; } .swa.shot { color: #9aa0a6; }
   .trip-go { display: none; }
 }
