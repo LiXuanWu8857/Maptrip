@@ -972,19 +972,26 @@ textarea.bk-in { resize: vertical; }
   font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums;
   display: block; text-align: center; line-height: 1;
 }
-.trip-swipe .trip-time { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.trip-swipe .trip-trange { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trip-swipe .trip-dur { flex-shrink: 0; white-space: nowrap; }
-/* 第二行固定欄位：里程 / 車資 / 付款 / 加收，各自固定位置、上下對齊，不隨長度跑位 */
-.trip-swipe .trip-stats {
-  display: grid; grid-template-columns: 58px 76px 46px 1fr;
-  align-items: center; column-gap: 6px; margin-top: 4px;
+/* ===== 兩排版面：上排＝金額(主體，顏色分付款)→距離→加收標籤；下排＝時長＋開始→結束時間 ===== */
+.trip-swipe .trip-meta { flex: 1; min-width: 0; }
+.trip-swipe .trip-top { display: flex; align-items: baseline; gap: 10px; }
+.trip-swipe .trip-amt { font-size: 1.16rem; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.trip-swipe .trip-amt .au { font-size: 0.72rem; font-weight: 700; opacity: 0.6; margin-right: 2px; }
+.trip-swipe .amt-cash    { color: #202124; }   /* 現金＝黑 */
+.trip-swipe .amt-card    { color: #1a73e8; }   /* 刷卡＝藍 */
+.trip-swipe .amt-voucher { color: #d93025; }   /* 簽單＝紅 */
+.trip-swipe .amt-other   { color: #5f6368; font-size: 0.95rem; font-weight: 700; }   /* 其他＝灰、顯示備註 */
+.trip-swipe .trip-dist { font-size: 0.8rem; color: #5f6368; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.trip-swipe .trip-tags { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; overflow: hidden; }
+.trip-swipe .trip-bot { display: flex; align-items: baseline; gap: 10px; margin-top: 4px; font-size: 0.82rem; color: #5f6368; font-variant-numeric: tabular-nums; }
+.trip-swipe .trip-dur { color: #9aa0a6; min-width: 46px; white-space: nowrap; }
+.trip-swipe .trip-trange { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-color-scheme: dark) {
+  .trip-swipe .trip-num { color: #8a8f98; }
+  .trip-swipe .amt-cash    { color: #e8eaed; }   /* 深色下現金用亮白（黑字會看不到）*/
+  .trip-swipe .amt-card    { color: #8ab4f8; }
+  .trip-swipe .amt-voucher { color: #f28b82; }
 }
-.trip-swipe .trip-stats > span { min-width: 0; white-space: nowrap; overflow: hidden; }
-.trip-swipe .ts-km { font-variant-numeric: tabular-nums; }
-.trip-swipe .ts-extra { overflow: visible; }
-.trip-row.swipeable.manual-row .trip-time { justify-content: flex-start; gap: 6px; }   /* 手動列：手動標籤留在時間旁、不推到最右 */
-@media (prefers-color-scheme: dark) { .trip-swipe .trip-num { color: #8a8f98; } }
 /* 手動列底色改掛在滑動層（不透明底才蓋得住後面的動作鈕）*/
 .trip-row.swipeable.manual-row { background: transparent; box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(245,124,0,0.18); }
 .trip-row.swipeable.manual-row .trip-swipe { background-image: linear-gradient(rgba(245,124,0,0.06), rgba(245,124,0,0.06)); }

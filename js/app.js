@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.447';
+const APP_VERSION  = '1.1.448';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1064,15 +1064,26 @@ function goHome() {
 // 心法：手指「起手的列」（touchstart target）永遠正確（真機黑盒子證實），故點按改由該列直接觸發，
 // 並 preventDefault 擋掉可能被 iOS 位移的原生 click；回饋高亮也加在正確那列。
 
-// 每趟第二行＝固定欄位（里程／車資／付款／加收），不隨文字長度跑位、上下對齊整齊
-function _statsCells(t) {
-  const km = (!t._manual && t.totalDist != null) ? fmtDist(t.totalDist) : '';
-  const fareInner = t.fare ? `<span class="trip-fare-tag">NT$ ${t.fare}</span>` : '';
-  const payInner = t.fare ? _payTag(t.paymentMethod) : _otherTag(t);   // 「其他」放付款欄
-  return `<span class="ts-km">${km}</span>`
-       + `<span class="ts-fare">${fareInner}</span>`
-       + `<span class="ts-pay">${payInner}</span>`
-       + `<span class="ts-extra">${_extraTag(t)}</span>`;
+// 金額＝主體，用「字體顏色」分付款方式：現金=黑、刷卡=藍、簽單=紅、其他=灰
+function _payClass(pm) {
+  return pm === 'card' ? 'amt-card' : pm === 'voucher' ? 'amt-voucher' : pm === 'other' ? 'amt-other' : 'amt-cash';
+}
+// 上排右邊的加收標籤（小費／抽成／叫車）；不含現金/刷卡（改用金額顏色表示）
+function _rowTags(t) {
+  let s = '';
+  if (t.tip)        s += `<span class="extra-tag">小費 ${t.tip}${(t.tipMethod === 'card') ? '刷' : '現'}</span>`;
+  if (t.commission) s += `<span class="extra-tag">抽成 ${t.commission}</span>`;
+  if (t.dispatch)   s += `<span class="extra-tag">叫車 ${t.dispatch}</span>`;
+  return s;
+}
+function _amtHtml(t) {
+  if (t.fare) return `<span class="trip-amt ${_payClass(t.paymentMethod)}"><span class="au">NT$</span>${(t.fare || 0).toLocaleString()}</span>`;
+  return `<span class="trip-amt amt-other">${t.paymentMethod === 'other' ? (t.label || '其他') : '—'}</span>`;
+}
+// GPS 趟（今日/歷史共用）的 .trip-meta 內容：上排＝金額→距離→加收標籤；下排＝時長＋開始→結束
+function _tripMetaInner(t) {
+  return `<div class="trip-top">${_amtHtml(t)}<span class="trip-dist">${fmtDist(t.totalDist)}</span><span class="trip-tags">${_rowTags(t)}</span></div>`
+       + `<div class="trip-bot"><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span></div>`;
 }
 
 function renderTripSheet() {
@@ -1115,10 +1126,7 @@ function renderTripSheet() {
       </div>
       <div class="trip-swipe" onclick="showSoloTripFromToday(${oi}); closeSheet()">
         <div class="trip-num">${i + 1}</div>
-        <div class="trip-meta">
-          <div class="trip-time"><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-          <div class="trip-stats">${_statsCells(t)}</div>
-        </div>
+        <div class="trip-meta">${_tripMetaInner(t)}</div>
         <span class="trip-go">‹</span>
       </div>
     </div>`;
@@ -1127,7 +1135,6 @@ function renderTripSheet() {
 
 // 手動紀錄列（記帳者補登；司機可刪、不可編、無地圖）。n＝顯示序號。
 function _manualRowHtml(t, n) {
-  const fareTag = t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t);
   return `
     <div class="trip-row swipeable manual-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}">
       <div class="trip-actions">
@@ -1136,8 +1143,8 @@ function _manualRowHtml(t, n) {
       <div class="trip-swipe" style="cursor:default">
         <div class="trip-num">${n}</div>
         <div class="trip-meta">
-          <div class="trip-time">${fmtTime(t.startTime)}　<span class="manual-badge">手動</span></div>
-          <div class="trip-stats">${_statsCells(t)}</div>
+          <div class="trip-top">${_amtHtml(t)}<span class="manual-badge">手動</span><span class="trip-tags">${_rowTags(t)}</span></div>
+          <div class="trip-bot"><span class="trip-trange">${fmtTime(t.startTime)}</span></div>
         </div>
         <span class="trip-go">‹</span>
       </div>
@@ -1752,10 +1759,7 @@ function renderHistorySheet(keepState) {
           </div>
           <div class="trip-swipe" onclick="showHistoryTrip('${day}',${oi})">
             <div class="trip-num">${i + 1}</div>
-            <div class="trip-meta">
-              <div class="trip-time"><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-              <div class="trip-stats">${_statsCells(t)}</div>
-            </div>
+            <div class="trip-meta">${_tripMetaInner(t)}</div>
             <span class="trip-go">‹</span>
           </div>
         </div>`;
