@@ -1316,7 +1316,7 @@ textarea.bk-in { resize: vertical; }
 }
 .dr-rest {
   padding: 6px 18px 8px; font-size: 0.76rem; color: #5f6368;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
 }
 .dr-rest b { color: #1a73e8; font-weight: 700; }
 @media (prefers-color-scheme: dark) {
