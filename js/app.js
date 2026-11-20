@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.450';
+const APP_VERSION  = '1.1.451';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1099,19 +1099,16 @@ function renderTripSheet() {
   const restMin = getRestMin(dk);
   const restHr = restMin ? +(restMin / 60).toFixed(2) : '';
   const work = workMs(merged, restMin);              // 手動趟無 endTime，workMs 內部自動排除
-  const fareLine = _fareLineHtml(merged, work);      // 車資統計含手動趟
-  const summary = `<div class="day-summary">
-    <div class="ds-top">
-      <span>${merged.length} 趟</span>
-      <span>${fmtDist(totalDist)}</span>
-      <button class="screenshot-btn" onclick="captureTripsScreenshot(null)">截圖</button>
-    </div>
-    ${fareLine ? `<div class="ds-bot">${fareLine}</div>` : ''}
-    <div class="ds-time">
-      <span>工作 <b>${fmtWork(work)}</b></span>
-      <span class="rest-wrap">休息
-        <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5"
-               value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span>
+  const tfs = _fareStats(merged);                    // {card, cash, total}（含手動趟）
+  const tRate = work > 0 ? Math.round(tfs.total / (work / 3600000)) : 0;
+  // 卡片化＋左滑露出「截圖」（v1.1.451）：總計＋每小時當主角、刷卡/現金色分、下排細字＝趟數·里程·工時＋休息
+  const summary = `<div class="day-summary swipeable">
+    <div class="trip-actions"><button class="swa a-shot" onclick="captureTripsScreenshot(null)"><span>📷</span><small>截圖</small></button></div>
+    <div class="trip-swipe tsum">
+      <div class="ts-hero"><span class="ts-lbl">總計</span><span class="ts-tot"><span class="u">NT$</span>${tfs.total.toLocaleString()}</span>${tRate ? `<span class="ts-rate">$${tRate.toLocaleString()}/hr</span>` : ''}</div>
+      <div class="ts-sub"><span class="fl-card">刷卡 ${tfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${tfs.cash.toLocaleString()}</span></div>
+      <div class="ts-meta"><span>${merged.length} 趟</span><span class="dot">·</span><span>${fmtDist(totalDist)}</span><span class="dot">·</span><span>工作 <b>${fmtWork(work)}</b></span>
+        <span class="rest-wrap">休息 <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5" value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span></div>
     </div>
   </div>`;
   body.innerHTML = summary + merged.map((t, i) => {
@@ -1726,7 +1723,6 @@ function renderHistorySheet(keepState) {
     const mWork = mDays.reduce((s, d) => s + workMs(mergedByDay[d], getRestMin(d)), 0);
     // 單月實際跑車天數：整天只有「其他」（自用/非載客）的日子不算
     const mWorkDays = _workDaysCount(mDays.map(d => mergedByDay[d]));
-    const mFareLine = _fareLineHtml(mTrips, mWork);
     const [yy, mm] = mk.split('-');
     const monthLabel = `${yy}年${parseInt(mm, 10)}月`;
     const monthOpen = monthIdx === 0;   // 最近月份展開，較遠月份預設收折
@@ -1785,14 +1781,20 @@ function renderHistorySheet(keepState) {
         <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
     }).join('');
 
-    return `<div class="history-month" data-row="M${mk}" onclick="toggleMonth('${mk}')">
-        <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
-        <span class="month-info">
-          <span class="month-title">${monthLabel}</span>
-          <span class="month-sub">${mWorkDays} 天　${mTrips.length} 趟　${fmtDist(mDist)}　工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></span>
-          ${mFareLine ? `<span class="month-fare">${mFareLine}</span>` : ''}
-        </span>
-        <button class="month-shot-btn" onclick="event.stopPropagation();captureMonthShot('${mk}')">📷 月結</button>
+    const mfs = _fareStats(mTrips);                      // {card, cash, total}
+    const mRate = mWork > 0 ? Math.round(mfs.total / (mWork / 3600000)) : 0;
+    // 卡片化＋左滑露出「月結」（v1.1.451）：月份名＋總計＋每小時當主角、刷卡/現金色分、天/趟/里程/工時收成一行細字
+    return `<div class="history-month swipeable" data-row="M${mk}">
+        <div class="trip-actions"><button class="swa a-month" onclick="event.stopPropagation();captureMonthShot('${mk}')"><span>📷</span><small>月結</small></button></div>
+        <div class="trip-swipe mrow" onclick="toggleMonth('${mk}')">
+          <div class="month-body">
+            <div class="month-title">${monthLabel}</div>
+            <div class="month-hero"><span class="m-tot"><span class="u">NT$</span>${mfs.total.toLocaleString()}</span>${mRate ? `<span class="m-rate">$${mRate.toLocaleString()}/hr</span>` : ''}</div>
+            <div class="month-sub2"><span class="fl-card">刷卡 ${mfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${mfs.cash.toLocaleString()}</span></div>
+            <div class="month-meta">${mWorkDays} 天 <span class="dot">·</span> ${mTrips.length} 趟 <span class="dot">·</span> ${fmtDist(mDist)} <span class="dot">·</span> 工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></div>
+          </div>
+          <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
+        </div>
       </div>
       <div class="month-days${monthOpen ? '' : ' collapsed'}" id="month-days-${mk}">${daysHtml}</div>`;
   }).join('');

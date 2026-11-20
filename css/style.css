@@ -966,6 +966,8 @@ textarea.bk-in { resize: vertical; }
 .swa.d-map    { background: #34a853; }   /* 歷史每日列：地圖＝綠 */
 .swa.d-comm   { background: #e8710a; }   /* 抽成＝橘 */
 .swa.d-replay { background: #1a73e8; }   /* 回放＝藍 */
+.swa.a-shot   { background: #1a73e8; }   /* 今日摘要：截圖＝藍 */
+.swa.a-month  { background: #e5508a; }   /* 月份標題：月結＝粉 */
 .swa:active { filter: brightness(0.9); }
 .trip-go { color: #c3c7cc; font-size: 1rem; padding: 4px 0 4px 2px; flex-shrink: 0; width: 16px; text-align: center; }
 /* 號碼造型 D（極簡大數字，無圈灰色）＋ 資訊向右填滿：時間在左、時長推到最右，右邊保留 ‹ 箭頭位 */
@@ -1072,26 +1074,36 @@ textarea.bk-in { resize: vertical; }
 }
 .day-rows.collapsed { display: none; }
 
-/* 月份分組 */
-.history-month {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px 10px; cursor: pointer;
+/* ===== 月份分組：卡片＋左滑露出「月結」（v1.1.451）=====
+   月份名＋總計＋每小時當主角、刷卡/現金色分、天/趟/里程/工時收成一行細字；右端 ▼/▶＝展開狀態 */
+.history-month.swipeable {
+  display: block; position: relative; overflow: hidden; cursor: pointer;
+  margin: 12px 10px 8px; border-radius: 14px; padding: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.05);
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
-  background: #f1f3f5; border-top: 1px solid rgba(0,0,0,0.06);
 }
-.history-month:first-child { border-top: none; }
-.month-caret { font-size: 0.7rem; color: #5f6368; flex-shrink: 0; width: 12px; }
-.month-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.month-title { font-size: 0.95rem; font-weight: 800; color: #202124; }
-.month-sub { font-size: 0.72rem; color: #5f6368; font-weight: 600; }
-.month-fare { font-size: 0.68rem; line-height: 1.55; }
-.month-fare .fl-card, .month-fare .fl-voucher, .month-fare .fl-cash, .month-fare .fl-total { margin-right: 8px; }
+.trip-swipe.mrow { gap: 10px; padding: 12px 12px 12px 14px; }
+.month-body { flex: 1; min-width: 0; }
+.month-title { font-size: 1rem; font-weight: 800; color: #202124; letter-spacing: 0.01em; }
+.month-hero { display: flex; align-items: baseline; gap: 9px; margin-top: 4px; }
+.m-tot { font-size: 1.3rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.01em; }
+.m-tot .u { font-size: 0.74rem; font-weight: 700; opacity: 0.55; margin-right: 2px; }
+.m-rate { font-size: 0.96rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
+.month-sub2 { font-size: 0.82rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.month-sub2 .fl-card { margin-right: 14px; }
+.month-meta { font-size: 0.72rem; color: #5f6368; margin-top: 5px; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-caret { font-size: 0.72rem; color: #c3c7cc; flex-shrink: 0; width: 14px; text-align: center; align-self: center; }
 .month-days.collapsed { display: none; }
 @media (prefers-color-scheme: dark) {
-  .history-month { background: #1c1c1e; border-top-color: rgba(255,255,255,0.06); }
-  .month-title { color: #e8eaed; }
-  .month-sub, .month-caret { color: #9aa0a6; }
+  .history-month.swipeable { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); }
+  .month-title, .m-tot { color: #e8eaed; }
+  .month-meta { color: #9aa0a6; }
+  .ts-tot, .ts-meta b { color: #e8eaed; }
+  .ts-lbl { color: #9aa0a6; }
+  .ts-sub .fl-card, .month-sub2 .fl-card { color: #8ab4f8; }
+  .ts-sub .fl-cash, .month-sub2 .fl-cash { color: #81c995; }
 }
 
 .toast {
@@ -1274,22 +1286,28 @@ textarea.bk-in { resize: vertical; }
   background: rgba(217,48,37,0.10); color: #c5221f; }
 @media (prefers-color-scheme: dark) { .extra-tag { background: rgba(242,139,130,0.16); color: #f28b82; } }
 
-.day-summary {
-  display: flex; flex-direction: column; gap: 5px;
-  padding: 10px 18px; background: #f8f9fa;
-  font-size: 0.82rem; color: #5f6368; font-weight: 500;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  /* 總計恆置頂：捲動下方清單時，這塊固定在最上面 */
-  position: sticky; top: 0; z-index: 3;
+/* ===== 今日行程 摘要：卡片＋左滑露出「截圖」（v1.1.451）=====
+   總計＋每小時當主角、刷卡/現金色分、下排細字＝趟數·里程·工時＋休息；恆置頂 */
+.day-summary.swipeable {
+  display: block; position: relative; overflow: hidden;
+  margin: 8px 10px; border-radius: 14px; padding: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
+  position: sticky; top: 8px; z-index: 5;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-.ds-top { display: flex; gap: 12px; align-items: center; }
-.ds-top .screenshot-btn { margin-left: auto; }
-.ds-bot { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
-/* 有紙本簽單時多一欄 → 允許換行、每項不拆字（v1.1.440） */
-.ds-bot { flex-wrap: wrap; row-gap: 4px; }
-.ds-bot > span { white-space: nowrap; }
-.ds-time { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
-.ds-time b { color: #202124; font-weight: 700; }
+.trip-swipe.tsum { display: block; padding: 12px 16px; cursor: default; }
+.ts-hero { display: flex; align-items: baseline; gap: 9px; }
+.ts-lbl { font-size: 0.72rem; color: #5f6368; font-weight: 700; align-self: center; }
+.ts-tot { font-size: 1.5rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.01em; }
+.ts-tot .u { font-size: 0.78rem; font-weight: 700; opacity: 0.55; margin-right: 2px; }
+.ts-rate { font-size: 1rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
+.ts-sub { font-size: 0.86rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.ts-sub .fl-card { margin-right: 14px; }
+.ts-meta { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.06); font-size: 0.75rem; color: #5f6368; font-variant-numeric: tabular-nums; flex-wrap: wrap; row-gap: 4px; }
+.ts-meta b { color: #202124; font-weight: 700; }
+.ts-meta .dot, .month-meta .dot { color: #c3c7cc; }
 .rest-wrap { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
 .rest-input {
   width: 46px; text-align: center; font-size: 0.82rem; font-family: inherit;
