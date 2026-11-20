@@ -23,7 +23,7 @@
   var IS_TOUCH = typeof global !== 'undefined' &&
     (('ontouchstart' in global) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0));
 
-  var ROW_SEL = '.trip-row.swipeable';
+  var ROW_SEL = '.swipeable';   // .trip-row.swipeable（行程列）＋ .history-day.swipeable（歷史每日列，v1.1.450）
   var DIR_THRESHOLD = 8;     // 超過幾 px 才判定方向
   var OPEN_RATIO = 0.4;      // 放手時滑超過動作寬度的幾成就吸附打開
 

@@ -1737,7 +1737,9 @@ function renderHistorySheet(keepState) {
       const dRestMin = getRestMin(day);
       const dRestHr = dRestMin ? +(dRestMin / 60).toFixed(2) : '';
       const dWork = workMs(trips, dRestMin);
-      const fareLine = _fareLineHtml(trips, dWork);
+      const dfs = _fareStats(trips);                       // {card, cash, total}（含小費/手動趟）
+      const dRate = dWork > 0 ? Math.round(dfs.total / (dWork / 3600000)) : 0;
+      const dNum = +day.slice(8, 10);                      // 只顯示「日」數字（2026-11-20 → 20）
       const isOpen = globalDayIdx === 0;   // 全清單最近一天展開
       globalDayIdx++;
       const restRow = `<div class="dr-rest">工作 <b id="work-${day}">${fmtWork(dWork)}</b>　休息
@@ -1764,18 +1766,20 @@ function renderHistorySheet(keepState) {
           </div>
         </div>`;
       }).join('');
-      return `<div class="history-day" data-row="D${day}" onclick="toggleDay('${day}')">
-          <div class="day-head">
-            <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
-            <span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>
+      return `<div class="history-day swipeable" data-row="D${day}">
+          <div class="trip-actions day-actions">
+            <button class="swa d-map" onclick="event.stopPropagation();previewDay('${day}')"><span>🗺</span><small>地圖</small></button>
+            <button class="swa d-comm" onclick="event.stopPropagation();openCommissionBatch('${day}')"><span>％</span><small>抽成</small></button>
+            <button class="swa d-replay" onclick="event.stopPropagation();replayDay('${day}')"><span>▶</span><small>回放</small></button>
           </div>
-          <div class="day-body">
-            ${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : '<span class="day-info-bot"></span>'}
-            <div class="day-acts">
-              <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
-              <button class="commission-btn" onclick="event.stopPropagation();openCommissionBatch('${day}')">抽成</button>
-              <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
+          <div class="trip-swipe day-swipe" onclick="toggleDay('${day}')">
+            <div class="hday-num"><b>${dNum}</b><small>日</small></div>
+            <div class="hday-body">
+              <div class="hday-hero"><span class="hday-tot"><span class="u">NT$</span>${dfs.total.toLocaleString()}</span>${dRate ? `<span class="hday-rate">$${dRate.toLocaleString()}/hr</span>` : ''}</div>
+              <div class="hday-sub"><span class="fl-card">刷卡 ${dfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${dfs.cash.toLocaleString()}</span></div>
             </div>
+            <div class="hday-right"><b>${trips.length} 趟</b><small>${fmtDist(totalDist)}</small></div>
+            <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
           </div>
         </div>
         <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;

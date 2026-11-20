@@ -950,8 +950,8 @@ textarea.bk-in { resize: vertical; }
   display: flex; align-items: stretch;
   opacity: 0; transition: opacity 0.12s;
 }
-.trip-row.swipeable.swiping .trip-actions,
-.trip-row.swipeable.swipe-open .trip-actions { opacity: 1; }
+.swipeable.swiping .trip-actions,
+.swipeable.swipe-open .trip-actions { opacity: 1; }
 .swa {
   border: none; margin: 0; padding: 0 2px; width: 74px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;   /* 圖與字拉開 */
@@ -963,6 +963,9 @@ textarea.bk-in { resize: vertical; }
 .swa.edit { background: #1a73e8; }
 .swa.shot { background: #5f6368; }
 .swa.del  { background: #ea4335; }
+.swa.d-map    { background: #34a853; }   /* 歷史每日列：地圖＝綠 */
+.swa.d-comm   { background: #e8710a; }   /* 抽成＝橘 */
+.swa.d-replay { background: #1a73e8; }   /* 回放＝藍 */
 .swa:active { filter: brightness(0.9); }
 .trip-go { color: #c3c7cc; font-size: 1rem; padding: 4px 0 4px 2px; flex-shrink: 0; width: 16px; text-align: center; }
 /* 號碼造型 D（極簡大數字，無圈灰色）＋ 資訊向右填滿：時間在左、時長推到最右，右邊保留 ‹ 箭頭位 */
@@ -1013,12 +1016,13 @@ textarea.bk-in { resize: vertical; }
 }
 /* 桌面（細指標、可 hover）：沒有左滑手勢 → 動作鈕直接內嵌右側（維持舊操作、不靠滑動）*/
 @media (hover: hover) and (pointer: fine) {
-  .trip-row.swipeable { display: flex; align-items: center; overflow: visible; }
+  .trip-row.swipeable, .history-day.swipeable { display: flex; align-items: center; overflow: visible; }
   .trip-swipe { flex: 1; transform: none !important; order: 1; }
   .trip-actions { position: static; opacity: 1; order: 2; }   /* 桌面不靠手勢 → 動作一直顯示在右側 */
   .swa { width: auto; flex-direction: row; gap: 4px; padding: 6px 10px; background: transparent !important; }
   .swa span { font-size: 0.95rem; } .swa small { display: none; }
   .swa.edit { color: #1a73e8; } .swa.del { color: #ea4335; } .swa.shot { color: #9aa0a6; }
+  .swa.d-map { color: #34a853; } .swa.d-comm { color: #e8710a; } .swa.d-replay { color: #1a73e8; }
   .trip-go { display: none; }
 }
 /* 換日分隔線：一日桶內凌晨隔超過 6h 的段界（全自動，無手動鈕） */
@@ -1034,26 +1038,38 @@ textarea.bk-in { resize: vertical; }
 
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 
-.history-day {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 10px 18px 4px; font-size: 0.75rem; font-weight: 600; color: #1a73e8; letter-spacing: 0.04em;
-  cursor: pointer;
+/* ===== 歷史「每日」列：卡片＋向左滑露出 地圖/抽成/回放（v1.1.450）=====
+   日期只顯示「日」大數字（藍）；上排主角＝總計＋每小時，下排＝刷卡/現金，最右＝趟數/里程 */
+.history-day.swipeable {
+  display: block; position: relative; overflow: hidden; cursor: pointer;
+  margin: 8px 10px; border-radius: 14px; padding: 0; color: #202124;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
   /* iOS：禁止選字/長按選單/點擊高亮 → 避免點日期列時高亮/選取被合成位移到下一列 */
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-/* 不用 :active（iOS 會把它畫到相鄰列＝顯示錯位）；點按會展開該日＝已有回饋 */
-/* 第一排：展開箭頭＋日期列（吃整行寬度，完整顯示不截斷）*/
-.day-head { display: flex; align-items: center; gap: 8px; }
-.day-caret { font-size: 0.65rem; color: #9aa0a6; flex-shrink: 0; width: 12px; }
-.day-info-top { flex: 1 1 auto; min-width: 0; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
-/* 第二排：左邊總計文字（兩行）＋右邊按鈕，縮排對齊日期文字（讓過箭頭寬度）*/
-.day-body { display: flex; align-items: center; gap: 8px; padding-left: 20px; }
-/* 總計那行：刷卡／現金 第一行、總計／每小時收入 第二行（使用者要求）*/
-.day-info-bot { flex: 1 1 auto; min-width: 0; font-size: 0.68rem; font-weight: 400; color: #5f6368; letter-spacing: 0.02em; line-height: 1.55; }
-/* 地圖/抽成/回放 放在總計文字右側（同第二排，垂直置中）*/
-.day-acts { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
-.history-day .replay-btn { flex-shrink: 0; }
+.hday-num { min-width: 30px; flex-shrink: 0; text-align: center; line-height: 1; }
+.hday-num b { display: block; font-size: 1.4rem; font-weight: 800; color: #1a73e8; font-variant-numeric: tabular-nums; }
+.hday-num small { font-size: 0.56rem; font-weight: 700; letter-spacing: 1px; color: #9aa0a6; }
+.hday-body { flex: 1; min-width: 0; }
+.hday-hero { display: flex; align-items: baseline; gap: 10px; }
+.hday-tot { font-size: 1.18rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hday-tot .u { font-size: 0.72rem; font-weight: 700; opacity: 0.6; margin-right: 2px; }
+.hday-rate { font-size: 0.92rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
+.hday-sub { font-size: 0.76rem; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.hday-sub .fl-card { color: #1a73e8; font-weight: 700; margin-right: 10px; }
+.hday-sub .fl-cash { color: #34a853; font-weight: 700; }
+.hday-right { flex-shrink: 0; text-align: right; line-height: 1.15; }
+.hday-right b { display: block; font-size: 0.95rem; font-weight: 800; color: #5f6368; font-variant-numeric: tabular-nums; }
+.hday-right small { font-size: 0.68rem; color: #9aa0a6; }
+.day-caret { font-size: 0.7rem; color: #c3c7cc; flex-shrink: 0; width: 14px; text-align: center; }
+@media (prefers-color-scheme: dark) {
+  .history-day.swipeable { color: #e8eaed; box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); }
+  .hday-num b { color: #8ab4f8; }
+  .hday-tot { color: #e8eaed; }
+  .hday-sub .fl-card { color: #8ab4f8; } .hday-sub .fl-cash { color: #81c995; }
+  .hday-right b { color: #9aa0a6; }
+}
 .day-rows.collapsed { display: none; }
 
 /* 月份分組 */
