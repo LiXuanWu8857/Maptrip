@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.448';
+const APP_VERSION  = '1.1.449';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1071,9 +1071,9 @@ function _payClass(pm) {
 // 上排右邊的加收標籤（小費／抽成／叫車）；不含現金/刷卡（改用金額顏色表示）
 function _rowTags(t) {
   let s = '';
+  if (t.dispatch)   s += `<span class="extra-tag">叫車 ${t.dispatch}</span>`;   // 順序：叫車 → 小費 → 抽成
   if (t.tip)        s += `<span class="extra-tag">小費 ${t.tip}${(t.tipMethod === 'card') ? '刷' : '現'}</span>`;
   if (t.commission) s += `<span class="extra-tag">抽成 ${t.commission}</span>`;
-  if (t.dispatch)   s += `<span class="extra-tag">叫車 ${t.dispatch}</span>`;
   return s;
 }
 function _amtHtml(t) {
