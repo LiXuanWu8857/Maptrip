@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.452';
+const APP_VERSION  = '1.1.453';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -1105,10 +1105,14 @@ function renderTripSheet() {
   const summary = `<div class="day-summary swipeable">
     <div class="trip-actions"><button class="swa a-shot" onclick="captureTripsScreenshot(null)"><span>📷</span><small>截圖</small></button></div>
     <div class="trip-swipe tsum">
-      <div class="ts-hero"><span class="ts-lbl">總計</span><span class="ts-tot"><span class="u">NT$</span>${tfs.total.toLocaleString()}</span>${tRate ? `<span class="ts-rate">$${tRate.toLocaleString()}/hr</span>` : ''}</div>
-      <div class="ts-sub"><span class="fl-card">刷卡 ${tfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${tfs.cash.toLocaleString()}</span></div>
-      <div class="ts-meta"><span>${merged.length} 趟</span><span class="dot">·</span><span>${fmtDist(totalDist)}</span><span class="dot">·</span><span>工作 <b>${fmtWork(work)}</b></span>
-        <span class="rest-wrap">休息 <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5" value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span></div>
+      <div class="ts-hero">
+        <div class="ts-left"><span class="ts-lbl">總計</span><span class="ts-tot"><span class="u">NT$</span>${tfs.total.toLocaleString()}</span>${tRate ? `<span class="ts-rate">$${tRate.toLocaleString()}/hr</span>` : ''}</div>
+        <div class="ts-pay"><span class="fl-card">刷卡 ${tfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${tfs.cash.toLocaleString()}</span></div>
+      </div>
+      <div class="ts-meta">
+        <div class="ts-meta-l"><span>${merged.length} 趟</span><span class="dot">·</span><span>${fmtDist(totalDist)}</span><span class="dot">·</span><span>工作 <b>${fmtWork(work)}</b></span></div>
+        <span class="rest-wrap">休息 <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5" value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span>
+      </div>
     </div>
   </div>`;
   body.innerHTML = summary + merged.map((t, i) => {
@@ -1789,8 +1793,10 @@ function renderHistorySheet(keepState) {
         <div class="trip-swipe mrow" onclick="toggleMonth('${mk}')">
           <div class="month-body">
             <div class="month-title">${monthLabel}</div>
-            <div class="month-hero"><span class="m-tot"><span class="u">NT$</span>${mfs.total.toLocaleString()}</span>${mRate ? `<span class="m-rate">$${mRate.toLocaleString()}/hr</span>` : ''}</div>
-            <div class="month-sub2"><span class="fl-card">刷卡 ${mfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${mfs.cash.toLocaleString()}</span></div>
+            <div class="month-hero">
+              <div class="m-left"><span class="m-tot"><span class="u">NT$</span>${mfs.total.toLocaleString()}</span>${mRate ? `<span class="m-rate">$${mRate.toLocaleString()}/hr</span>` : ''}</div>
+              <div class="m-pay"><span class="fl-card">刷卡 ${mfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${mfs.cash.toLocaleString()}</span></div>
+            </div>
             <div class="month-meta">${mWorkDays} 天 <span class="dot">·</span> ${mTrips.length} 趟 <span class="dot">·</span> ${fmtDist(mDist)} <span class="dot">·</span> 工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></div>
           </div>
           <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>

@@ -1086,12 +1086,15 @@ textarea.bk-in { resize: vertical; }
 .trip-swipe.mrow { gap: 10px; padding: 12px 12px 12px 14px; }
 .month-body { flex: 1; min-width: 0; }
 .month-title { font-size: 1rem; font-weight: 800; color: #202124; letter-spacing: 0.01em; }
-.month-hero { display: flex; align-items: baseline; gap: 9px; margin-top: 4px; }
+/* 上排：左＝總計＋每小時（主角）；右＝刷卡/現金 直排靠右（填右側空白，v1.1.453）*/
+.month-hero { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.m-left { display: flex; align-items: baseline; gap: 9px; flex: 1; min-width: 0; }
 .m-tot { font-size: 1.3rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.01em; }
 .m-tot .u { font-size: 0.74rem; font-weight: 700; opacity: 0.55; margin-right: 2px; }
 .m-rate { font-size: 0.96rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
-.month-sub2 { font-size: 0.82rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
-.month-sub2 .fl-card { margin-right: 14px; }
+.m-pay { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  font-size: 0.8rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.m-pay span { white-space: nowrap; }
 .month-meta { font-size: 0.72rem; color: #5f6368; margin-top: 5px; font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .month-caret { font-size: 0.72rem; color: #c3c7cc; flex-shrink: 0; width: 14px; text-align: center; align-self: center; }
@@ -1100,10 +1103,7 @@ textarea.bk-in { resize: vertical; }
   .history-month.swipeable { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); }
   .month-title, .m-tot { color: #e8eaed; }
   .month-meta { color: #9aa0a6; }
-  .ts-tot, .ts-meta b { color: #e8eaed; }
-  .ts-lbl { color: #9aa0a6; }
-  .ts-sub .fl-card, .month-sub2 .fl-card { color: #8ab4f8; }
-  .ts-sub .fl-cash, .month-sub2 .fl-cash { color: #81c995; }
+  .m-pay .fl-card { color: #8ab4f8; } .m-pay .fl-cash { color: #81c995; }
 }
 
 .toast {
@@ -1297,22 +1297,33 @@ textarea.bk-in { resize: vertical; }
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .trip-swipe.tsum { display: block; padding: 12px 16px; cursor: default; }
-.ts-hero { display: flex; align-items: baseline; gap: 9px; }
+/* 上排：左＝總計＋每小時（主角）；右＝刷卡/現金 直排置中，和下面休息對齊成同一右欄（v1.1.453）*/
+.ts-hero { display: flex; align-items: center; gap: 10px; }
+.ts-left { display: flex; align-items: baseline; gap: 9px; flex: 1; min-width: 0; }
 .ts-lbl { font-size: 0.72rem; color: #5f6368; font-weight: 700; align-self: center; }
 .ts-tot { font-size: 1.5rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.01em; }
 .ts-tot .u { font-size: 0.78rem; font-weight: 700; opacity: 0.55; margin-right: 2px; }
 .ts-rate { font-size: 1rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
-.ts-sub { font-size: 0.86rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
-.ts-sub .fl-card { margin-right: 14px; }
+.ts-pay { flex-shrink: 0; width: 118px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  font-size: 0.84rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.ts-pay span { white-space: nowrap; }
 .ts-meta { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding-top: 8px;
-  border-top: 1px solid rgba(0,0,0,0.06); font-size: 0.75rem; color: #5f6368; font-variant-numeric: tabular-nums; flex-wrap: wrap; row-gap: 4px; }
+  border-top: 1px solid rgba(0,0,0,0.06); font-size: 0.75rem; color: #5f6368; font-variant-numeric: tabular-nums; }
+.ts-meta-l { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; row-gap: 4px; }
 .ts-meta b { color: #202124; font-weight: 700; }
 .ts-meta .dot, .month-meta .dot { color: #c3c7cc; }
-.rest-wrap { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+/* 休息：固定同寬右欄、置中 → 和上面刷卡/現金對齊成一欄 */
+.rest-wrap { flex-shrink: 0; width: 118px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .rest-input {
   width: 46px; text-align: center; font-size: 0.82rem; font-family: inherit;
   border: 1px solid rgba(0,0,0,0.18); border-radius: 7px; padding: 3px 4px;
   background: #fff; color: #202124; outline: none;
+}
+/* 今日摘要深色（放在今日樣式之後，才不會被上面的基底色蓋回＝自 v1.1.451 的 dark-on-dark 修正）*/
+@media (prefers-color-scheme: dark) {
+  .ts-tot, .ts-meta b { color: #e8eaed; }
+  .ts-lbl { color: #9aa0a6; }
+  .ts-pay .fl-card { color: #8ab4f8; } .ts-pay .fl-cash { color: #81c995; }
 }
 .dr-rest {
   padding: 6px 18px 8px; font-size: 0.76rem; color: #5f6368;
