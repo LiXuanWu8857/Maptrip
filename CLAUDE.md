@@ -99,6 +99,15 @@
   有時沒重算、整條飄離底圖（點/標記正常，只有線脫鉤；投影本身正確）。`redrawAllLines()`
   在 zoomend/moveend/去抖 rotate 後強制以目前投影重畫所有折線（allMapLayers/soloLayers/
   dayPreviewLayers/replayTempLayers/activePolyline）。GL 模式 redraw 不存在自動略過
+- **休息空檔不連線、放 ☕（v1.1.455）**：今日路線兩趟之間原本一律畫紅虛線貝茲曲線（`drawGapLine`）。
+  使用者要「有休息時結束與開始不要連起來」→ 空檔達休息門檻（`MaptripUtil.isRestGap`＝兩趟間隔
+  `≥ GAP_REST_MIN`＝90 分，**與 workMs 自動扣休息同一門檻**）就**不連線、改在空檔中點放一個 ☕**
+  （使用者選：不寫時間）；短空檔（等客/排班，<90 分）仍維持紅虛線。`util.js isRestGap(a,b)`（純函式、
+  缺 start/end 時間＝不算休息照舊連線）、`icons.js makeRestIcon()`（白底圓＋☕ divIcon、anchor 置中）、
+  `app.js drawRestCoffee(from,to)`（marker 入 todayMarks pane＋`_applyTodayMode`，隨今日圖層一起隱藏/淡化）、
+  `drawTripGap(prev,cur,from,to)` 分流。兩個呼叫點 `saveTripFinal`（新完成一趟）、`loadTodayFromStorage`
+  （開 App 重建今日路線）都走 `drawTripGap`。**範圍＝今日路線**；歷史整日預覽本就每趟各自畫、無連接線。
+  測試 `restgap.js` 14 項（isRestGap 門檻 89/90/120 分邊界＋缺時間＋負空檔、makeRestIcon 含 ☕、分流 marker/line）全過。
 - **記帳**：每趟車資、現金/刷卡/其他（其他可填備註 label；改回現金/刷卡會清 label）、
   抽成 commission、叫車費 dispatch
 - **叫車費切換 + 抽成延後填（v249；v250 預設有）**：叫車費改成單一切換按鈕（`toggleDispatch`），

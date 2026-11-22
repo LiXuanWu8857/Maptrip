@@ -131,6 +131,13 @@
     return Math.max(0, (maxEnd - minStart) - autoRest - (restMin || 0) * 60000);
   }
 
+  // 兩趟之間的空檔是否達「休息」門檻（≥ GAP_REST_MIN 分）＝路線顯示時不連線、改放 ☕。
+  // 與 workMs 的自動扣休息同一門檻，地圖呈現與工時計算一致。缺時間資訊＝不算休息（照舊連線）。
+  function isRestGap(a, b) {
+    if (!a || !b || !a.endTime || !b.startTime) return false;
+    return (b.startTime - a.endTime) >= GAP_REST_MIN * 60000;
+  }
+
   // 初始化：對齊 app.js 的 TEST_MODE_ON，決定 REST_KEY
   function init(opts) {
     opts = opts || {};
@@ -144,7 +151,7 @@
     _payTag: _payTag, _otherTag: _otherTag, _extraTag: _extraTag,
     _fareStats: _fareStats, _fareLineHtml: _fareLineHtml,
     getRestMin: getRestMin, setRestMin: setRestMin, workMs: workMs,
-    GAP_REST_MIN: GAP_REST_MIN
+    GAP_REST_MIN: GAP_REST_MIN, isRestGap: isRestGap
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

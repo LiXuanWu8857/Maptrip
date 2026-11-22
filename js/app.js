@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.454';
+const APP_VERSION  = '1.1.455';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -658,10 +658,11 @@ function showFareDialog(trip) { return MaptripFareDialog.showFareDialog(trip); }
 function saveTripFinal(trip) {
   if (todayTrips.length > 0) {
     try {
-      const prevCoords = tripPath(todayTrips[todayTrips.length - 1]);
+      const prevTrip   = todayTrips[todayTrips.length - 1];
+      const prevCoords = tripPath(prevTrip);
       const curCoords  = tripPath(trip);
       if (prevCoords.length && curCoords.length)
-        allMapLayers.push(drawGapLine(prevCoords.at(-1), curCoords[0]));
+        allMapLayers.push(drawTripGap(prevTrip, trip, prevCoords.at(-1), curCoords[0]));
     } catch (_) {}
   }
   drawTripLine(trip, todayTrips.length + 1);
@@ -739,6 +740,19 @@ function drawGapLine(from, to) {
     { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5', pane: _todayPane('todayLines') }).addTo(map);
   _applyTodayMode([gap]);
   return gap;
+}
+
+// 兩趟之間是「休息」（長空檔 ≥ 90 分）＝不連線，改在空檔中點放一個 ☕ 標（使用者選擇：不寫時間）。
+function _isRestGap(a, b) { return MaptripUtil.isRestGap(a, b); }
+function drawRestCoffee(from, to) {
+  const mid = [(from.lat + to.lat) / 2, (from.lng + to.lng) / 2];
+  const m = L.marker(mid, { icon: makeRestIcon(), pane: _todayPane('todayMarks'), zIndexOffset: 5 }).addTo(map);
+  _applyTodayMode([m]);
+  return m;
+}
+// 休息＝放 ☕、短空檔＝紅虛線；回傳畫出的圖層（存進 allMapLayers，刪趟/隱藏一起處理）。
+function drawTripGap(prevTrip, curTrip, from, to) {
+  return _isRestGap(prevTrip, curTrip) ? drawRestCoffee(from, to) : drawGapLine(from, to);
 }
 
 // 回傳存在的 today pane 名稱；不存在（GL 模式或建立失敗）回 undefined → 用預設 pane
@@ -828,6 +842,7 @@ function makeStartIcon() { return MaptripIcons.makeStartIcon(); }
 function makeEndIcon() { return MaptripIcons.makeEndIcon(); }
 function makePreviewDotIcon() { return MaptripIcons.makePreviewDotIcon(); }
 function makePreviewSquareIcon(dark) { return MaptripIcons.makePreviewSquareIcon(dark); }
+function makeRestIcon() { return MaptripIcons.makeRestIcon(); }
 
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
@@ -2172,10 +2187,11 @@ function loadTodayFromStorage() {
     const copy = { ...t };
     try {
       if (i > 0) {
-        const prevCoords = tripPath(todayTrips[todayTrips.length - 1]);
+        const prevTrip   = todayTrips[todayTrips.length - 1];
+        const prevCoords = tripPath(prevTrip);
         const curCoords  = tripPath(t);
         if (prevCoords.length && curCoords.length)
-          allMapLayers.push(drawGapLine(prevCoords.at(-1), curCoords[0]));
+          allMapLayers.push(drawTripGap(prevTrip, t, prevCoords.at(-1), curCoords[0]));
       }
     } catch (_) {}
     todayTrips.push(copy);

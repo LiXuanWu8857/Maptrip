@@ -65,13 +65,25 @@
     });
   }
 
+  // 休息標：兩趟之間是休息（長空檔）時，放在空檔中點取代連接線。白底圓形＋☕，淺/深底圖都看得見。
+  function makeRestIcon() {
+    return L.divIcon({
+      className: '',
+      html: '<div style="width:24px;height:24px;border-radius:50%;background:#fff;border:1.5px solid #d9c3a0;'
+          + 'box-shadow:0 1px 5px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;'
+          + 'font-size:13px;line-height:1;">☕</div>',
+      iconSize: [24, 24], iconAnchor: [12, 12]
+    });
+  }
+
   global.MaptripIcons = {
     makeNumberIcon: makeNumberIcon,
     makeDotIcon: makeDotIcon,
     makeStartIcon: makeStartIcon,
     makeEndIcon: makeEndIcon,
     makePreviewDotIcon: makePreviewDotIcon,
-    makePreviewSquareIcon: makePreviewSquareIcon
+    makePreviewSquareIcon: makePreviewSquareIcon,
+    makeRestIcon: makeRestIcon
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
