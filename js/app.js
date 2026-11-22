@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.453';
+const APP_VERSION  = '1.1.454';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -972,6 +972,7 @@ function _dispatchMenu(action) {
   else if (action === 'metro') { closeSheet(); if (window.openMetroSettings) window.openMetroSettings(); }
   else if (action === 'flight') { closeSheet(); if (window.MaptripFlight && MaptripFlight.openLookup) MaptripFlight.openLookup(); }
   else if (action === 'glmap') toggleGlEngine();
+  else if (action === 'autonav') toggleAutoNav();
   else if (action === 'reviewtoggle') { if (window.MaptripDesktop) MaptripDesktop.toggle(); }
 }
 window._dispatchMenu = _dispatchMenu;
@@ -1006,6 +1007,20 @@ function toggleGlEngine() {
   else localStorage.setItem('maptrip_gl', '1');                     // 目前標準 → 換向量
   try { sessionStorage.removeItem('gl_fail'); localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (_) {}
   location.reload();
+}
+
+// 「開始後自動開 Google 地圖」開關（設定，預設關）：開了之後每次按開始行程就自動跳 Google Maps app（v1.1.454）
+function _syncAutoNavLabel() {
+  const b = document.getElementById('autonav-menu-btn');
+  if (!b) return;
+  let on = false; try { on = localStorage.getItem('maptrip_autonav') === '1'; } catch (_) {}
+  b.textContent = on ? '🧭 開始後自動開 Google 地圖：開' : '🧭 開始後自動開 Google 地圖：關';
+}
+function toggleAutoNav() {
+  let on = false; try { on = localStorage.getItem('maptrip_autonav') === '1'; } catch (_) {}
+  try { localStorage.setItem('maptrip_autonav', on ? '0' : '1'); } catch (_) {}
+  _syncAutoNavLabel();
+  toast(on ? '已關閉：開始後不自動開 Google 地圖' : '已開啟：之後按「開始」會自動跳 Google 地圖');
 }
 
 function toggleTopMenu() {
@@ -2493,6 +2508,7 @@ function boot() {
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
   if (glBtn) glBtn.textContent = window.MAPTRIP_GL ? '🗺 換回標準地圖' : '🧪 新地圖引擎（Beta）';
+  _syncAutoNavLabel();   // 還原「開始後自動開 Google 地圖」開關文字
   // 朝行進方向預設開啟（按指北針可關，選擇會記住）
   try {
     headingUp = localStorage.getItem('maptrip_headup') !== '0';
