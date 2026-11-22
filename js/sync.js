@@ -912,7 +912,8 @@
 
   async function syncDay(day) {
     if (!ready || !user) return;
-    const local = getLocal()[day] || [];
+    // 只讀這一天（v1.1.458，免 clone 整個歷史；沒有 getDay 的舊版退回全量讀）
+    const local = (TripStore.getDay ? TripStore.getDay(day) : (getLocal()[day] || []));
     try {
       const ref = daysCol().doc(day);
       // 先讀雲端現有資料，與本機「合併」（依 id 聯集、保留較完整那筆），再寫回。

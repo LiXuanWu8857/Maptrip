@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.457';
+const APP_VERSION  = '1.1.458';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -14,19 +14,31 @@ function saveTrips(raw) { TripStore.setAll(raw); }
 function applyCommission(tripId, commission, dispatch, fareOverride, payOverride) {
   try {
     const id = isNaN(+tripId) ? tripId : +tripId;   // 趟 id 通常是數字
-    const raw = loadTrips();
-    let changed = false;
-    const apply = (t) => {
-      if (!(t && (t.id === id || String(t.id) === String(tripId)))) return;
+    const apply = (t) => {   // 回傳是否真的改到這筆
+      if (!(t && (t.id === id || String(t.id) === String(tripId)))) return false;
+      let c = false;
       if ((t.commission || 0) !== (commission || 0) || (t.dispatch || 0) !== (dispatch || 0)) {
-        t.commission = commission || 0; t.dispatch = dispatch || 0; changed = true;
+        t.commission = commission || 0; t.dispatch = dispatch || 0; c = true;
       }
-      if (fareOverride != null && (t.fare || 0) !== fareOverride) { t.fare = fareOverride; delete t._roadBad; changed = true; }
-      if (payOverride != null && payOverride !== '' && t.paymentMethod !== payOverride) { t.paymentMethod = payOverride; changed = true; }
+      if (fareOverride != null && (t.fare || 0) !== fareOverride) { t.fare = fareOverride; delete t._roadBad; c = true; }
+      if (payOverride != null && payOverride !== '' && t.paymentMethod !== payOverride) { t.paymentMethod = payOverride; c = true; }
+      return c;
     };
-    Object.keys(raw).forEach(day => (raw[day] || []).forEach(apply));
+    // 單日化（v1.1.458）：唯讀掃描找出該趟在哪天，只重寫那天（免 clone 整個歷史）。
+    const S = window.TripStore;
+    const peek = (S && S.peekAll) ? S.peekAll() : loadTrips();
+    let changed = false; const changedDays = {};
+    Object.keys(peek).forEach(day => {
+      const arr0 = peek[day]; if (!Array.isArray(arr0)) return;
+      if (!arr0.some(t => t && (t.id === id || String(t.id) === String(tripId)))) return;   // 這天沒有 → 不碰
+      const arr = (S && S.getDay) ? S.getDay(day) : arr0.slice();   // 只拷貝這一天
+      let dayChanged = false;
+      arr.forEach(t => { if (apply(t)) dayChanged = true; });
+      if (dayChanged) { changedDays[day] = arr; changed = true; }
+    });
     if (changed) {
-      saveTrips(raw);
+      if (S && S.setDays) S.setDays(changedDays);
+      else { const raw = loadTrips(); Object.keys(changedDays).forEach(d => raw[d] = changedDays[d]); saveTrips(raw); }
       todayTrips.forEach(apply);   // 記憶體中的今日清單也同步
     }
     return changed;
@@ -1317,8 +1329,8 @@ function editHistoryFare(e, day, idx) {
     const ex = _readFareExtra();
     const tp = _readTip();
     const tipMethod = tp.tip ? tp.tipMethod : '';
-    const cur = loadTrips();
-    const target = (cur[day] || []).find(t => t.id === tripId);
+    const arr = TripStore.getDay(day);   // 只拷貝這一天（v1.1.458，免 clone 整個歷史）
+    const target = arr.find(t => t.id === tripId);
     if (target) {
       target.fare = fare;
       target.paymentMethod = paymentMethod;
@@ -1326,7 +1338,7 @@ function editHistoryFare(e, day, idx) {
       target.dispatch = ex.dispatch;
       target.tip = tp.tip; target.tipMethod = tipMethod;
       if (paymentMethod !== 'other') target.label = '';   // 由「其他」轉成付費 → 清掉備注
-      saveTrips(cur);
+      TripStore.setDays({ [day]: arr });   // 只寫這一天，其他天原封不動
       if (window.MaptripSync) MaptripSync.syncDays([day]);
     }
     // 若編輯的是「今日」的趟，記憶體中的 todayTrips 也要同步，
@@ -1403,8 +1415,7 @@ function saveCommissionBatch() {
   const day = _cbDay;
   if (!day) return;
   const inputs = document.querySelectorAll('#cb-body .cb-inp');
-  const cur = loadTrips();
-  const arr = cur[day] || [];
+  const arr = TripStore.getDay(day);   // 只拷貝這一天（v1.1.458）
   let changed = 0;
   inputs.forEach(inp => {
     const id = inp.getAttribute('data-id');
@@ -1419,7 +1430,7 @@ function saveCommissionBatch() {
     }
   });
   if (changed) {
-    saveTrips(cur);
+    TripStore.setDays({ [day]: arr });   // 只寫這一天
     if (window.MaptripSync) MaptripSync.syncDays([day]);
   }
   closeCommissionBatch();
@@ -1663,8 +1674,7 @@ function deleteTodayTrip(e, idx) {
 // 刪除「歷史」某趟（含雲端與墓碑，同今日刪除的安全機制）
 function deleteHistoryTrip(e, day, idx) {
   e.stopPropagation();
-  const raw = loadTrips();
-  const trip = (raw[day] || [])[idx];
+  const trip = TripStore.getDay(day)[idx];   // 只拷貝這一天（v1.1.458）
   if (!trip) return;
   if (!confirm(`刪除 ${day} 第 ${idx + 1} 趟行程？`)) return;
   // 若剛好是今日的趟：同步清掉記憶體與地圖圖層
@@ -2176,9 +2186,9 @@ function storageBytes() { return MaptripStorage.storageBytes(); }
 function removeTripFromStorage(id) { return MaptripStorage.removeTripFromStorage(id); }
 
 function loadTodayFromStorage() {
-  let raw = {};
-  try { raw = loadTrips(); } catch (_) {}
-  const saved = raw[todayKey()] || [];
+  let saved = [];
+  // 只讀今天那一天（v1.1.458，免每次開 App 都 clone 整個歷史）
+  try { saved = (window.TripStore && TripStore.getDay) ? TripStore.getDay(todayKey()) : (loadTrips()[todayKey()] || []); } catch (_) {}
   if (!saved.length) return;
   saved.forEach((t, i) => {
     // 用同一個物件入陣列並畫線：_layers 才會掛在 todayTrips 內的那份，
