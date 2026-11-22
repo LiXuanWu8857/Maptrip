@@ -61,6 +61,8 @@
   function _fareStats(trips) {
     let card = 0, cash = 0, voucher = 0, total = 0;
     trips.forEach(t => {
+      // 代收取消費（v1.1.455）：幫公司代收、客人給現金但公司從刷卡扣回 → 現金+a、刷卡−a、總計不變（淨 0）
+      if (t.cancelCollect) { const a = t.fare || 0; cash += a; card -= a; return; }
       const f = t.fare || 0; total += f;
       if (t.paymentMethod === 'card') card += f;
       else if (t.paymentMethod === 'cash') cash += f;
@@ -108,7 +110,7 @@
     const segs = [];
     for (let i = 0; i < trips.length; i++) {
       const x = trips[i];
-      if (!x || x.paymentMethod === 'other' || !x.startTime) continue;
+      if (!x || x.paymentMethod === 'other' || x.cancelCollect || !x.startTime) continue;   // 代收取消費非載客，不算工時
       segs.push({ s: x.startTime, e: x.endTime || x.startTime });
     }
     if (!segs.length) return 0;

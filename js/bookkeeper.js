@@ -608,7 +608,7 @@
   // disp=true 只留有叫車費的趟（叫車費與逐趟顯示同口徑：commissions 覆蓋優先，否則行程自帶）
   function _filterTrips(trips, pay, disp, commissions) {
     return (trips || []).filter(function (t) {
-      if (!t || t.paymentMethod === 'other') return false;
+      if (!t || t.paymentMethod === 'other' || t.cancelCollect) return false;   // 代收取消費不列入記帳
       if (pay && pay !== 'all' && t.paymentMethod !== pay) return false;
       if (disp) {
         var c = (commissions && commissions[String(t.id)]) || {};
@@ -694,7 +694,7 @@
     var all = { n: 0, comm: 0, disp: 0 }, month = { n: 0, comm: 0, disp: 0 };
     Object.keys(days || {}).forEach(function (day) {
       (days[day] || []).forEach(function (t) {
-        if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與記帳
+        if (t.paymentMethod === 'other' || t.cancelCollect) return;   // 「其他/自用」與代收取消費不參與記帳
         var c = (commissions && commissions[String(t.id)]) || {};
         var comm = c.commission != null ? c.commission : (t.commission || 0);
         var disp = c.dispatch != null ? c.dispatch : (t.dispatch || 0);
@@ -717,7 +717,7 @@
       if (ym && String(day).slice(0, 7) !== ym) return;
       var arr = days[day] || [];
       arr.forEach(function (t) {
-        if (t.paymentMethod === 'other') return;
+        if (t.paymentMethod === 'other' || t.cancelCollect) return;
         fare += (t.fare || 0) + (t.tip || 0);   // 車資＋小費/加收都算營收
         var c = commissions && commissions[String(t.id)];
         comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
@@ -774,7 +774,7 @@
   function _resolve(days, commissions) {
     var out = {};
     Object.keys(days || {}).forEach(function (d) {
-      out[d] = (days[d] || []).map(function (t) {
+      out[d] = (days[d] || []).filter(function (t) { return !(t && t.cancelCollect); }).map(function (t) {   // 代收取消費不進記帳者清單
         var c = t && commissions && commissions[String(t.id)];
         if (!c) return t;
         var fo = c.fareOverride, po = c.payOverride;
@@ -828,7 +828,7 @@
   function _daySummary(trips, commissions) {
     var cash = 0, card = 0, voucher = 0, comm = 0, disp = 0, tips = 0;
     (trips || []).forEach(function (t) {
-      if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與（不計車資/抽成/叫車）
+      if (t.paymentMethod === 'other' || t.cancelCollect) return;   // 「其他/自用」與代收取消費不參與記帳
       var c = (commissions && commissions[String(t.id)]) || {};
       var f = t.fare || 0;
       if (t.paymentMethod === 'cash') cash += f;

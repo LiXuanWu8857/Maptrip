@@ -1125,13 +1125,14 @@ function renderTripSheet() {
         <div class="ts-pay"><span class="fl-card">刷卡 ${tfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${tfs.cash.toLocaleString()}</span></div>
       </div>
       <div class="ts-meta">
-        <div class="ts-meta-l"><span>${merged.length} 趟</span><span class="dot">·</span><span>${fmtDist(totalDist)}</span><span class="dot">·</span><span>工作 <b>${fmtWork(work)}</b></span></div>
+        <div class="ts-meta-l"><span>${merged.filter(t => !t.cancelCollect).length} 趟</span><span class="dot">·</span><span>${fmtDist(totalDist)}</span><span class="dot">·</span><span>工作 <b>${fmtWork(work)}</b></span></div>
         <span class="rest-wrap">休息 <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5" value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span>
       </div>
     </div>
   </div>`;
   body.innerHTML = summary + merged.map((t, i) => {
     if (t._manual) return _manualRowHtml(t, i + 1);
+    if (t.cancelCollect) return _collectRowHtml(t, `deleteTodayTrip(event,${todayTrips.indexOf(t)})`);
     const oi = todayTrips.indexOf(t);                // GPS 趟：用真實索引呼叫既有 handler
     return `
     <div class="trip-row swipeable${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="t${i}">
@@ -1162,6 +1163,27 @@ function _manualRowHtml(t, n) {
           <div class="trip-top">${_amtHtml(t)}<span class="manual-badge">手動</span><span class="trip-tags">${_rowTags(t)}</span></div>
           <div class="trip-bot"><span class="trip-trange">${fmtTime(t.startTime)}</span></div>
         </div>
+        <span class="trip-go">‹</span>
+      </div>
+    </div>`;
+}
+
+// 代收取消費列（v1.1.455，淨 0）：咖啡色、無路線、右邊顯示 現金+a / 刷卡−a / 淨0；可刪。
+// delOnclick＝刪除按鈕的 onclick 字串（今日/歷史各自帶對應 handler）。
+function _collectRowHtml(t, delOnclick) {
+  const a = (t.fare || 0).toLocaleString();
+  return `
+    <div class="trip-row swipeable collect-row">
+      <div class="trip-actions">
+        <button class="swa del" onclick="${delOnclick}"><span>🗑</span><small>刪除</small></button>
+      </div>
+      <div class="trip-swipe" style="cursor:default">
+        <div class="cc-ico">🧾</div>
+        <div class="cc-body">
+          <div class="cc-title">代收取消費</div>
+          <div class="cc-note">公司將從刷卡扣回 · 不計入收入</div>
+        </div>
+        <div class="cc-pay"><span class="cc-p">現金 +${a}</span><span class="cc-m">刷卡 −${a}</span><span class="cc-net">淨 0</span></div>
         <span class="trip-go">‹</span>
       </div>
     </div>`;
@@ -1767,6 +1789,7 @@ function renderHistorySheet(keepState) {
       const rows = restRow + trips.map((t, i) => {
         const sep = _segStartAfter.has(t) ? '<div class="day-split-sep">↡ 凌晨隔超過 6 小時，新的一天</div>' : '';
         if (t._manual) return sep + _manualRowHtml(t, i + 1);
+        if (t.cancelCollect) return sep + _collectRowHtml(t, `deleteHistoryTrip(event,'${day}',${(raw[day] || []).indexOf(t)})`);
         const oi = (raw[day] || []).indexOf(t);        // GPS 趟：用真實索引呼叫既有 handler
         return sep + `
         <div class="trip-row swipeable${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="h${i}">
@@ -1793,7 +1816,7 @@ function renderHistorySheet(keepState) {
               <div class="hday-hero"><span class="hday-tot"><span class="u">NT$</span>${dfs.total.toLocaleString()}</span>${dRate ? `<span class="hday-rate">$${dRate.toLocaleString()}/hr</span>` : ''}</div>
               <div class="hday-sub"><span class="fl-card">刷卡 ${dfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${dfs.cash.toLocaleString()}</span></div>
             </div>
-            <div class="hday-right"><b>${trips.length} 趟</b><small>${fmtDist(totalDist)}</small></div>
+            <div class="hday-right"><b>${trips.filter(t => !t.cancelCollect).length} 趟</b><small>${fmtDist(totalDist)}</small></div>
             <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
           </div>
         </div>
@@ -1812,7 +1835,7 @@ function renderHistorySheet(keepState) {
               <div class="m-left"><span class="m-tot"><span class="u">NT$</span>${mfs.total.toLocaleString()}</span>${mRate ? `<span class="m-rate">$${mRate.toLocaleString()}/hr</span>` : ''}</div>
               <div class="m-pay"><span class="fl-card">刷卡 ${mfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${mfs.cash.toLocaleString()}</span></div>
             </div>
-            <div class="month-meta">${mWorkDays} 天 <span class="dot">·</span> ${mTrips.length} 趟 <span class="dot">·</span> ${fmtDist(mDist)} <span class="dot">·</span> 工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></div>
+            <div class="month-meta">${mWorkDays} 天 <span class="dot">·</span> ${mTrips.filter(t => !t.cancelCollect).length} 趟 <span class="dot">·</span> ${fmtDist(mDist)} <span class="dot">·</span> 工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></div>
           </div>
           <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
         </div>
@@ -1882,11 +1905,12 @@ function previewDay(dayKey) {
   closeHistory();
 
   // 先顯示 bar（讓 fitMapToRoute 量到正確高度）
-  const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
-  const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
+  const realTrips = trips.filter(t => !t.cancelCollect);   // 代收取消費不計趟數/金額（淨0）
+  const totalDist = realTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
+  const totalFare = realTrips.reduce((s, t) => s + (t.fare || 0), 0);
   document.getElementById('dp-info').innerHTML =
     `<div class="dp-day">${dayKeyToLabel(dayKey)}</div>` +
-    `<div class="dp-stats">${trips.length} 趟　${fmtDist(totalDist)}${totalFare ? `　NT$ ${totalFare.toLocaleString()}` : ''}</div>`;
+    `<div class="dp-stats">${realTrips.length} 趟　${fmtDist(totalDist)}${totalFare ? `　NT$ ${totalFare.toLocaleString()}` : ''}</div>`;
   document.getElementById('day-preview-bar').style.display = 'flex';
   document.body.classList.add('day-preview-active');
   // 日預覽時：雙擊地圖回主頁（暫時關掉 Leaflet 雙擊放大避免衝突）
@@ -1965,7 +1989,7 @@ function captureMonthShot(ym) {
   return MaptripShot.captureMonthScreenshot(ym, {
     fare: fs.total, cash: fs.cash, card: fs.card, voucher: fs.voucher,
     workMs: mWork, workDays: _workDaysCount(mDays.map(d => mergedByDay[d])),
-    trips: mTrips.length, dist: mTrips.reduce((s, t) => s + (t.totalDist || 0), 0)
+    trips: mTrips.filter(t => !t.cancelCollect).length, dist: mTrips.reduce((s, t) => s + (t.totalDist || 0), 0)
   });
 }
 function captureSingleTripScreenshot(trip) { return MaptripShot.captureSingleTripScreenshot(trip); }

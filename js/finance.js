@@ -106,6 +106,8 @@
       if (String(day).slice(0, 7) !== month) return;
       (days[day] || []).forEach(function (t) {
         if (t.paymentMethod === 'other') return;
+        // 代收取消費（v1.1.455）：現金+a、刷卡−a、不計營收/趟數/里程/抽成（淨 0）
+        if (t.cancelCollect) { var ca = t.fare || 0; cash += ca; card -= ca; return; }
         var f = t.fare || 0; fare += f; dist += t.totalDist || 0; trips++;
         var c = commissions && commissions[String(t.id)];
         comm += (c && c.commission != null) ? c.commission : (t.commission || 0);

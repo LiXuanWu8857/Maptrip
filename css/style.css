@@ -1016,6 +1016,22 @@ textarea.bk-in { resize: vertical; }
     background-image: linear-gradient(rgba(242,139,130,0.10), rgba(242,139,130,0.10));
   }
 }
+/* 代收取消費列（v1.1.455，淨 0）：咖啡色外框、無路線；右邊 現金+a / 刷卡−a / 淨0 */
+.trip-row.swipeable.collect-row { box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(142,91,42,0.22); }
+.trip-swipe .cc-ico { width: 26px; min-width: 26px; flex-shrink: 0; text-align: center; font-size: 1.1rem; }
+.trip-swipe .cc-body { flex: 1; min-width: 0; }
+.cc-title { font-size: 1rem; font-weight: 800; color: #8e5b2a; }
+.cc-note { font-size: 0.72rem; color: #5f6368; margin-top: 3px; }
+.cc-pay { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3;
+  font-variant-numeric: tabular-nums; font-size: 0.86rem; }
+.cc-pay .cc-p { color: #34a853; font-weight: 800; white-space: nowrap; }
+.cc-pay .cc-m { color: #1a73e8; font-weight: 800; white-space: nowrap; }
+.cc-pay .cc-net { font-size: 0.66rem; color: #9aa0a6; }
+@media (prefers-color-scheme: dark) {
+  .trip-row.swipeable.collect-row { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(200,150,100,0.32); }
+  .cc-title { color: #d2a679; } .cc-note { color: #9aa0a6; }
+  .cc-pay .cc-p { color: #81c995; } .cc-pay .cc-m { color: #8ab4f8; }
+}
 /* 桌面（細指標、可 hover）：沒有左滑手勢 → 動作鈕直接內嵌右側（維持舊操作、不靠滑動）*/
 @media (hover: hover) and (pointer: fine) {
   .trip-row.swipeable, .history-day.swipeable { display: flex; align-items: center; overflow: visible; }

@@ -62,7 +62,7 @@ window.MaptripExport = (function () {
     var merged = _mergeManual(days, manualTrips);
     var out = {};
     Object.keys(merged).forEach(function (d) {
-      out[d] = merged[d].map(function (t) {
+      out[d] = merged[d].filter(function (t) { return !(t && t.cancelCollect); }).map(function (t) {   // 代收取消費不進 Excel
         var c = commissions && commissions[String(t.id)];
         if (c && c.fareOverride != null && c.fareOverride !== t.fare) {
           var nt = {}; for (var k in t) nt[k] = t[k]; nt.fare = c.fareOverride; return nt;
@@ -103,7 +103,7 @@ window.MaptripExport = (function () {
     var rows = [TRIP_HEAD.slice()];
     dayKeys.forEach(function (day) {
       merged[day].forEach(function (t) {
-        if (t.paymentMethod === 'other') return;   // 自用/非載客不計帳
+        if (t.paymentMethod === 'other' || t.cancelCollect) return;   // 自用/非載客、代收取消費不計帳
         var f = _tripFields(t, commissions);
         rows.push([
           day, wd(day), hm(t.startTime), payLabel(t),
