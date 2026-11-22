@@ -179,6 +179,8 @@
       // 紙本簽單（算在刷卡）：整列紅框顯著標示（v1.1.443）
       '.bk-trow.voucher{border:2px solid #d93025;border-radius:8px;background:rgba(217,48,37,.07);margin:3px 0}' +
       '.bk-trow.voucher .p{color:#d93025;font-weight:700}' +
+      '.bk-trow.collect{background:rgba(142,91,42,.08);border-radius:8px;margin:3px 0;cursor:default}' +
+      '.bk-trow.collect .p,.bk-trow.collect .f{color:#8e5b2a;font-weight:700}' +
       '.bk-trow .t{color:var(--bk-t2)}.bk-trow .p{color:var(--bk-muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
       '.bk-trow .f{text-align:left;color:var(--bk-t2)}.bk-trow .f.edited{color:var(--bk-acc-t);font-weight:700}' +
       '.bk-trow .rc{text-align:right;font-weight:600;min-width:44px;color:var(--bk-text);white-space:nowrap}.bk-trow .rc.todo{color:var(--bk-warn-t)}' +
@@ -549,7 +551,7 @@
           '<button class="dg-done' + (done ? ' on' : '') + '" onclick="event.stopPropagation();MaptripBookkeeper.toggleDay(\'' + day + '\')">' +
             (done ? '↺ 展開' : '✓ 已完成紀錄') + '</button>' +
         '</div>' +
-        '<div class="dg-r"><span class="dg-n">' + trips.length + ' 趟</span></div>' +
+        '<div class="dg-r"><span class="dg-n">' + trips.filter(function (t) { return !t.cancelCollect; }).length + ' 趟</span></div>' +
         '<div class="dg-sum">' +
           '<span>現金 <b>' + nf(sm2.cash) + '</b></span>' +
           '<span>刷卡 <b>' + nf(sm2.card) + '</b></span>' +
@@ -564,6 +566,16 @@
       if (done) return;   // 已完成＝收折：不畫每趟
       trips.forEach(function (t) {
         var idS = String(t.id);
+        // 代收取消費（淨0）：唯讀咖啡色列，顯示 現金+a / 刷卡−a，不進抽成編輯
+        if (t.cancelCollect) {
+          var ca = t.fare || 0;
+          h += '<div class="bk-trow collect">' +
+            '<span class="t">' + fmtT(t.startTime) + '</span>' +
+            '<span class="p">代收</span>' +
+            '<span class="f">現金 +' + nf(ca) + '　刷卡 −' + nf(ca) + '</span>' +
+            '<span class="rc">-</span><span class="rc">-</span></div>';
+          return;
+        }
         var c = data.commissions[idS] || {};
         var touched = c.commission != null;
         var cashLock = t.paymentMethod === 'cash';   // 現金：抽成鎖 0、不可輸入
@@ -608,7 +620,8 @@
   // disp=true 只留有叫車費的趟（叫車費與逐趟顯示同口徑：commissions 覆蓋優先，否則行程自帶）
   function _filterTrips(trips, pay, disp, commissions) {
     return (trips || []).filter(function (t) {
-      if (!t || t.paymentMethod === 'other' || t.cancelCollect) return false;   // 代收取消費不列入記帳
+      if (!t || t.paymentMethod === 'other') return false;
+      if (t.cancelCollect) return (!pay || pay === 'all') && !disp;   // 代收取消費只在「全部」顯示（影響現金+刷卡兩欄）
       if (pay && pay !== 'all' && t.paymentMethod !== pay) return false;
       if (disp) {
         var c = (commissions && commissions[String(t.id)]) || {};
@@ -629,6 +642,7 @@
     var n = 0, fare = 0, comm = 0, disp = 0, tip = 0;
     (dayKeys || []).forEach(function (d) {
       _filterTrips((days || {})[d], pay, dispOnly, commissions).forEach(function (t) {
+        if (t.cancelCollect) return;   // 代收取消費不計入篩選合計（趟數/車資/抽成）
         var c = (commissions && commissions[String(t.id)]) || {};
         n++;
         fare += (c.fareOverride != null ? c.fareOverride : (t.fare || 0));
@@ -774,7 +788,7 @@
   function _resolve(days, commissions) {
     var out = {};
     Object.keys(days || {}).forEach(function (d) {
-      out[d] = (days[d] || []).filter(function (t) { return !(t && t.cancelCollect); }).map(function (t) {   // 代收取消費不進記帳者清單
+      out[d] = (days[d] || []).map(function (t) {
         var c = t && commissions && commissions[String(t.id)];
         if (!c) return t;
         var fo = c.fareOverride, po = c.payOverride;
@@ -828,7 +842,8 @@
   function _daySummary(trips, commissions) {
     var cash = 0, card = 0, voucher = 0, comm = 0, disp = 0, tips = 0;
     (trips || []).forEach(function (t) {
-      if (t.paymentMethod === 'other' || t.cancelCollect) return;   // 「其他/自用」與代收取消費不參與記帳
+      if (t.paymentMethod === 'other') return;   // 「其他/自用」不參與記帳
+      if (t.cancelCollect) { var a = t.fare || 0; cash += a; card -= a; return; }   // 代收取消費：現金+a、刷卡−a（淨0，不計抽成/叫車）
       var c = (commissions && commissions[String(t.id)]) || {};
       var f = t.fare || 0;
       if (t.paymentMethod === 'cash') cash += f;
