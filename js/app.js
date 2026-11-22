@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.456';
+const APP_VERSION  = '1.1.457';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -2469,6 +2469,30 @@ function healBogusRoads(notify) {
 
 // 一次性清理「未貼路且含飄移群」的既有行程：不受 _snapN 重試上限影響
 // （今天貼路一直失敗、_snapN 已滿的鋸齒趟也要清）。以版本旗標保證每版只跑一次。
+// 一次性修復：v1.1.456 前 serializeTrip 白名單漏掉 cancelCollect → 存檔/重開後代收取消費趟
+// 退化成「普通現金 $40」（旗標消失、呈現與統計都錯）。用 label＋現金＋無路線的特徵還原旗標。
+function healCollectFlags() {
+  try {
+    if (localStorage.getItem('maptrip_ccfix') === '1') return;
+    const all = loadTrips();
+    let changed = false;
+    Object.keys(all).forEach(day => (all[day] || []).forEach(t => {
+      if (t && !t.cancelCollect && t.label === '代收取消費' &&
+          t.paymentMethod === 'cash' && (t.fare || 0) > 0 &&
+          (!t.coords || !t.coords.length) && !(t.totalDist > 0)) {
+        t.cancelCollect = true; changed = true;
+      }
+    }));
+    if (changed) saveTrips(all);
+    try { todayTrips.forEach(t => {
+      if (t && !t.cancelCollect && t.label === '代收取消費' && t.paymentMethod === 'cash' &&
+          (t.fare || 0) > 0 && (!t.coords || !t.coords.length) && !(t.totalDist > 0)) t.cancelCollect = true;
+    }); } catch (_) {}
+    localStorage.setItem('maptrip_ccfix', '1');
+    if (changed) { try { renderTripSheet(); } catch (_) {} }
+  } catch (_) {}
+}
+
 function healZigzagTraces() {
   try {
     if (localStorage.getItem('maptrip_zigfix') === 'v275') return;   // v275 加收紅燈原地飄移圈 → 重跑一次
@@ -2544,6 +2568,7 @@ function boot() {
   healBogusRoads(true);
   setTimeout(() => healBogusRoads(false), 25000);
   healZigzagTraces();   // 一次性清理既有鋸齒/飄移群的未貼路趟
+  healCollectFlags();   // 一次性修復：v1.1.456 前存檔漏掉 cancelCollect 旗標的代收取消費趟
   initMap();
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');

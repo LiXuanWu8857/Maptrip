@@ -70,7 +70,7 @@
     return out;
   }
 
-  function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label, commission, dispatch, tip, tipMethod, newDay }) {
+  function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label, commission, dispatch, tip, tipMethod, newDay, cancelCollect }) {
     // 注意：t 可能不存在（壓實後的舊資料）。絕不能寫成 t: undefined —
     // Firestore 會以 invalid-argument 拒收整份文件，導致雲端備份失敗。
     const slimCoords = (coords || []).map(c =>
@@ -88,6 +88,7 @@
       ...(tip ? { tip } : {}),                  // 小費/加收（金額）
       ...(tip && tipMethod ? { tipMethod } : {}),   // 小費付款方式（cash/card）
       ...(newDay != null ? { newDay } : {}),        // 換日手動覆蓋：true=起新日 / false=併回前一天（!=null 保住 false）
+      ...(cancelCollect ? { cancelCollect: true } : {}),   // 代收取消費旗標（淨0，必須保留才會特殊呈現/統計）
       ...(slimRoad ? { roadCoords: slimRoad } : {}) };
   }
 
