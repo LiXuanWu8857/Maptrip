@@ -2,8 +2,10 @@ package com.maptrip.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -18,7 +20,13 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.text.TextUtils;
 
+import java.util.ArrayList;
+import java.util.List;
+import org.json.JSONObject;
+
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -39,9 +47,15 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  *   update({elapsed,distance})
  *   promptFare()                    顯示車資鍵盤
  *   hide()
+ *   setShortcuts({apps:[{id,label,pkg}]})  浮窗下方捷徑鈕（v1.1.467；沒安裝的 App 自動略過）
+ *   launchApp({pkg}) → {ok}               用套件名稱直接開 App（網頁端「跳轉 App」在安卓優先用這個）
  * 事件：
- *   floatCommand { action: "start" | "end" }
- *   floatFare    { value: 金額(int) }
+ *   floatCommand  { action: "start" | "end" }
+ *   floatFare     { value: 金額(int) }
+ *   floatShortcut { id, ok }               按了浮窗捷徑鈕（黑盒子記錄用）
+ *
+ * 注意（Android 11+ 套件可見性）：AndroidManifest.xml 要有 <queries>（見 Android-打包說明.md 4.7），
+ * 否則 getLaunchIntentForPackage 一律回 null＝捷徑鈕不顯示、launchApp 失敗。
  */
 @CapacitorPlugin(name = "FloatingWindow")
 public class FloatingWindowPlugin extends Plugin {
@@ -59,6 +73,12 @@ public class FloatingWindowPlugin extends Plugin {
     private LinearLayout keypad;
     private TextView fareDisplay;
     private TextView dispatchToggle;   // 叫車費切換（跟 iPhone 車資對話框一樣）
+
+    // ---- 捷徑鈕（v1.1.467）：浮窗下方一排，等寬填滿；車資鍵盤時隱藏 ----
+    private LinearLayout shortcutBox;   // 分隔線＋按鈕列
+    private LinearLayout shortcutRow;
+    private final List<String[]> shortcuts = new ArrayList<>();   // {id, label, pkg}
+    private boolean keypadShown = false;
 
     private String mode = "idle";     // "idle" | "recording"
     private String fareStr = "";
@@ -146,6 +166,40 @@ public class FloatingWindowPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             if (root != null) showKeypad();
             call.resolve();
+        });
+    }
+
+    // 設定浮窗捷徑鈕：apps=[{id,label,pkg}]；浮窗還沒建也先存著，建好時畫上
+    @PluginMethod
+    public void setShortcuts(final PluginCall call) {
+        final List<String[]> list = new ArrayList<>();
+        try {
+            JSArray arr = call.getArray("apps", new JSArray());
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.getJSONObject(i);
+                String pkg = o.optString("pkg", "");
+                if (pkg.isEmpty()) continue;
+                list.add(new String[] { o.optString("id", pkg), o.optString("label", ""), pkg });
+            }
+        } catch (Exception e) { call.reject("bad-apps"); return; }
+        getActivity().runOnUiThread(() -> {
+            shortcuts.clear();
+            shortcuts.addAll(list);
+            int shown = renderShortcuts();
+            JSObject r = new JSObject();
+            r.put("shown", shown);
+            call.resolve(r);
+        });
+    }
+
+    // 用套件名稱直接開 App（不用猜 URL scheme）；有浮動視窗權限＝背景也能開
+    @PluginMethod
+    public void launchApp(final PluginCall call) {
+        final String pkg = call.getString("pkg", "");
+        getActivity().runOnUiThread(() -> {
+            JSObject r = new JSObject();
+            r.put("ok", launchPkg(pkg));
+            call.resolve(r);
         });
     }
 
@@ -241,7 +295,10 @@ public class FloatingWindowPlugin extends Plugin {
         keypad = buildKeypad(ctx);
         keypad.setVisibility(View.GONE);
 
+        shortcutBox = buildShortcutBox(ctx);
+
         card.addView(mainRow);
+        card.addView(shortcutBox);
         card.addView(keypad);
         root.addView(card);
 
@@ -261,6 +318,104 @@ public class FloatingWindowPlugin extends Plugin {
 
         root.bind(wm, lp);
         wm.addView(root, lp);
+        renderShortcuts();
+    }
+
+    // ---- 捷徑鈕 ----
+    private LinearLayout buildShortcutBox(Context ctx) {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        boxLp.topMargin = dp(10);
+        box.setLayoutParams(boxLp);
+
+        View line = new View(ctx);
+        line.setBackgroundColor(col("#EEF0F2", "#2E2E2E"));
+        box.addView(line, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, dp(1))));
+
+        shortcutRow = new LinearLayout(ctx);
+        shortcutRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        rowLp.topMargin = dp(10);
+        box.addView(shortcutRow, rowLp);
+        box.setVisibility(View.GONE);
+        return box;
+    }
+
+    // 依 shortcuts 重畫按鈕列；回傳實際顯示幾顆（沒安裝的 App 略過）
+    private int renderShortcuts() {
+        if (shortcutRow == null) return 0;
+        Context ctx = getContext();
+        PackageManager pm = ctx.getPackageManager();
+        shortcutRow.removeAllViews();
+        int n = 0;
+        for (final String[] s : shortcuts) {
+            final String id = s[0], label = s[1], pkg = s[2];
+            if (pm.getLaunchIntentForPackage(pkg) == null) continue;   // 沒安裝（或 manifest 少 <queries>）
+            LinearLayout b = new LinearLayout(ctx);
+            b.setOrientation(LinearLayout.HORIZONTAL);
+            b.setGravity(Gravity.CENTER);
+            b.setPadding(dp(6), 0, dp(6), 0);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(col("#F1F3F4", "#2A2A2A"));   // 同車資鍵盤的淺灰鍵
+            bg.setCornerRadius(dp(12));
+            b.setBackground(bg);
+            b.setClickable(true);
+
+            ImageView ic = new ImageView(ctx);
+            try {
+                Drawable d = pm.getApplicationIcon(pkg);   // 手機裡那個 App 的真圖示
+                ic.setImageDrawable(d);
+            } catch (PackageManager.NameNotFoundException ignored) {}
+            b.addView(ic, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
+            if (label != null && !label.isEmpty()) {
+                TextView t = new TextView(ctx);
+                t.setText(label);
+                t.setTextColor(col("#202124", "#E8EAED"));
+                t.setTextSize(13);
+                t.setSingleLine(true);
+                t.setEllipsize(TextUtils.TruncateAt.END);
+                LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                tLp.leftMargin = dp(7);
+                b.addView(t, tLp);
+            }
+
+            b.setOnClickListener(v -> {
+                JSObject o = new JSObject();
+                o.put("id", id);
+                o.put("ok", launchPkg(pkg));
+                notifyListeners("floatShortcut", o);
+            });
+
+            LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(0, dp(40), 1f);   // 等寬填滿
+            if (n > 0) bLp.leftMargin = dp(8);
+            shortcutRow.addView(b, bLp);
+            n++;
+        }
+        if (shortcutBox != null) shortcutBox.setVisibility(n > 0 && !keypadShown ? View.VISIBLE : View.GONE);
+        return n;
+    }
+
+    private boolean launchPkg(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        try {
+            Context ctx = getContext();
+            Intent i = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (i == null) return false;
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            ctx.startActivity(i);
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    private void setShortcutsVisible() {
+        if (shortcutBox == null) return;
+        boolean any = shortcutRow != null && shortcutRow.getChildCount() > 0;
+        shortcutBox.setVisibility(any && !keypadShown ? View.VISIBLE : View.GONE);
     }
 
     private LinearLayout buildKeypad(Context ctx) {
@@ -437,6 +592,8 @@ public class FloatingWindowPlugin extends Plugin {
         actionBtn.setPadding(dp(10), 0, dp(10), 0);
         actionBtn.setText("▶ 開始行程");
         setBtnColor(actionBtn, "#1A73E8");
+        keypadShown = false;
+        setShortcutsVisible();
     }
 
     private void setRecording(int elapsed, int distance) {
@@ -468,6 +625,8 @@ public class FloatingWindowPlugin extends Plugin {
         actionBtn.setPadding(dp(10), 0, dp(10), 0);
         actionBtn.setText("結束");
         setBtnColor(actionBtn, "#EA4335");
+        keypadShown = false;
+        setShortcutsVisible();
     }
 
     private void showKeypad() {
@@ -477,6 +636,8 @@ public class FloatingWindowPlugin extends Plugin {
         updateFareDisplay();
         mainRow.setVisibility(View.GONE);
         keypad.setVisibility(View.VISIBLE);
+        keypadShown = true;
+        setShortcutsVisible();   // 輸入車資時捷徑列先藏起來，免得按錯
     }
 
     private void setText(int elapsedSec, int distanceM) {

@@ -187,3 +187,21 @@ try {
   SW 不攔 itunes/mzstatic（「其他請求：不攔截」）。
 - 沙箱連不到 itunes.apple.com → 測試 `autonavicon.js` 18 項用 route mock（JSONP 回應、圖片 200/404、離線 abort）全過；
   **實機才會看到真圖示**。
+
+### v1.1.467：安卓浮動視窗捷徑鈕＋安卓原生開 App
+- 使用者：「在浮動視窗也可以放上捷徑嗎」→ 預覽 v2「兩顆向右填滿、等寬」確認。
+- **原生** `native/android/FloatingWindowPlugin.java`：
+  - `setShortcuts({apps:[{id,label,pkg}]})`：存清單、`renderShortcuts()` 在卡片 mainRow 與 keypad 之間畫「分隔線＋按鈕列」；
+    每顆 `weight 1` 等寬、40dp 高、淺灰底（同車資鍵盤鍵）、`pm.getApplicationIcon(pkg)` 真圖示＋小字；`getLaunchIntentForPackage==null`（沒裝）略過；
+    `keypadShown` 時整列 GONE。浮窗未建也先存，`buildView` 末尾畫。
+  - `launchApp({pkg})→{ok}`：`getLaunchIntentForPackage`＋`FLAG_ACTIVITY_NEW_TASK|RESET_TASK_IF_NEEDED`。有 SYSTEM_ALERT_WINDOW＝不受背景啟動限制。
+  - 事件 `floatShortcut {id, ok}`。
+  - **Android 11+ 必須在 manifest 加 `<queries>`**（見 `Android-打包說明.md` 4.7），否則全部找不到。
+  - 驗證：沙箱無 Android SDK → 用 javac＋手寫假 android/capacitor/org.json 類別編譯（scratchpad `jstub/`）通過；
+    `PluginCall.getArray(String,JSArray)`、`getString(String,String)`、`notifyListeners` 已對照 Capacitor 6.2.3 原始碼。**實機未測**。
+- **網頁** `autonav.js`：APPS 加 `pkg/short/androidUrls/androidFallback`；`launch()` 在安卓先 `FloatingWindow.launchApp`，
+  ok→結束（黑盒子 `autonav:ok native`），失敗/拒絕（舊版殼）→ `_launchUrls`（安卓用 `androidUrls`：Google＝`https://www.google.com/maps`、
+  55688＝無→直接 `market://details?id=…`；不再試 iOS 的 comgooglemaps/shortcuts/itms-apps）。
+  `syncFloat()`（renderBar 時）把 `barApps()` 中有 pkg 的送 `setShortcuts`，內容簽章相同不重送；舊版殼被拒忽略。
+- 測試 `autonavandroid.js` 20 項（模擬 Capacitor：新殼原生開/設定同步浮窗/不重送/自訂 App 不上浮窗、未安裝→Play/一般網址、
+  舊殼不壞、iPhone 完全不呼叫浮窗外掛且行為不變）＋ autonav2 61／autonavbar 35／autonavicon 18 回歸全過。

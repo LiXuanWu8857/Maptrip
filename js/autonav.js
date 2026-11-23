@@ -25,10 +25,14 @@
     // 55688 司機版：官方 scheme 查無資料 → 依序試幾個候選（iOS 開不認得的 scheme＝靜默失敗、無副作用），
     // 都沒跳走 → App Store 頁（itms-apps:// 一律由 App Store 處理；已安裝時頁上是「開啟」）。
     // 最穩的直接跳法＝設定裡填「iPhone 捷徑」名稱（捷徑：打開 App → 55688司機版），會排在最先試。
+    // 安卓（v1.1.467）：pkg＝套件名稱，App 殼有新版浮窗外掛時用原生 launchApp 直接開（最穩）；舊版殼退回 URL＋Google Play 頁
     { id: 'taxi55688', name: '55688 司機版', icon: '🚕', def: true, shortcut: true, storeId: '1190486682',
+      pkg: 'tw.com.masterhand.twtaxidriver', short: '55688', androidUrls: [],
+      androidFallback: 'market://details?id=tw.com.masterhand.twtaxidriver',
       urls: ['twtaxidriver://', 'tw.com.masterhand.twtaxidriver://', 'taiwantaxidriver://', 'masterhand://'],
       fallback: 'itms-apps://apps.apple.com/app/id1190486682', badge: { t: '55', bg: '#f9c400', fg: '#1a1a1a' } },
     { id: 'gmaps', name: 'Google 地圖', icon: '🟢', def: true, storeId: '585027354',
+      pkg: 'com.google.android.apps.maps', short: '地圖', androidUrls: ['https://www.google.com/maps'], androidFallback: '',
       urls: ['comgooglemaps://'],
       fallback: 'https://www.google.com/maps', badge: { t: 'G', bg: '#1a73e8', fg: '#fff' } },
     { id: 'amaps', name: 'Apple 地圖', icon: '🍎', def: false, storeId: '915056765',
@@ -99,10 +103,18 @@
     p.sc[id] = String(name || '').trim(); _lsSet(PREF_KEY, JSON.stringify(p));
   }
   // 純函式：這個 App 要依序試哪些網址（捷徑優先）
-  function urlsFor(a, scName) {
+  // platform：'android' 時用 androidUrls（comgooglemaps:// 是 iOS 專用、安卓沒有「捷徑」App）
+  function urlsFor(a, scName, platform) {
+    if (platform === 'android') return (a.androidUrls || []).slice();
     var list = [];
     if (scName) list.push('shortcuts://run-shortcut?name=' + encodeURIComponent(scName));
     return list.concat(a.urls || []);
+  }
+  function _platform() {
+    try { return (global.Capacitor && global.Capacitor.getPlatform && global.Capacitor.getPlatform()) || 'web'; } catch (_) { return 'web'; }
+  }
+  function _fw() {
+    try { return _platform() === 'android' && global.Capacitor.Plugins ? global.Capacitor.Plugins.FloatingWindow : null; } catch (_) { return null; }
   }
   function _find(id) { var L = allApps(); for (var i = 0; i < L.length; i++) if (L[i].id === id) return L[i]; return null; }
   function enabledApps(phase) { return allApps().filter(function (a) { return appOn(a.id, phase); }); }
@@ -131,7 +143,26 @@
   var STEP_MS = 1200;
   function launch(id) {
     var a = _find(id); if (!a) return;
-    var list = urlsFor(a, a.shortcut ? shortcutName(id) : '');
+    var plat = _platform();
+    function log(m) { try { global.__mtLog && global.__mtLog('autonav:' + m); } catch (_) {} }
+    // 安卓：新版浮窗外掛有 launchApp → 用套件名稱直接開；失敗（沒裝／舊版殼沒這個方法）才走 URL
+    var fw = _fw();
+    if (plat === 'android' && a.pkg && fw && typeof fw.launchApp === 'function') {
+      var p; try { p = fw.launchApp({ pkg: a.pkg }); } catch (_) { p = null; }
+      if (p && typeof p.then === 'function') {
+        p.then(function (r) {
+          if (r && r.ok) log('ok native ' + id);
+          else { log('native-miss ' + id); _launchUrls(a, plat); }
+        }, function () { log('native-err ' + id); _launchUrls(a, plat); });
+        return;
+      }
+    }
+    _launchUrls(a, plat);
+  }
+  function _launchUrls(a, plat) {
+    var id = a.id;
+    var list = urlsFor(a, a.shortcut ? shortcutName(id) : '', plat);
+    var fallback = plat === 'android' ? (a.androidFallback || '') : a.fallback;
     var left = false, i = 0;
     function log(m) { try { global.__mtLog && global.__mtLog('autonav:' + m); } catch (_) {} }
     function onHide() { if (document.visibilityState === 'hidden') { if (!left) log('ok hidden ' + id + ' #' + (i - 1)); left = true; } }
@@ -148,7 +179,7 @@
         return;
       }
       done();
-      if (a.fallback && document.visibilityState === 'visible') { log('fallback ' + id); _openUrl(a.fallback); }
+      if (fallback && document.visibilityState === 'visible') { log('fallback ' + id); _openUrl(fallback); }
       else log('fail ' + id);
     }
     step();
@@ -299,7 +330,7 @@
     var sc = allApps().filter(function (a) { return a.shortcut; });
     _settings.innerHTML = '<div class="in" style="max-height:calc(100dvh - 40px);overflow-y:auto"><h3>🧭 跳轉 App</h3>' +
       '<div class="sec">主頁右上角快捷鈕</div>' +
-      '<p class="sub" style="margin:2px 4px 0">開著的 App 會出現在主頁右上角，點一下直接跳過去。一般 iPhone 放得下 3 個，再多的會依順序自動藏起來（Pro Max 可到 ' + BAR_MAX + ' 個）。</p>' +
+      '<p class="sub" style="margin:2px 4px 0">開著的 App 會出現在主頁右上角，點一下直接跳過去。' + (_platform() === 'android' ? '安卓的浮動視窗下方也會顯示這幾顆（需新版安卓 App）。' : '') + '一般 iPhone 放得下 3 個，再多的會依順序自動藏起來（Pro Max 可到 ' + BAR_MAX + ' 個）。</p>' +
       _appRows('bar', true) +
       '<p class="sub" style="margin:10px 4px 0">開始／結束：只開一個 App＝直接跳、不問；開兩個以上＝跳出選單讓你選。</p>' +
       '<div class="sec">開始行程後</div>' +
@@ -435,9 +466,29 @@
       return '<button class="icon-btn an-bbtn" data-app="' + _esc(a.id) + '" title="' + _esc(a.name) + '" aria-label="開啟 ' + _esc(a.name) + '">' + _badgeHtml(a) + '</button>';
     }).join('');
     bar.style.display = apps.length ? '' : 'none';
+    syncFloat();
     _watchTopLeft();
     _fitBar();
   }
+  // 安卓浮動視窗捷徑鈕（v1.1.467）：跟右上角快捷鈕同一組開關；只送有套件名稱的 App（自訂 App 沒有＝不上浮窗）。
+  // 舊版安卓殼沒有 setShortcuts → 呼叫被拒，忽略即可（網頁照常）。
+  var _lastFloat = '';
+  function floatApps() {
+    return barApps().filter(function (a) { return a.pkg; }).map(function (a) { return { id: a.id, label: a.short || a.name, pkg: a.pkg }; });
+  }
+  function syncFloat() {
+    var fw = _fw(); if (!fw || typeof fw.setShortcuts !== 'function') return;
+    var apps = floatApps(), sig = JSON.stringify(apps);
+    if (sig === _lastFloat) return;
+    _lastFloat = sig;
+    try {
+      var p = fw.setShortcuts({ apps: apps });
+      if (p && typeof p.then === 'function') p.then(function (r) {
+        try { global.__mtLog && global.__mtLog('autonav:float ' + (r && r.shown) + '/' + apps.length); } catch (_) {}
+      }, function () { _lastFloat = ''; });
+    } catch (_) { _lastFloat = ''; }
+  }
+
   // 頂列放不下時：先縮小（an-tight），還放不下就從尾端藏起快捷鈕（日期／趟數不被擠換行）
   function _overflow() {
     var tb = document.getElementById('top-bar'), l = document.getElementById('top-left'), r = document.getElementById('top-actions');
@@ -479,7 +530,7 @@
     decide: decide, launch: launch, urlsFor: urlsFor, shortcutName: shortcutName, setShortcutName: setShortcutName, STEP_MS: STEP_MS, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart, endOn: endOn, setEndOn: setEndOn, decideEnd: decideEnd, onTripEnd: onTripEnd,
     openPicker: openPicker, openSettings: openSettings, close: close,
     syncMenuLabel: _syncMenuLabel,
-    allApps: allApps, _fitBar: _fitBar, fetchIcons: fetchIcons, iconUrl: iconUrl, _artFrom: _artFrom, addCustomApp: addCustomApp, removeCustomApp: removeCustomApp, renderBar: renderBar, barApps: barApps, BAR_MAX: BAR_MAX
+    allApps: allApps, _fitBar: _fitBar, floatApps: floatApps, syncFloat: syncFloat, _platform: _platform, fetchIcons: fetchIcons, iconUrl: iconUrl, _artFrom: _artFrom, addCustomApp: addCustomApp, removeCustomApp: removeCustomApp, renderBar: renderBar, barApps: barApps, BAR_MAX: BAR_MAX
   };
   // 開機就把右上角快捷鈕畫上（DOM 已在 index.html 裡，script 在 body 尾端載入）；稍後背景查官方圖示
   try {

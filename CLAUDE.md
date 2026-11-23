@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.466**（2026-11-23）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.467**（2026-11-23）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -119,7 +119,11 @@
   **v1.1.465 使用者要求拔掉 Uber**（舊設定殘留 uberdriver 無害、不顯示）。另有**自訂 App**（`prefs.custom`，名稱＋iPhone 捷徑名稱，任何 App 都能開，開始/結束清單也有）。
   `_fitBar` 頂列放不下先縮（`an-tight`）再從尾端藏鈕（390 寬約放 3 顆），MutationObserver 盯 `#top-left` 文字變化重量。測試 `autonavbar.js` 35。
   **v1.1.466 官方 App 圖示**：裝置上用 iTunes lookup（storeId 批次）/search（自訂 App 用名稱）**JSONP** 查 App Store 圖示（沙箱連不到 itunes，測試用 route mock），
-  快取 `maptrip_appicons`（7 天；查不到 1 天後重試；網路失敗不寫快取）；`<img>` 疊在色塊字標上，載入失敗 onerror 移除＝退回字標。測試 `autonavicon.js` 18。詳見 `docs/開始後自動開Google地圖-交接.md`
+  快取 `maptrip_appicons`（7 天；查不到 1 天後重試；網路失敗不寫快取）；`<img>` 疊在色塊字標上，載入失敗 onerror 移除＝退回字標。測試 `autonavicon.js` 18。
+  **v1.1.467 安卓**：`FloatingWindowPlugin.java` 加 `setShortcuts({apps:[{id,label,pkg}]})`（浮窗下方等寬捷徑鈕、系統真圖示、沒裝不顯示、車資鍵盤時藏）＋
+  `launchApp({pkg})`（套件名稱直接開；有浮窗權限＝背景也能開）。網頁 `autonav.js` 安卓優先 `launchApp`，失敗/舊版殼→`androidUrls`/`androidFallback`
+  （Google 一般網址、55688 `market://`）；`syncFloat` 跟 `prefs.bar` 同步（簽章去重）。**需 manifest `<queries>`（Android-打包說明 4.7）＋重編安卓**。
+  javac＋假安卓類別編譯通過、Capacitor 6 API 簽章已對；測試 `autonavandroid.js` 20（模擬安卓新/舊殼/未安裝、iPhone 不受影響）。詳見 `docs/開始後自動開Google地圖-交接.md`
 - **記帳**：每趟車資、現金/刷卡/其他（其他可填備註 label；改回現金/刷卡會清 label）、
   抽成 commission、叫車費 dispatch
 - **叫車費切換 + 抽成延後填（v249；v250 預設有）**：叫車費改成單一切換按鈕（`toggleDispatch`），
