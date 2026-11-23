@@ -149,3 +149,12 @@ try {
   開關開＋前景＋pm∈{cash, card, voucher} 才跳；「其他」（skip 鈕）不跳；Android 浮窗背景存檔不跳（visible 擋）。
   延遲 500ms（存檔/toast 先跑）後 `launch('taxi55688')`，開法同開始（捷徑→候選 scheme→App Store）。
 - 測試 `autonav2.js` 51 項（真車資對話框：現金/刷卡跳、開關關不跳、車資照存；其他/背景不跳；設定開關）全過。
+
+### v1.1.463：結束段設計改成跟開始一樣
+- 使用者：「跟開始一樣，結束行程後是否要開啟跳轉一個開關、跳轉到哪一個 App 一個開關」。
+- 設定面板：「開始行程後」＝總開關＋各 App 開關；「結束收款後（現金／刷卡／簽單）」＝總開關（`maptrip_autonav_end`）＋
+  各 App 開關（`maptrip_autonav_apps.end`，**預設只開 55688**）；最下方「55688 開啟方式」捷徑名稱（兩段共用）。
+- `appOn/setAppOn/enabledApps/openPicker` 加 `phase` 參數（'start' 預設／'end'）；`decideEnd(on,visible,pm,n)` 回
+  'none'|'direct'|'pick'（沿用 decide）；結束開 ≥2 個 App → 「收款完成！」選單。
+- 測試 `autonav2.js` 61 項全過（含結束 2 個 App 走真車資對話框→選單→選 Google、兩段開關互不影響）。
+  注意 `?test` 模式的 probe 除錯浮層會擋 Playwright 點擊，測試裡用 addStyleTag 藏起來。

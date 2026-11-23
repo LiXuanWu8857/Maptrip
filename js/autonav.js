@@ -14,7 +14,8 @@
   var MASTER_KEY = 'maptrip_autonav';        // 總開關（v1.1.454 起）
   var PREF_KEY = 'maptrip_autonav_apps';     // { on: {id:bool}, sc: {id:捷徑名稱} }
   var END_KEY = 'maptrip_autonav_end';       // v1.1.462：結束收款後跳 55688（'1' 開，預設關）
-  var END_APP = 'taxi55688';
+  // v1.1.463：結束也跟開始一樣＝總開關＋各 App 開關（prefs.end）；結束預設只開 55688
+  var END_DEF = { taxi55688: true, gmaps: false, amaps: false };
   var END_PAYS = { cash: 1, card: 1, voucher: 1 };   // 現金／刷卡／紙本簽單才跳；「其他」不跳
 
   // App 清單（預設 on＝出現在選單）
@@ -43,13 +44,20 @@
     var p = null; try { p = JSON.parse(_ls(PREF_KEY) || 'null'); } catch (_) {}
     return (p && typeof p === 'object' && p.on && typeof p.on === 'object') ? p : { on: {} };
   }
-  function appOn(id) {
-    var p = _prefs();
-    if (Object.prototype.hasOwnProperty.call(p.on, id)) return !!p.on[id];
+  // phase：'start'（預設）或 'end'——兩段各自一組 App 開關
+  function _bucket(p, phase) {
+    if (phase !== 'end') return p.on;
+    if (!p.end || typeof p.end !== 'object') p.end = {};
+    return p.end;
+  }
+  function appOn(id, phase) {
+    var p = _prefs(), m = _bucket(p, phase);
+    if (Object.prototype.hasOwnProperty.call(m, id)) return !!m[id];
+    if (phase === 'end') return !!END_DEF[id];
     var a = _find(id); return !!(a && a.def);
   }
-  function setAppOn(id, v) {
-    var p = _prefs(); p.on[id] = !!v; _lsSet(PREF_KEY, JSON.stringify(p));
+  function setAppOn(id, v, phase) {
+    var p = _prefs(); _bucket(p, phase)[id] = !!v; _lsSet(PREF_KEY, JSON.stringify(p));
   }
   // iPhone 捷徑名稱（選填）：有填就先用 shortcuts://run-shortcut 開（捷徑 App 一定在、scheme 官方）
   function shortcutName(id) { var p = _prefs(); return (p.sc && typeof p.sc[id] === 'string') ? p.sc[id].trim() : ''; }
@@ -64,7 +72,7 @@
     return list.concat(a.urls || []);
   }
   function _find(id) { for (var i = 0; i < APPS.length; i++) if (APPS[i].id === id) return APPS[i]; return null; }
-  function enabledApps() { return APPS.filter(function (a) { return appOn(a.id); }); }
+  function enabledApps(phase) { return APPS.filter(function (a) { return appOn(a.id, phase); }); }
 
   // 純函式：行程開始時要做什麼 → 'none' | 'direct' | 'pick'
   function decide(masterOn, visible, nEnabled) {
@@ -129,17 +137,23 @@
   // ---------- 結束收款後跳 55688（v1.1.462）----------
   function endOn() { return _ls(END_KEY) === '1'; }
   function setEndOn(v) { _lsSet(END_KEY, v ? '1' : '0'); _syncMenuLabel(); }
-  // 純函式：結束收款要不要跳
-  function decideEnd(on, visible, paymentMethod) {
-    return !!(on && visible && END_PAYS[paymentMethod]);
+  // 純函式：結束收款要做什麼 → 'none' | 'direct' | 'pick'（現金／刷卡／簽單才跳）
+  function decideEnd(on, visible, paymentMethod, nEnabled) {
+    if (!END_PAYS[paymentMethod]) return 'none';
+    return decide(on, visible, nEnabled == null ? 1 : nEnabled);
   }
   // 車資對話框按「現金／刷卡／簽單」存檔時呼叫（recorder.finalizeSavedTrip）
   function onTripEnd(paymentMethod) {
     var visible = (typeof document === 'undefined') || document.visibilityState === 'visible';
-    if (!decideEnd(endOn(), visible, paymentMethod)) return false;
-    try { global.__mtLog && global.__mtLog('autonav:end ' + paymentMethod); } catch (_) {}
-    setTimeout(function () { launch(END_APP); }, 500);   // 讓存檔（IndexedDB）與 toast 先跑完再跳走
-    return true;
+    var apps = enabledApps('end');
+    var d = decideEnd(endOn(), visible, paymentMethod, apps.length);
+    if (d === 'none') return d;
+    try { global.__mtLog && global.__mtLog('autonav:end ' + paymentMethod + ' ' + d); } catch (_) {}
+    setTimeout(function () {   // 讓存檔（IndexedDB）與 toast 先跑完再跳走
+      if (d === 'direct') launch(apps[0].id);
+      else openPicker('end');
+    }, 500);
+    return d;
   }
 
   // ---------- UI ----------
@@ -195,12 +209,15 @@
     if (_settings) _settings.classList.remove('on');
   }
 
-  // 行程開始選單
-  function openPicker() {
+  // 選單（phase：'start' 行程開始／'end' 收款完成）
+  function openPicker(phase) {
     _ensureBase();
     _picker = _sheet('mt-an-pick');
-    var apps = enabledApps();
-    _picker.innerHTML = '<div class="in"><h3>行程開始！</h3><p class="sub">要切換到哪個 App？（MapTrip 在背景繼續記錄）</p>' +
+    var apps = enabledApps(phase);
+    var head = phase === 'end'
+      ? '<h3>收款完成！</h3><p class="sub">要切換到哪個 App？</p>'
+      : '<h3>行程開始！</h3><p class="sub">要切換到哪個 App？（MapTrip 在背景繼續記錄）</p>';
+    _picker.innerHTML = '<div class="in">' + head +
       apps.map(function (a) {
         return '<button class="nb" data-app="' + _esc(a.id) + '"><span class="ico">' + a.icon + '</span><b>' + _esc(a.name) + '</b></button>';
       }).join('') +
@@ -221,30 +238,39 @@
     _renderSettings();
     _show(_settings);
   }
-  function _renderSettings() {
-    var on = isOn();
-    _settings.innerHTML = '<div class="in" style="max-height:calc(100dvh - 40px);overflow-y:auto"><h3>🧭 跳轉 App</h3>' +
-      '<div class="sec">開始行程後</div>' +
-      '<p class="sub" style="margin:2px 4px 0">跳出選單選要切到哪個 App。只開一個＝直接跳、不問。</p>' +
-      '<div class="row master"><span class="nm">開始後跳出選單</span><button class="sw' + (on ? ' on' : '') + '" data-master="1" aria-label="總開關"></button></div>' +
-      '<div class="apps' + (on ? '' : ' dim') + '">' +
+  function _appRows(phase, on) {
+    return '<div class="apps' + (on ? '' : ' dim') + '">' +
       APPS.map(function (a) {
         return '<div class="row"><span class="ico">' + a.icon + '</span><span class="nm">' + _esc(a.name) + '</span>' +
-          '<button class="sw' + (appOn(a.id) ? ' on' : '') + '" data-app="' + _esc(a.id) + '" aria-label="' + _esc(a.name) + '"></button></div>' +
-          (a.shortcut ? '<div class="scrow"><label>用 iPhone 捷徑開啟（選填，填捷徑名稱）</label>' +
-            '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：55688" value="' + _esc(shortcutName(a.id)) + '"></div>' : '');
-      }).join('') + '</div>' +
-      '<div class="sec">結束收款後</div>' +
-      '<div class="row master"><span class="nm">🚕 現金／刷卡／簽單後跳 55688</span><button class="sw' + (endOn() ? ' on' : '') + '" data-end="1" aria-label="結束後跳 55688"></button></div>' +
-      '<p class="sub" style="margin:6px 4px 0">選「其他」不會跳。55688 的開法同上（有填捷徑就用捷徑）。</p>' +
+          '<button class="sw' + (appOn(a.id, phase) ? ' on' : '') + '" data-app="' + _esc(a.id) + '" data-phase="' + phase + '" aria-label="' + _esc(a.name) + '"></button></div>';
+      }).join('') + '</div>';
+  }
+  function _renderSettings() {
+    var on = isOn(), eon = endOn();
+    var sc = APPS.filter(function (a) { return a.shortcut; });
+    _settings.innerHTML = '<div class="in" style="max-height:calc(100dvh - 40px);overflow-y:auto"><h3>🧭 跳轉 App</h3>' +
+      '<p class="sub" style="margin:2px 4px 0">只開一個 App＝直接跳、不問；開兩個以上＝跳出選單讓你選。</p>' +
+      '<div class="sec">開始行程後</div>' +
+      '<div class="row master"><span class="nm">開始後跳轉</span><button class="sw' + (on ? ' on' : '') + '" data-master="start" aria-label="開始後跳轉"></button></div>' +
+      _appRows('start', on) +
+      '<div class="sec">結束收款後（現金／刷卡／簽單）</div>' +
+      '<div class="row master"><span class="nm">結束後跳轉</span><button class="sw' + (eon ? ' on' : '') + '" data-master="end" aria-label="結束後跳轉"></button></div>' +
+      _appRows('end', eon) +
+      '<p class="sub" style="margin:6px 4px 0">選「其他」不會跳。</p>' +
+      sc.map(function (a) {
+        return '<div class="sec">' + a.icon + ' ' + _esc(a.name) + ' 開啟方式</div>' +
+          '<div class="scrow" style="padding-left:4px"><label>用 iPhone 捷徑開啟（選填，填捷徑名稱；開始與結束共用）</label>' +
+          '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：55688" value="' + _esc(shortcutName(a.id)) + '"></div>';
+      }).join('') +
       '<button class="cx" data-x="1">完成</button></div>';
     _settings.onclick = function (e) {
       var b = e.target.closest ? e.target.closest('button') : null; if (!b) return;
       if (b.getAttribute('data-x')) { close(); return; }
-      if (b.getAttribute('data-master')) { setOn(!isOn()); _renderSettings(); return; }
-      if (b.getAttribute('data-end')) { setEndOn(!endOn()); _renderSettings(); return; }
-      var id = b.getAttribute('data-app');
-      if (id) { setAppOn(id, !appOn(id)); _renderSettings(); }
+      var m = b.getAttribute('data-master');
+      if (m === 'start') { setOn(!isOn()); _renderSettings(); return; }
+      if (m === 'end') { setEndOn(!endOn()); _renderSettings(); return; }
+      var id = b.getAttribute('data-app'), ph = b.getAttribute('data-phase');
+      if (id) { setAppOn(id, !appOn(id, ph), ph); _renderSettings(); }
     };
     var ins = _settings.querySelectorAll('input[data-sc]');
     for (var k = 0; k < ins.length; k++) {
