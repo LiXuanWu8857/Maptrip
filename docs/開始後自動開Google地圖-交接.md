@@ -171,3 +171,8 @@ try {
   390 寬實測放 3 顆、430 寬放 4 顆、375 寬 3 顆。日期/趟數開機後才填 → MutationObserver 盯 `#top-left` 重量＋開機後 1.5s/4s 再量。
 - 測試 `autonavbar.js` 32 項（預設 3 顆、點擊開對的 App、設定即時增減、自訂 App 新增/捷徑/重開仍在/刪除、375/390/430 不溢出、
   趟數變 12 仍不溢出、全關不顯示）＋`autonav2.js` 61 項回歸全過，零 pageerror。
+
+### v1.1.465：拔掉 Uber
+- 使用者：「Uber 拔掉」。APPS 移除 `uberdriver`、BAR_DEF 只剩 55688／Google。舊裝置存過 `uberdriver:true` 也不會顯示
+  （`enabledApps` 只從現有清單挑）。要用 Uber 可走「＋ 新增其他 App」（捷徑）。
+- 測試 `autonavbar.js` 35 項（含舊設定殘留不顯示、設定面板無 Uber）＋`autonav2.js` 61 項全過。

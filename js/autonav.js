@@ -17,8 +17,8 @@
   // v1.1.463：結束也跟開始一樣＝總開關＋各 App 開關（prefs.end）；結束預設只開 55688
   var END_DEF = { taxi55688: true, gmaps: false, amaps: false };
   var END_PAYS = { cash: 1, card: 1, voucher: 1 };   // 現金／刷卡／紙本簽單才跳；「其他」不跳
-  // v1.1.464：主頁右上角快捷鈕（prefs.bar），預設 55688／Google 地圖／Uber
-  var BAR_DEF = { taxi55688: true, gmaps: true, uberdriver: true };
+  // v1.1.464：主頁右上角快捷鈕（prefs.bar），預設 55688／Google 地圖（v1.1.465 使用者要求拿掉 Uber）
+  var BAR_DEF = { taxi55688: true, gmaps: true };
 
   // App 清單（預設 on＝出現在選單）
   var APPS = [
@@ -31,11 +31,6 @@
     { id: 'gmaps', name: 'Google 地圖', icon: '🟢', def: true,
       urls: ['comgooglemaps://'],
       fallback: 'https://www.google.com/maps', badge: { t: 'G', bg: '#1a73e8', fg: '#fff' } },
-    // Uber 司機版（v1.1.464）：uberdriver:// 為常見 scheme（非官方文件）；失敗→App Store 搜尋「Uber Driver」
-    { id: 'uberdriver', name: 'Uber 司機版', icon: '⬛', def: false, shortcut: true,
-      urls: ['uberdriver://'],
-      fallback: 'itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=Uber%20Driver',
-      badge: { t: 'U', bg: '#000', fg: '#fff' } },
     { id: 'amaps', name: 'Apple 地圖', icon: '🍎', def: false,
       urls: ['maps://'],
       fallback: '', badge: { t: 'A', bg: '#34c759', fg: '#fff' } }
@@ -312,7 +307,7 @@
         return '<div class="sec">' + _badgeHtml(a) + ' ' + _esc(a.name) + ' 開啟方式' +
             (a.custom ? ' <button class="del" data-del="' + _esc(a.id) + '">刪除</button>' : '') + '</div>' +
           '<div class="scrow" style="padding-left:4px"><label>' + (a.custom ? 'iPhone 捷徑名稱（必填）' : '用 iPhone 捷徑開啟（選填，填捷徑名稱）') + '</label>' +
-          '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：' + _esc(a.custom ? a.name : (a.id === 'uberdriver' ? 'Uber' : '55688')) + '" value="' + _esc(shortcutName(a.id)) + '"></div>';
+          '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：' + _esc(a.custom ? a.name : '55688') + '" value="' + _esc(shortcutName(a.id)) + '"></div>';
       }).join('') +
       '<div class="sec">＋ 新增其他 App</div>' +
       '<div class="scrow" style="padding-left:4px"><label>任何 App 都能加：先在「捷徑」App 建一個「打開 App → 那個 App」的捷徑，再把名稱填在這</label>' +
