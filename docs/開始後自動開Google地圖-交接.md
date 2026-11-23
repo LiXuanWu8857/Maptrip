@@ -158,3 +158,16 @@ try {
   'none'|'direct'|'pick'（沿用 decide）；結束開 ≥2 個 App → 「收款完成！」選單。
 - 測試 `autonav2.js` 61 項全過（含結束 2 個 App 走真車資對話框→選單→選 Google、兩段開關互不影響）。
   注意 `?test` 模式的 probe 除錯浮層會擋 Playwright 點擊，測試裡用 addStyleTag 藏起來。
+
+### v1.1.464：主頁右上角快捷鈕＋Uber＋自訂 App
+- 使用者：「在主頁的右上角幫我加上跳轉 Google map 和我指定的 App（如 55688、Uber 等等）」。
+- `autonav.js renderBar()`：在 `#top-actions`（🔄☰）最前面插 `#an-bar`，每個開著的 App 一顆 `.icon-btn` 色塊字標
+  （55688＝黃底 55、Google＝藍底 G、Uber＝黑底 U、Apple＝綠底 A、自訂＝灰底首字），點一下 `launch(id)`（點擊當下開）。
+  開關 `maptrip_autonav_apps.bar`，預設 55688／Google／Uber 開。
+- **Uber 司機版**：`uberdriver://`（常見 scheme、非官方文件）→ 後備 App Store 搜尋「Uber Driver」；可填捷徑名稱。
+- **自訂 App**：設定面板最下方「＋ 新增其他 App」＝顯示名稱＋iPhone 捷徑名稱（`prefs.custom` + `prefs.sc`），新增後預設上右上角，
+  也會出現在開始/結束清單（預設關）；可刪除（連帶清 on/end/bar/sc）。
+- **版面**：`_fitBar` 放不下先 `an-tight` 縮小按鈕/間距，還不行就從尾端藏；`#top-date/#top-tripcount` nowrap。
+  390 寬實測放 3 顆、430 寬放 4 顆、375 寬 3 顆。日期/趟數開機後才填 → MutationObserver 盯 `#top-left` 重量＋開機後 1.5s/4s 再量。
+- 測試 `autonavbar.js` 32 項（預設 3 顆、點擊開對的 App、設定即時增減、自訂 App 新增/捷徑/重開仍在/刪除、375/390/430 不溢出、
+  趟數變 12 仍不溢出、全關不顯示）＋`autonav2.js` 61 項回歸全過，零 pageerror。

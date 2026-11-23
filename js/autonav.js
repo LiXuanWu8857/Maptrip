@@ -17,6 +17,8 @@
   // v1.1.463：結束也跟開始一樣＝總開關＋各 App 開關（prefs.end）；結束預設只開 55688
   var END_DEF = { taxi55688: true, gmaps: false, amaps: false };
   var END_PAYS = { cash: 1, card: 1, voucher: 1 };   // 現金／刷卡／紙本簽單才跳；「其他」不跳
+  // v1.1.464：主頁右上角快捷鈕（prefs.bar），預設 55688／Google 地圖／Uber
+  var BAR_DEF = { taxi55688: true, gmaps: true, uberdriver: true };
 
   // App 清單（預設 on＝出現在選單）
   var APPS = [
@@ -25,14 +27,48 @@
     // 最穩的直接跳法＝設定裡填「iPhone 捷徑」名稱（捷徑：打開 App → 55688司機版），會排在最先試。
     { id: 'taxi55688', name: '55688 司機版', icon: '🚕', def: true, shortcut: true,
       urls: ['twtaxidriver://', 'tw.com.masterhand.twtaxidriver://', 'taiwantaxidriver://', 'masterhand://'],
-      fallback: 'itms-apps://apps.apple.com/app/id1190486682' },
+      fallback: 'itms-apps://apps.apple.com/app/id1190486682', badge: { t: '55', bg: '#f9c400', fg: '#1a1a1a' } },
     { id: 'gmaps', name: 'Google 地圖', icon: '🟢', def: true,
       urls: ['comgooglemaps://'],
-      fallback: 'https://www.google.com/maps' },
+      fallback: 'https://www.google.com/maps', badge: { t: 'G', bg: '#1a73e8', fg: '#fff' } },
+    // Uber 司機版（v1.1.464）：uberdriver:// 為常見 scheme（非官方文件）；失敗→App Store 搜尋「Uber Driver」
+    { id: 'uberdriver', name: 'Uber 司機版', icon: '⬛', def: false, shortcut: true,
+      urls: ['uberdriver://'],
+      fallback: 'itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=Uber%20Driver',
+      badge: { t: 'U', bg: '#000', fg: '#fff' } },
     { id: 'amaps', name: 'Apple 地圖', icon: '🍎', def: false,
       urls: ['maps://'],
-      fallback: '' }
+      fallback: '', badge: { t: 'A', bg: '#34c759', fg: '#fff' } }
   ];
+  // 自訂 App（v1.1.464）：使用者自己加，名稱＋iPhone 捷徑名稱（捷徑「打開 App → X」＝任何 App 都能開）
+  function _customApps() {
+    var c = _prefs().custom;
+    if (!Array.isArray(c)) return [];
+    return c.filter(function (x) { return x && x.id && x.name; }).map(function (x) {
+      return { id: x.id, name: x.name, icon: '⭐', custom: true, shortcut: true, urls: [], fallback: '',
+        badge: { t: String(x.name).trim().charAt(0) || '?', bg: '#5f6368', fg: '#fff' } };
+    });
+  }
+  function allApps() { return APPS.concat(_customApps()); }
+  function addCustomApp(name, scName) {
+    name = String(name || '').trim(); scName = String(scName || '').trim();
+    if (!name) return null;
+    var p = _prefs(); if (!Array.isArray(p.custom)) p.custom = [];
+    var id = 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+    p.custom.push({ id: id, name: name });
+    if (!p.sc || typeof p.sc !== 'object') p.sc = {};
+    p.sc[id] = scName || name;
+    if (!p.bar || typeof p.bar !== 'object') p.bar = {};
+    p.bar[id] = true;   // 新增的自訂 App 預設出現在主頁右上角
+    _lsSet(PREF_KEY, JSON.stringify(p));
+    return id;
+  }
+  function removeCustomApp(id) {
+    var p = _prefs(); if (!Array.isArray(p.custom)) return;
+    p.custom = p.custom.filter(function (x) { return x && x.id !== id; });
+    ['on', 'end', 'bar', 'sc'].forEach(function (k) { if (p[k] && typeof p[k] === 'object') delete p[k][id]; });
+    _lsSet(PREF_KEY, JSON.stringify(p));
+  }
 
   function _ls(k) { try { return global.localStorage.getItem(k); } catch (_) { return null; } }
   function _lsSet(k, v) { try { global.localStorage.setItem(k, v); } catch (_) {} }
@@ -46,18 +82,20 @@
   }
   // phase：'start'（預設）或 'end'——兩段各自一組 App 開關
   function _bucket(p, phase) {
-    if (phase !== 'end') return p.on;
-    if (!p.end || typeof p.end !== 'object') p.end = {};
-    return p.end;
+    if (phase !== 'end' && phase !== 'bar') return p.on;
+    if (!p[phase] || typeof p[phase] !== 'object') p[phase] = {};
+    return p[phase];
   }
   function appOn(id, phase) {
     var p = _prefs(), m = _bucket(p, phase);
     if (Object.prototype.hasOwnProperty.call(m, id)) return !!m[id];
     if (phase === 'end') return !!END_DEF[id];
+    if (phase === 'bar') return !!BAR_DEF[id];
     var a = _find(id); return !!(a && a.def);
   }
   function setAppOn(id, v, phase) {
     var p = _prefs(); _bucket(p, phase)[id] = !!v; _lsSet(PREF_KEY, JSON.stringify(p));
+    if (phase === 'bar') renderBar();
   }
   // iPhone 捷徑名稱（選填）：有填就先用 shortcuts://run-shortcut 開（捷徑 App 一定在、scheme 官方）
   function shortcutName(id) { var p = _prefs(); return (p.sc && typeof p.sc[id] === 'string') ? p.sc[id].trim() : ''; }
@@ -71,8 +109,8 @@
     if (scName) list.push('shortcuts://run-shortcut?name=' + encodeURIComponent(scName));
     return list.concat(a.urls || []);
   }
-  function _find(id) { for (var i = 0; i < APPS.length; i++) if (APPS[i].id === id) return APPS[i]; return null; }
-  function enabledApps(phase) { return APPS.filter(function (a) { return appOn(a.id, phase); }); }
+  function _find(id) { var L = allApps(); for (var i = 0; i < L.length; i++) if (L[i].id === id) return L[i]; return null; }
+  function enabledApps(phase) { return allApps().filter(function (a) { return appOn(a.id, phase); }); }
 
   // 純函式：行程開始時要做什麼 → 'none' | 'direct' | 'pick'
   function decide(masterOn, visible, nEnabled) {
@@ -177,6 +215,16 @@
     '.mt-an .sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.3);}' +
     '.mt-an .sw.on{background:#34a853;}.mt-an .sw.on::after{left:22px;}' +
     '.mt-an .apps.dim{opacity:.45;}' +
+    '.an-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 3px;box-sizing:border-box;' +
+      'border-radius:6px;font:700 12px/1 -apple-system,system-ui,sans-serif;letter-spacing:-.3px;vertical-align:middle;}' +
+    '#an-bar{display:flex;align-items:center;gap:6px;}' +
+    '#an-bar .an-bbtn{width:34px;height:34px;padding:0;}' +
+    '#an-bar .an-bbtn .an-badge{min-width:24px;height:24px;font-size:13px;}' +
+    '#top-date,#top-tripcount{white-space:nowrap;}' +
+    '#top-bar.an-tight #top-actions{gap:5px;}#top-bar.an-tight #top-left{gap:8px;}' +
+    '#top-bar.an-tight #an-bar{gap:4px;}#top-bar.an-tight #an-bar .an-bbtn{width:30px;height:32px;}' +
+    '#top-bar.an-tight #an-bar .an-bbtn .an-badge{min-width:22px;height:22px;font-size:12px;}' +
+    '.mt-an .sec .del{float:right;font:inherit;font-size:12px;color:#d93025;background:none;border:1px solid #f1c0bc;border-radius:8px;padding:2px 8px;cursor:pointer;}' +
     '.mt-an .scrow{padding:4px 4px 12px 38px;border-bottom:1px solid #eef0f2;}' +
     '.mt-an .scrow label{display:block;font-size:12px;color:#666;margin-bottom:4px;}' +
     '.mt-an .scrow input{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:8px 10px;border:1px solid #d5d9de;border-radius:8px;background:#fff;color:#1a1a1a;}' +
@@ -240,16 +288,19 @@
   }
   function _appRows(phase, on) {
     return '<div class="apps' + (on ? '' : ' dim') + '">' +
-      APPS.map(function (a) {
-        return '<div class="row"><span class="ico">' + a.icon + '</span><span class="nm">' + _esc(a.name) + '</span>' +
+      allApps().map(function (a) {
+        return '<div class="row"><span class="ico">' + _badgeHtml(a) + '</span><span class="nm">' + _esc(a.name) + '</span>' +
           '<button class="sw' + (appOn(a.id, phase) ? ' on' : '') + '" data-app="' + _esc(a.id) + '" data-phase="' + phase + '" aria-label="' + _esc(a.name) + '"></button></div>';
       }).join('') + '</div>';
   }
   function _renderSettings() {
     var on = isOn(), eon = endOn();
-    var sc = APPS.filter(function (a) { return a.shortcut; });
+    var sc = allApps().filter(function (a) { return a.shortcut; });
     _settings.innerHTML = '<div class="in" style="max-height:calc(100dvh - 40px);overflow-y:auto"><h3>🧭 跳轉 App</h3>' +
-      '<p class="sub" style="margin:2px 4px 0">只開一個 App＝直接跳、不問；開兩個以上＝跳出選單讓你選。</p>' +
+      '<div class="sec">主頁右上角快捷鈕</div>' +
+      '<p class="sub" style="margin:2px 4px 0">開著的 App 會出現在主頁右上角，點一下直接跳過去。一般 iPhone 放得下 3 個，再多的會依順序自動藏起來（Pro Max 可到 ' + BAR_MAX + ' 個）。</p>' +
+      _appRows('bar', true) +
+      '<p class="sub" style="margin:10px 4px 0">開始／結束：只開一個 App＝直接跳、不問；開兩個以上＝跳出選單讓你選。</p>' +
       '<div class="sec">開始行程後</div>' +
       '<div class="row master"><span class="nm">開始後跳轉</span><button class="sw' + (on ? ' on' : '') + '" data-master="start" aria-label="開始後跳轉"></button></div>' +
       _appRows('start', on) +
@@ -258,14 +309,27 @@
       _appRows('end', eon) +
       '<p class="sub" style="margin:6px 4px 0">選「其他」不會跳。</p>' +
       sc.map(function (a) {
-        return '<div class="sec">' + a.icon + ' ' + _esc(a.name) + ' 開啟方式</div>' +
-          '<div class="scrow" style="padding-left:4px"><label>用 iPhone 捷徑開啟（選填，填捷徑名稱；開始與結束共用）</label>' +
-          '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：55688" value="' + _esc(shortcutName(a.id)) + '"></div>';
+        return '<div class="sec">' + _badgeHtml(a) + ' ' + _esc(a.name) + ' 開啟方式' +
+            (a.custom ? ' <button class="del" data-del="' + _esc(a.id) + '">刪除</button>' : '') + '</div>' +
+          '<div class="scrow" style="padding-left:4px"><label>' + (a.custom ? 'iPhone 捷徑名稱（必填）' : '用 iPhone 捷徑開啟（選填，填捷徑名稱）') + '</label>' +
+          '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：' + _esc(a.custom ? a.name : (a.id === 'uberdriver' ? 'Uber' : '55688')) + '" value="' + _esc(shortcutName(a.id)) + '"></div>';
       }).join('') +
+      '<div class="sec">＋ 新增其他 App</div>' +
+      '<div class="scrow" style="padding-left:4px"><label>任何 App 都能加：先在「捷徑」App 建一個「打開 App → 那個 App」的捷徑，再把名稱填在這</label>' +
+        '<input type="text" id="mt-an-newname" placeholder="顯示名稱，例如：LINE TAXI" style="margin-bottom:6px">' +
+        '<input type="text" id="mt-an-newsc" placeholder="捷徑名稱（不填＝同顯示名稱）">' +
+        '<button class="nb" data-add="1" style="margin:8px 0 0;justify-content:center"><b>＋ 新增</b></button></div>' +
       '<button class="cx" data-x="1">完成</button></div>';
     _settings.onclick = function (e) {
       var b = e.target.closest ? e.target.closest('button') : null; if (!b) return;
       if (b.getAttribute('data-x')) { close(); return; }
+      if (b.getAttribute('data-add')) {
+        var nm = (document.getElementById('mt-an-newname') || {}).value, scn = (document.getElementById('mt-an-newsc') || {}).value;
+        if (addCustomApp(nm, scn)) { renderBar(); _renderSettings(); }
+        return;
+      }
+      var del = b.getAttribute('data-del');
+      if (del) { removeCustomApp(del); renderBar(); _renderSettings(); return; }
       var m = b.getAttribute('data-master');
       if (m === 'start') { setOn(!isOn()); _renderSettings(); return; }
       if (m === 'end') { setEndOn(!endOn()); _renderSettings(); return; }
@@ -274,8 +338,66 @@
     };
     var ins = _settings.querySelectorAll('input[data-sc]');
     for (var k = 0; k < ins.length; k++) {
-      ins[k].addEventListener('input', function (e) { setShortcutName(e.target.getAttribute('data-sc'), e.target.value); });
+      ins[k].addEventListener('input', function (e) { setShortcutName(e.target.getAttribute('data-sc'), e.target.value); renderBar(); });
     }
+  }
+
+  // ---------- 主頁右上角快捷鈕（v1.1.464）----------
+  var BAR_MAX = 4;
+  function _badgeHtml(a) {
+    var b = a.badge || { t: '?', bg: '#5f6368', fg: '#fff' };
+    return '<span class="an-badge" style="background:' + b.bg + ';color:' + b.fg + '">' + _esc(b.t) + '</span>';
+  }
+  function barApps() { return enabledApps('bar').slice(0, BAR_MAX); }
+  function renderBar() {
+    if (typeof document === 'undefined') return;
+    var host = document.getElementById('top-actions'); if (!host) return;
+    _ensureBase();
+    var bar = document.getElementById('an-bar');
+    if (!bar) {
+      bar = document.createElement('span'); bar.id = 'an-bar';
+      host.insertBefore(bar, host.firstChild);
+      bar.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('button[data-app]') : null; if (!b) return;
+        e.stopPropagation(); launch(b.getAttribute('data-app'));
+      });
+    }
+    var apps = barApps();
+    bar.innerHTML = apps.map(function (a) {
+      return '<button class="icon-btn an-bbtn" data-app="' + _esc(a.id) + '" title="' + _esc(a.name) + '" aria-label="開啟 ' + _esc(a.name) + '">' + _badgeHtml(a) + '</button>';
+    }).join('');
+    bar.style.display = apps.length ? '' : 'none';
+    _watchTopLeft();
+    _fitBar();
+  }
+  // 頂列放不下時：先縮小（an-tight），還放不下就從尾端藏起快捷鈕（日期／趟數不被擠換行）
+  function _overflow() {
+    var tb = document.getElementById('top-bar'), l = document.getElementById('top-left'), r = document.getElementById('top-actions');
+    if (!tb || !l || !r) return false;
+    return l.getBoundingClientRect().right > r.getBoundingClientRect().left - 4 || tb.scrollWidth > tb.clientWidth + 1;
+  }
+  function _fitBar() {
+    var tb = document.getElementById('top-bar'), bar = document.getElementById('an-bar');
+    if (!tb || !bar) return;
+    tb.classList.remove('an-tight');
+    var btns = bar.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) btns[i].style.display = '';
+    if (!_overflow()) return;
+    tb.classList.add('an-tight');
+    for (var j = btns.length - 1; j >= 1 && _overflow(); j--) btns[j].style.display = 'none';
+  }
+  try { global.addEventListener('resize', function () { _fitBar(); }); } catch (_) {}
+  // 日期／趟數是開機後才填、之後會變（「12 趟」）→ 內容一變就重量；開機後再補兩次
+  var _fitObs = false;
+  function _watchTopLeft() {
+    if (_fitObs) return;
+    var l = document.getElementById('top-left');
+    if (!l || typeof MutationObserver === 'undefined') return;
+    _fitObs = true;
+    var t = null;
+    new MutationObserver(function () { clearTimeout(t); t = setTimeout(_fitBar, 50); })
+      .observe(l, { childList: true, characterData: true, subtree: true });
+    setTimeout(_fitBar, 1500); setTimeout(_fitBar, 4000);
   }
 
   function _syncMenuLabel() {
@@ -288,6 +410,12 @@
     isOn: isOn, setOn: setOn, appOn: appOn, setAppOn: setAppOn, enabledApps: enabledApps,
     decide: decide, launch: launch, urlsFor: urlsFor, shortcutName: shortcutName, setShortcutName: setShortcutName, STEP_MS: STEP_MS, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart, endOn: endOn, setEndOn: setEndOn, decideEnd: decideEnd, onTripEnd: onTripEnd,
     openPicker: openPicker, openSettings: openSettings, close: close,
-    syncMenuLabel: _syncMenuLabel
+    syncMenuLabel: _syncMenuLabel,
+    allApps: allApps, _fitBar: _fitBar, addCustomApp: addCustomApp, removeCustomApp: removeCustomApp, renderBar: renderBar, barApps: barApps, BAR_MAX: BAR_MAX
   };
+  // 開機就把右上角快捷鈕畫上（DOM 已在 index.html 裡，script 在 body 尾端載入）
+  try {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderBar);
+    else renderBar();
+  } catch (_) {}
 })();
