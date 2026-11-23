@@ -117,3 +117,13 @@ try {
   - Apple 地圖：`maps://`
 - 黑盒子：`autonav:open <id>`／`autonav:fallback <id>`（用來判讀 55688 scheme 有沒有成功）。
 - 測試 `autonav2.js`（scratchpad，完整 App 實跑）25 項全過零 pageerror。
+
+### v1.1.460 修：按 55688 完全沒反應（血淚）
+- 實機回報：點「55688 司機版」停在原畫面，連 App Store 後備都沒開。
+- 根因：WKWebView 的 `window.open` 只在「點擊當下」放行。`taiwantaxidriver://` 猜錯→ iOS 靜默失敗；
+  1.5 秒後的後備 `window.open` 已不是點擊當下 → 被擋 → 什麼都沒發生。（v1.1.454 只開 Google 時用 setTimeout 350ms 也有同樣風險。）
+- 修法：`_openUrl` 在 App 殼（`Capacitor.isNativePlatform()`）改用 `location.href`：Capacitor 導覽委派把非本站網址／
+  非 http scheme 一律交 `UIApplication.open`、並 cancel 導覽（頁面不離開），**不需點擊手勢**。瀏覽器仍用 window.open。
+- 55688 實際 scheme 仍未知 → 目前實機行為預期是「開到 App Store 頁再按開啟」。替代方案：iOS 捷徑
+  `shortcuts://run-shortcut?name=...`（使用者自建「打開 App」捷徑，可直接開任何 App）。
+- 測試 `autonav2.js` 擴到 30 項（native 走 location.href、後備非點擊當下也能開、不用 window.open）全過。

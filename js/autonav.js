@@ -54,6 +54,19 @@
     return nEnabled === 1 ? 'direct' : 'pick';
   }
 
+  // 開外部網址。App 殼（Capacitor）內改用 location.href：WKWebView 的 window.open 只在「點擊當下」放行
+  // （v1.1.459 血淚：55688 scheme 沒反應後，1.5 秒後的 App Store 後備 window.open 已非點擊當下→被擋＝完全沒反應）。
+  // location.href 走 Capacitor 導覽委派：非本站網址／非 http scheme 一律交 UIApplication.open，不需點擊手勢、
+  // 頁面也不會離開（導覽被 cancel）。瀏覽器（Safari 後備）仍用 window.open，免得把 MapTrip 頁面導走。
+  function _isNative() {
+    try { return !!(global.Capacitor && global.Capacitor.isNativePlatform && global.Capacitor.isNativePlatform()); } catch (_) { return false; }
+  }
+  var _navTo = function (u) { global.location.href = u; };   // 測試可替換（_setNav）
+  function _openUrl(u) {
+    if (_isNative()) { try { _navTo(u); return; } catch (_) {} }
+    try { global.open(u, '_blank'); } catch (_) {}
+  }
+
   // 開 App：scheme → 1.5 秒仍在前景就開後備網址
   function launch(id) {
     var a = _find(id); if (!a) return;
@@ -63,13 +76,13 @@
     function onBlur() { left = true; }
     document.addEventListener('visibilitychange', onHide);
     global.addEventListener('blur', onBlur);
-    try { global.open(a.url, '_blank'); } catch (_) {}
+    _openUrl(a.url);
     setTimeout(function () {
       document.removeEventListener('visibilitychange', onHide);
       global.removeEventListener('blur', onBlur);
       if (!left && a.fallback && document.visibilityState === 'visible') {
         try { global.__mtLog && global.__mtLog('autonav:fallback ' + id); } catch (_) {}
-        try { global.open(a.fallback, '_blank'); } catch (_) {}
+        _openUrl(a.fallback);
       }
     }, 1500);
   }
@@ -189,7 +202,7 @@
   global.MaptripAutoNav = {
     APPS: APPS,
     isOn: isOn, setOn: setOn, appOn: appOn, setAppOn: setAppOn, enabledApps: enabledApps,
-    decide: decide, launch: launch, onTripStart: onTripStart,
+    decide: decide, launch: launch, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart,
     openPicker: openPicker, openSettings: openSettings, close: close,
     syncMenuLabel: _syncMenuLabel
   };
