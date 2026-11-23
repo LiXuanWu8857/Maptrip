@@ -98,3 +98,22 @@ try {
 - 存旗標：localStorage `maptrip_autonav`（裝置級,不分帳號）。
 - 與其他「選單開關」同一套：`data-menu` → `_dispatchMenu` → toggle 函式 → 更新鈕文字
   （可參考 `glmap`/單行道 `maptrip_oneway_on` 的做法）。
+
+---
+
+## v1.1.459 改版：跳出選單選 App（取代上面「直接跳 Google」）
+
+使用者需求：「改成跳出選項讓我選擇要跳轉到哪個 app，預設是 55688 和 Google map，讓我在開關設定」。
+
+- **新模組 `js/autonav.js`（`MaptripAutoNav`）**：所有邏輯在這；app.js `toggleAutoNav/_syncAutoNavLabel` 只剩薄包裝，
+  recorder.js `beginRecording()` 改呼叫 `MaptripAutoNav.onTripStart()`。
+- **設定面板**（選單 ⚙️設定 →「🧭 開始後跳轉 App：開/關」）：總開關（沿用 `maptrip_autonav`）＋每個 App 開關
+  （`maptrip_autonav_apps` = `{on:{id:bool}}`）。預設：55688 司機版 開、Google 地圖 開、Apple 地圖 關。
+- **行程開始**（前景＋總開關開）：開 ≥2 個 App → 底部選單（各 App＋「不用，留在 MapTrip」）；只開 1 個 → 直接跳不問；0 個 → 不動。
+- **開啟＋後備**：`window.open(scheme)`；1.5 秒內沒有 blur/hidden（＝沒跳走）就開 fallback 網址。
+  - Google：`comgooglemaps://` → 後備 `https://www.google.com/maps`
+  - **55688 司機版：`taiwantaxidriver://` 是猜的（查不到官方 scheme）** → 後備 App Store 頁 `https://apps.apple.com/tw/app/id1190486682`
+    （已安裝時頁上是「開啟」鈕＝多點一下）。若實機確認真正的 scheme，改 `autonav.js` APPS 的 `url` 一行即可。
+  - Apple 地圖：`maps://`
+- 黑盒子：`autonav:open <id>`／`autonav:fallback <id>`（用來判讀 55688 scheme 有沒有成功）。
+- 測試 `autonav2.js`（scratchpad，完整 App 實跑）25 項全過零 pageerror。

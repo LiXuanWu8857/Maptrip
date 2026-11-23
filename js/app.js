@@ -1036,19 +1036,9 @@ function toggleGlEngine() {
   location.reload();
 }
 
-// 「開始後自動開 Google 地圖」開關（設定，預設關）：開了之後每次按開始行程就自動跳 Google Maps app（v1.1.454）
-function _syncAutoNavLabel() {
-  const b = document.getElementById('autonav-menu-btn');
-  if (!b) return;
-  let on = false; try { on = localStorage.getItem('maptrip_autonav') === '1'; } catch (_) {}
-  b.textContent = on ? '🧭 開始後自動開 Google 地圖：開' : '🧭 開始後自動開 Google 地圖：關';
-}
-function toggleAutoNav() {
-  let on = false; try { on = localStorage.getItem('maptrip_autonav') === '1'; } catch (_) {}
-  try { localStorage.setItem('maptrip_autonav', on ? '0' : '1'); } catch (_) {}
-  _syncAutoNavLabel();
-  toast(on ? '已關閉：開始後不自動開 Google 地圖' : '已開啟：之後按「開始」會自動跳 Google 地圖');
-}
+// 「開始後跳轉 App」設定（v1.1.459 起改為選單＋各 App 開關，邏輯在 js/autonav.js；這裡只是薄包裝）
+function _syncAutoNavLabel() { if (window.MaptripAutoNav) MaptripAutoNav.syncMenuLabel(); }
+function toggleAutoNav() { closeTopMenu(); if (window.MaptripAutoNav) MaptripAutoNav.openSettings(); }
 
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
@@ -2583,7 +2573,7 @@ function boot() {
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
   if (glBtn) glBtn.textContent = window.MAPTRIP_GL ? '🗺 換回標準地圖' : '🧪 新地圖引擎（Beta）';
-  _syncAutoNavLabel();   // 還原「開始後自動開 Google 地圖」開關文字
+  _syncAutoNavLabel();   // 還原「開始後跳轉 App」開關文字
   // 朝行進方向預設開啟（按指北針可關，選擇會記住）
   try {
     headingUp = localStorage.getItem('maptrip_headup') !== '0';

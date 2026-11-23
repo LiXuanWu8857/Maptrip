@@ -227,15 +227,9 @@
     floatWin()?.showRecording({ elapsed: 0, distance: 0 }).catch(() => {});
     saveActiveTrip();   // 立即存一份，供重載復原
 
-    // 「開始後自動開 Google 地圖」設定開（預設關）→ 前景按開始時自動跳 Google Maps app（v1.1.454）。
-    // 僅前景（visible）才跳，避免鎖屏/背景（widget）啟動時誤跳；MapTrip 在背景照常記錄 GPS。
-    // 用 comgooglemaps:// scheme（同 tel:/導航，Capacitor WKWebView 交系統開 App，不需改 Info.plist）。
-    try {
-      if (global.localStorage && localStorage.getItem('maptrip_autonav') === '1'
-          && (typeof document === 'undefined' || document.visibilityState === 'visible')) {
-        setTimeout(function () { try { global.open('comgooglemaps://', '_blank'); } catch (_) {} }, 350);
-      }
-    } catch (_) {}
+    // 「開始後跳轉 App」（v1.1.459，邏輯在 js/autonav.js）：總開關開＋僅前景 → 跳選單（55688／Google 地圖…），
+    // 只開一個 App 就直接跳。鎖定畫面/背景（widget）啟動不跳；MapTrip 在背景照常記錄 GPS。
+    try { global.MaptripAutoNav && global.MaptripAutoNav.onTripStart(); } catch (_) {}
 
     // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
     await requestWakeLock();
