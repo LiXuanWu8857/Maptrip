@@ -176,3 +176,14 @@ try {
 - 使用者：「Uber 拔掉」。APPS 移除 `uberdriver`、BAR_DEF 只剩 55688／Google。舊裝置存過 `uberdriver:true` 也不會顯示
   （`enabledApps` 只從現有清單挑）。要用 Uber 可走「＋ 新增其他 App」（捷徑）。
 - 測試 `autonavbar.js` 35 項（含舊設定殘留不顯示、設定面板無 Uber）＋`autonav2.js` 61 項全過。
+
+### v1.1.466：右上角按鈕改用 App 官方圖示
+- 使用者：「右上角的按鈕可以放進他們 App 的圖案嗎」。
+- 不把圖示檔放進 repo；**在使用者手機上**開機 3 秒後用 iTunes API **JSONP**（`callback=`，免 CORS）查：
+  內建 App 用 `storeId`（55688 司機版 1190486682、Google 地圖 585027354、Apple 地圖 915056765）一次 `lookup` 批次；
+  自訂 App 用名稱 `search`（App Store 第一筆）。`_artFrom` 取 artworkUrl512/100、改 `120x120bb.png`、只收 https。
+- 快取 `maptrip_appicons` `{ 'id:<storeId>' | 'q:<name>': {u, t} }`：有圖 7 天刷新、查不到 1 天後重試、網路失敗不寫。
+- `_badgeHtml`：色塊字標一直墊底，有圖示就疊 `<img class=an-ic>`（`.has-ic` 隱藏字標文字），`onerror` 移除圖＝退回字標。
+  SW 不攔 itunes/mzstatic（「其他請求：不攔截」）。
+- 沙箱連不到 itunes.apple.com → 測試 `autonavicon.js` 18 項用 route mock（JSONP 回應、圖片 200/404、離線 abort）全過；
+  **實機才會看到真圖示**。

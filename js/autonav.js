@@ -25,13 +25,13 @@
     // 55688 司機版：官方 scheme 查無資料 → 依序試幾個候選（iOS 開不認得的 scheme＝靜默失敗、無副作用），
     // 都沒跳走 → App Store 頁（itms-apps:// 一律由 App Store 處理；已安裝時頁上是「開啟」）。
     // 最穩的直接跳法＝設定裡填「iPhone 捷徑」名稱（捷徑：打開 App → 55688司機版），會排在最先試。
-    { id: 'taxi55688', name: '55688 司機版', icon: '🚕', def: true, shortcut: true,
+    { id: 'taxi55688', name: '55688 司機版', icon: '🚕', def: true, shortcut: true, storeId: '1190486682',
       urls: ['twtaxidriver://', 'tw.com.masterhand.twtaxidriver://', 'taiwantaxidriver://', 'masterhand://'],
       fallback: 'itms-apps://apps.apple.com/app/id1190486682', badge: { t: '55', bg: '#f9c400', fg: '#1a1a1a' } },
-    { id: 'gmaps', name: 'Google 地圖', icon: '🟢', def: true,
+    { id: 'gmaps', name: 'Google 地圖', icon: '🟢', def: true, storeId: '585027354',
       urls: ['comgooglemaps://'],
       fallback: 'https://www.google.com/maps', badge: { t: 'G', bg: '#1a73e8', fg: '#fff' } },
-    { id: 'amaps', name: 'Apple 地圖', icon: '🍎', def: false,
+    { id: 'amaps', name: 'Apple 地圖', icon: '🍎', def: false, storeId: '915056765',
       urls: ['maps://'],
       fallback: '', badge: { t: 'A', bg: '#34c759', fg: '#fff' } }
   ];
@@ -213,6 +213,12 @@
     '.an-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 3px;box-sizing:border-box;' +
       'border-radius:6px;font:700 12px/1 -apple-system,system-ui,sans-serif;letter-spacing:-.3px;vertical-align:middle;}' +
     '#an-bar{display:flex;align-items:center;gap:6px;}' +
+    '.an-badge{position:relative;overflow:hidden;}' +
+    '.an-badge .an-ic{position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;object-fit:cover;}' +
+    '.an-badge.has-ic{background:transparent!important;color:transparent!important;}' +
+    '#an-bar .an-bbtn{background:transparent!important;}' +
+    '#an-bar .an-bbtn .an-badge.has-ic{min-width:30px;height:30px;border-radius:8px;box-shadow:0 0 0 .5px rgba(0,0,0,.15);}' +
+    '#top-bar.an-tight #an-bar .an-bbtn .an-badge.has-ic{min-width:28px;height:28px;}' +
     '#an-bar .an-bbtn{width:34px;height:34px;padding:0;}' +
     '#an-bar .an-bbtn .an-badge{min-width:24px;height:24px;font-size:13px;}' +
     '#top-date,#top-tripcount{white-space:nowrap;}' +
@@ -320,7 +326,7 @@
       if (b.getAttribute('data-x')) { close(); return; }
       if (b.getAttribute('data-add')) {
         var nm = (document.getElementById('mt-an-newname') || {}).value, scn = (document.getElementById('mt-an-newsc') || {}).value;
-        if (addCustomApp(nm, scn)) { renderBar(); _renderSettings(); }
+        if (addCustomApp(nm, scn)) { renderBar(); _renderSettings(); fetchIcons(false); }
         return;
       }
       var del = b.getAttribute('data-del');
@@ -339,9 +345,76 @@
 
   // ---------- 主頁右上角快捷鈕（v1.1.464）----------
   var BAR_MAX = 4;
+  // App 官方圖示（v1.1.466）：在使用者手機上用 iTunes lookup/search API（JSONP，免 CORS）查 App Store 圖示網址，
+  // 快取 localStorage `maptrip_appicons`（7 天刷新）；查不到／圖片載入失敗 → 退回色塊字標（字標一直墊在底下）。
+  // 內建 App 用 storeId 查；自訂 App 用名稱搜尋 App Store 第一筆。
+  var ICON_KEY = 'maptrip_appicons', ICON_TTL = 7 * 864e5;
+  function _iconCache() { try { var c = JSON.parse(_ls(ICON_KEY) || '{}'); return (c && typeof c === 'object') ? c : {}; } catch (_) { return {}; } }
+  function _iconKey(a) { return a.storeId ? 'id:' + a.storeId : (a.custom ? 'q:' + String(a.name).trim().toLowerCase() : ''); }
+  function iconUrl(a) {
+    var k = _iconKey(a); if (!k) return '';
+    var e = _iconCache()[k];
+    return (e && typeof e.u === 'string' && /^https:\/\//.test(e.u)) ? e.u : '';
+  }
+  // 純函式：iTunes API 回應 → 圖示網址（優先 512→改小尺寸省流量）
+  function _artFrom(r) {
+    if (!r) return '';
+    var u = r.artworkUrl512 || r.artworkUrl100 || r.artworkUrl60 || '';
+    if (!/^https:\/\//.test(u)) return '';
+    return u.replace(/\/\d+x\d+(bb)?\.(png|jpg|jpeg|webp)$/i, '/120x120bb.png');
+  }
+  var _jsonpN = 0;
+  function _jsonp(url, cb) {
+    var name = '__mtIconCb' + (++_jsonpN) + '_' + Date.now().toString(36);
+    var sc = document.createElement('script'), done = false;
+    function fin(d) { if (done) return; done = true; try { delete global[name]; } catch (_) { global[name] = undefined; } if (sc.parentNode) sc.parentNode.removeChild(sc); cb(d); }
+    global[name] = function (d) { fin(d); };
+    sc.onerror = function () { fin(null); };
+    setTimeout(function () { fin(null); }, 10000);
+    sc.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'callback=' + name;
+    document.head.appendChild(sc);
+  }
+  var _iconBusy = false;
+  function fetchIcons(force) {
+    if (_iconBusy || typeof document === 'undefined') return;
+    var cache = _iconCache(), now = Date.now();
+    var stale = function (k) { var e = cache[k]; return force || !e || !(now - (e.t || 0) < (e.u ? ICON_TTL : 864e5)); };   // 查不到的 1 天後再試
+    var ids = [], qs = [];
+    allApps().forEach(function (a) {
+      var k = _iconKey(a); if (!k || !stale(k)) return;
+      if (a.storeId) ids.push(a.storeId); else qs.push(a);
+    });
+    if (!ids.length && !qs.length) return;
+    _iconBusy = true;
+    var pending = (ids.length ? 1 : 0) + qs.length;
+    function save(k, u) { var c = _iconCache(); c[k] = { u: u || '', t: Date.now() }; _lsSet(ICON_KEY, JSON.stringify(c)); }
+    function one() {
+      if (--pending > 0) return;
+      _iconBusy = false;
+      try { global.__mtLog && global.__mtLog('autonav:icons ' + Object.keys(_iconCache()).length); } catch (_) {}
+      renderBar();
+      if (_settings && _settings.classList.contains('on')) _renderSettings();
+    }
+    if (ids.length) {
+      _jsonp('https://itunes.apple.com/lookup?country=tw&id=' + ids.join(','), function (d) {
+        var got = {};
+        ((d && d.results) || []).forEach(function (r) { if (r && r.trackId) got[String(r.trackId)] = _artFrom(r); });
+        ids.forEach(function (id) { if (d) save('id:' + id, got[id] || ''); });   // 網路失敗（d=null）不寫快取，下次再試
+        one();
+      });
+    }
+    qs.forEach(function (a) {
+      _jsonp('https://itunes.apple.com/search?country=tw&entity=software&limit=1&term=' + encodeURIComponent(a.name), function (d) {
+        if (d) save(_iconKey(a), _artFrom(d.results && d.results[0]));
+        one();
+      });
+    });
+  }
   function _badgeHtml(a) {
     var b = a.badge || { t: '?', bg: '#5f6368', fg: '#fff' };
-    return '<span class="an-badge" style="background:' + b.bg + ';color:' + b.fg + '">' + _esc(b.t) + '</span>';
+    var u = iconUrl(a);
+    return '<span class="an-badge' + (u ? ' has-ic' : '') + '" style="background:' + b.bg + ';color:' + b.fg + '">' + _esc(b.t) +
+      (u ? '<img class="an-ic" alt="" src="' + _esc(u) + '" onerror="this.parentNode.classList.remove(\'has-ic\');this.remove()">' : '') + '</span>';
   }
   function barApps() { return enabledApps('bar').slice(0, BAR_MAX); }
   function renderBar() {
@@ -406,11 +479,12 @@
     decide: decide, launch: launch, urlsFor: urlsFor, shortcutName: shortcutName, setShortcutName: setShortcutName, STEP_MS: STEP_MS, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart, endOn: endOn, setEndOn: setEndOn, decideEnd: decideEnd, onTripEnd: onTripEnd,
     openPicker: openPicker, openSettings: openSettings, close: close,
     syncMenuLabel: _syncMenuLabel,
-    allApps: allApps, _fitBar: _fitBar, addCustomApp: addCustomApp, removeCustomApp: removeCustomApp, renderBar: renderBar, barApps: barApps, BAR_MAX: BAR_MAX
+    allApps: allApps, _fitBar: _fitBar, fetchIcons: fetchIcons, iconUrl: iconUrl, _artFrom: _artFrom, addCustomApp: addCustomApp, removeCustomApp: removeCustomApp, renderBar: renderBar, barApps: barApps, BAR_MAX: BAR_MAX
   };
-  // 開機就把右上角快捷鈕畫上（DOM 已在 index.html 裡，script 在 body 尾端載入）
+  // 開機就把右上角快捷鈕畫上（DOM 已在 index.html 裡，script 在 body 尾端載入）；稍後背景查官方圖示
   try {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderBar);
     else renderBar();
+    setTimeout(function () { fetchIcons(false); }, 3000);
   } catch (_) {}
 })();

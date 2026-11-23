@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.465**（2026-11-23）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.466**（2026-11-23）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -117,7 +117,9 @@
   **v1.1.463 結束段改成跟開始一樣**＝總開關＋各 App 開關（`maptrip_autonav_apps.end`，預設只開 55688），開 ≥2 個跳「收款完成！」選單；捷徑名稱兩段共用。
   **v1.1.464 主頁右上角快捷鈕**：`#top-actions` 前插 `#an-bar`（色塊字標按鈕 55/G/U/A），各 App 開關 `prefs.bar`（預設 55688／Google）；
   **v1.1.465 使用者要求拔掉 Uber**（舊設定殘留 uberdriver 無害、不顯示）。另有**自訂 App**（`prefs.custom`，名稱＋iPhone 捷徑名稱，任何 App 都能開，開始/結束清單也有）。
-  `_fitBar` 頂列放不下先縮（`an-tight`）再從尾端藏鈕（390 寬約放 3 顆），MutationObserver 盯 `#top-left` 文字變化重量。測試 `autonavbar.js` 32。詳見 `docs/開始後自動開Google地圖-交接.md`
+  `_fitBar` 頂列放不下先縮（`an-tight`）再從尾端藏鈕（390 寬約放 3 顆），MutationObserver 盯 `#top-left` 文字變化重量。測試 `autonavbar.js` 35。
+  **v1.1.466 官方 App 圖示**：裝置上用 iTunes lookup（storeId 批次）/search（自訂 App 用名稱）**JSONP** 查 App Store 圖示（沙箱連不到 itunes，測試用 route mock），
+  快取 `maptrip_appicons`（7 天；查不到 1 天後重試；網路失敗不寫快取）；`<img>` 疊在色塊字標上，載入失敗 onerror 移除＝退回字標。測試 `autonavicon.js` 18。詳見 `docs/開始後自動開Google地圖-交接.md`
 - **記帳**：每趟車資、現金/刷卡/其他（其他可填備註 label；改回現金/刷卡會清 label）、
   抽成 commission、叫車費 dispatch
 - **叫車費切換 + 抽成延後填（v249；v250 預設有）**：叫車費改成單一切換按鈕（`toggleDispatch`），
