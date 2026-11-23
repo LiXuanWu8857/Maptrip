@@ -127,3 +127,17 @@ try {
 - 55688 實際 scheme 仍未知 → 目前實機行為預期是「開到 App Store 頁再按開啟」。替代方案：iOS 捷徑
   `shortcuts://run-shortcut?name=...`（使用者自建「打開 App」捷徑，可直接開任何 App）。
 - 測試 `autonav2.js` 擴到 30 項（native 走 location.href、後備非點擊當下也能開、不用 window.open）全過。
+
+### v1.1.461：55688 仍沒跳（Google 有跳）
+- 實機：Google 地圖有跳，55688 仍停在原畫面（無法確認當時是否已更新到 v1.1.460，故這版補黑盒子數據）。
+- 已讀 Capacitor 6.2.3 原始碼 `WebViewDelegationHandler.swift`：主框架導覽到非本站網址 → `UIApplication.shared.open(navURL)` 並 cancel
+  ＝ location.href 路徑確實會交給 iOS；window.open 走 `createWebViewWith`（需點擊手勢）。
+- 改：
+  1. 55688 依序試候選 scheme（`twtaxidriver://`、`tw.com.masterhand.twtaxidriver://`、`taiwantaxidriver://`、`masterhand://`，
+     依 Android 套件名 `tw.com.masterhand.twtaxidriver` 推測），每個 1.2 秒看有沒有 blur/hidden。
+  2. 後備改 `itms-apps://apps.apple.com/app/id1190486682`（App Store 專屬 scheme）。
+  3. 設定面板 55688 下方「用 iPhone 捷徑開啟」輸入框（`maptrip_autonav_apps.sc.taxi55688`）→ 最先試
+     `shortcuts://run-shortcut?name=<名稱>`。使用者在「捷徑」App 建「打開 App → 55688司機版」即可保證直接跳（會閃一下捷徑）。
+  4. 黑盒子：`autonav:try <id> <url>`、`autonav:ok blur|hidden <id> #<第幾個>`、`autonav:fallback`、`autonav:fail`。
+     **若某候選成功（ok … #n），就把那個 scheme 固定到第一個**。
+- 測試 `autonav2.js` 35 項全過。

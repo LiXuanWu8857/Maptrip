@@ -4,8 +4,8 @@
 //
 // 開啟方式：window.open(scheme,'_blank')，Capacitor WKWebView 把非 http(s) 交給 iOS 開對應 App
 // （同 tel:／導航，不需改 Info.plist：UIApplication.open 不需 LSApplicationQueriesSchemes）。
-// 後備：開了 scheme 後 1.5 秒畫面仍在前景＝沒跳走（沒裝／scheme 不對）→ 改開 fallback 網址
-//   （Google＝地圖網頁、55688＝App Store 頁面，已安裝時頁面上就是「開啟」鈕）。
+// 後備：依序試網址（每個 1.2 秒），畫面一直在前景＝沒跳走 → 改開 fallback 網址
+//   （Google＝地圖網頁、55688＝App Store 頁面，已安裝時頁面上就是「開啟」鈕）。v1.1.461 起可填 iPhone 捷徑名稱。
 // 舊版旗標 maptrip_autonav（'1'/'0'）沿用為總開關。
 (function () {
   'use strict';
@@ -16,14 +16,17 @@
 
   // App 清單（預設 on＝出現在選單）
   var APPS = [
-    { id: 'taxi55688', name: '55688 司機版', icon: '🚕', def: true,
-      url: 'taiwantaxidriver://',
-      fallback: 'https://apps.apple.com/tw/app/id1190486682' },
+    // 55688 司機版：官方 scheme 查無資料 → 依序試幾個候選（iOS 開不認得的 scheme＝靜默失敗、無副作用），
+    // 都沒跳走 → App Store 頁（itms-apps:// 一律由 App Store 處理；已安裝時頁上是「開啟」）。
+    // 最穩的直接跳法＝設定裡填「iPhone 捷徑」名稱（捷徑：打開 App → 55688司機版），會排在最先試。
+    { id: 'taxi55688', name: '55688 司機版', icon: '🚕', def: true, shortcut: true,
+      urls: ['twtaxidriver://', 'tw.com.masterhand.twtaxidriver://', 'taiwantaxidriver://', 'masterhand://'],
+      fallback: 'itms-apps://apps.apple.com/app/id1190486682' },
     { id: 'gmaps', name: 'Google 地圖', icon: '🟢', def: true,
-      url: 'comgooglemaps://',
+      urls: ['comgooglemaps://'],
       fallback: 'https://www.google.com/maps' },
     { id: 'amaps', name: 'Apple 地圖', icon: '🍎', def: false,
-      url: 'maps://',
+      urls: ['maps://'],
       fallback: '' }
   ];
 
@@ -44,6 +47,18 @@
   }
   function setAppOn(id, v) {
     var p = _prefs(); p.on[id] = !!v; _lsSet(PREF_KEY, JSON.stringify(p));
+  }
+  // iPhone 捷徑名稱（選填）：有填就先用 shortcuts://run-shortcut 開（捷徑 App 一定在、scheme 官方）
+  function shortcutName(id) { var p = _prefs(); return (p.sc && typeof p.sc[id] === 'string') ? p.sc[id].trim() : ''; }
+  function setShortcutName(id, name) {
+    var p = _prefs(); if (!p.sc || typeof p.sc !== 'object') p.sc = {};
+    p.sc[id] = String(name || '').trim(); _lsSet(PREF_KEY, JSON.stringify(p));
+  }
+  // 純函式：這個 App 要依序試哪些網址（捷徑優先）
+  function urlsFor(a, scName) {
+    var list = [];
+    if (scName) list.push('shortcuts://run-shortcut?name=' + encodeURIComponent(scName));
+    return list.concat(a.urls || []);
   }
   function _find(id) { for (var i = 0; i < APPS.length; i++) if (APPS[i].id === id) return APPS[i]; return null; }
   function enabledApps() { return APPS.filter(function (a) { return appOn(a.id); }); }
@@ -67,24 +82,32 @@
     try { global.open(u, '_blank'); } catch (_) {}
   }
 
-  // 開 App：scheme → 1.5 秒仍在前景就開後備網址
+  // 開 App：依序試網址，每個等 STEP_MS 看有沒有跳走（blur/hidden）；都沒跳走 → 後備網址。
+  // 每一步都記黑盒子（autonav:try/ok/fallback），實機失敗時用數據判讀是哪一步。
+  var STEP_MS = 1200;
   function launch(id) {
     var a = _find(id); if (!a) return;
-    try { global.__mtLog && global.__mtLog('autonav:open ' + id); } catch (_) {}
-    var left = false;
-    function onHide() { if (document.visibilityState === 'hidden') left = true; }
-    function onBlur() { left = true; }
+    var list = urlsFor(a, a.shortcut ? shortcutName(id) : '');
+    var left = false, i = 0;
+    function log(m) { try { global.__mtLog && global.__mtLog('autonav:' + m); } catch (_) {} }
+    function onHide() { if (document.visibilityState === 'hidden') { if (!left) log('ok hidden ' + id + ' #' + (i - 1)); left = true; } }
+    function onBlur() { if (!left) log('ok blur ' + id + ' #' + (i - 1)); left = true; }
     document.addEventListener('visibilitychange', onHide);
     global.addEventListener('blur', onBlur);
-    _openUrl(a.url);
-    setTimeout(function () {
-      document.removeEventListener('visibilitychange', onHide);
-      global.removeEventListener('blur', onBlur);
-      if (!left && a.fallback && document.visibilityState === 'visible') {
-        try { global.__mtLog && global.__mtLog('autonav:fallback ' + id); } catch (_) {}
-        _openUrl(a.fallback);
+    function done() { document.removeEventListener('visibilitychange', onHide); global.removeEventListener('blur', onBlur); }
+    function step() {
+      if (left) { done(); return; }
+      if (i < list.length) {
+        var u = list[i++]; log('try ' + id + ' ' + u.slice(0, 48));
+        _openUrl(u);
+        setTimeout(step, STEP_MS);
+        return;
       }
-    }, 1500);
+      done();
+      if (a.fallback && document.visibilityState === 'visible') { log('fallback ' + id); _openUrl(a.fallback); }
+      else log('fail ' + id);
+    }
+    step();
   }
 
   // 行程開始時呼叫（recorder.beginRecording）
@@ -120,10 +143,14 @@
     '.mt-an .sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.3);}' +
     '.mt-an .sw.on{background:#34a853;}.mt-an .sw.on::after{left:22px;}' +
     '.mt-an .apps.dim{opacity:.45;}' +
+    '.mt-an .scrow{padding:4px 4px 12px 38px;border-bottom:1px solid #eef0f2;}' +
+    '.mt-an .scrow label{display:block;font-size:12px;color:#666;margin-bottom:4px;}' +
+    '.mt-an .scrow input{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:8px 10px;border:1px solid #d5d9de;border-radius:8px;background:#fff;color:#1a1a1a;}' +
     '.mt-an button.cx{text-align:center;color:#666;background:none;border:none;font:inherit;font-size:14px;width:100%;padding:8px 8px 2px;margin-top:4px;cursor:pointer;}' +
     '@media (prefers-color-scheme: dark){' +
       '.mt-an .in{background:#1c2024;}.mt-an h3,.mt-an .row{color:#e8eaed;}.mt-an .sub{color:#9aa0a6;}' +
-      '.mt-an .row{border-color:#2a2f34;}' +
+      '.mt-an .row,.mt-an .scrow{border-color:#2a2f34;}.mt-an .scrow label{color:#9aa0a6;}' +
+      '.mt-an .scrow input{background:#12161a;color:#e8eaed;border-color:#2a2f34;}' +
       '.mt-an button.nb{background:#1c2024;color:#e8eaed;border-color:#2a2f34;}.mt-an button.cx{color:#9aa0a6;}}';
 
   var _bd = null, _picker = null, _settings = null;
@@ -182,7 +209,9 @@
       '<div class="apps' + (on ? '' : ' dim') + '">' +
       APPS.map(function (a) {
         return '<div class="row"><span class="ico">' + a.icon + '</span><span class="nm">' + _esc(a.name) + '</span>' +
-          '<button class="sw' + (appOn(a.id) ? ' on' : '') + '" data-app="' + _esc(a.id) + '" aria-label="' + _esc(a.name) + '"></button></div>';
+          '<button class="sw' + (appOn(a.id) ? ' on' : '') + '" data-app="' + _esc(a.id) + '" aria-label="' + _esc(a.name) + '"></button></div>' +
+          (a.shortcut ? '<div class="scrow"><label>用 iPhone 捷徑開啟（選填，填捷徑名稱）</label>' +
+            '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：55688" value="' + _esc(shortcutName(a.id)) + '"></div>' : '');
       }).join('') + '</div>' +
       '<button class="cx" data-x="1">完成</button></div>';
     _settings.onclick = function (e) {
@@ -192,6 +221,10 @@
       var id = b.getAttribute('data-app');
       if (id) { setAppOn(id, !appOn(id)); _renderSettings(); }
     };
+    var ins = _settings.querySelectorAll('input[data-sc]');
+    for (var k = 0; k < ins.length; k++) {
+      ins[k].addEventListener('input', function (e) { setShortcutName(e.target.getAttribute('data-sc'), e.target.value); });
+    }
   }
 
   function _syncMenuLabel() {
@@ -202,7 +235,7 @@
   global.MaptripAutoNav = {
     APPS: APPS,
     isOn: isOn, setOn: setOn, appOn: appOn, setAppOn: setAppOn, enabledApps: enabledApps,
-    decide: decide, launch: launch, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart,
+    decide: decide, launch: launch, urlsFor: urlsFor, shortcutName: shortcutName, setShortcutName: setShortcutName, STEP_MS: STEP_MS, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart,
     openPicker: openPicker, openSettings: openSettings, close: close,
     syncMenuLabel: _syncMenuLabel
   };
