@@ -12,7 +12,10 @@
   var global = window;
 
   var MASTER_KEY = 'maptrip_autonav';        // 總開關（v1.1.454 起）
-  var PREF_KEY = 'maptrip_autonav_apps';     // { on: {id:bool} }
+  var PREF_KEY = 'maptrip_autonav_apps';     // { on: {id:bool}, sc: {id:捷徑名稱} }
+  var END_KEY = 'maptrip_autonav_end';       // v1.1.462：結束收款後跳 55688（'1' 開，預設關）
+  var END_APP = 'taxi55688';
+  var END_PAYS = { cash: 1, card: 1, voucher: 1 };   // 現金／刷卡／紙本簽單才跳；「其他」不跳
 
   // App 清單（預設 on＝出現在選單）
   var APPS = [
@@ -123,6 +126,22 @@
     return d;
   }
 
+  // ---------- 結束收款後跳 55688（v1.1.462）----------
+  function endOn() { return _ls(END_KEY) === '1'; }
+  function setEndOn(v) { _lsSet(END_KEY, v ? '1' : '0'); _syncMenuLabel(); }
+  // 純函式：結束收款要不要跳
+  function decideEnd(on, visible, paymentMethod) {
+    return !!(on && visible && END_PAYS[paymentMethod]);
+  }
+  // 車資對話框按「現金／刷卡／簽單」存檔時呼叫（recorder.finalizeSavedTrip）
+  function onTripEnd(paymentMethod) {
+    var visible = (typeof document === 'undefined') || document.visibilityState === 'visible';
+    if (!decideEnd(endOn(), visible, paymentMethod)) return false;
+    try { global.__mtLog && global.__mtLog('autonav:end ' + paymentMethod); } catch (_) {}
+    setTimeout(function () { launch(END_APP); }, 500);   // 讓存檔（IndexedDB）與 toast 先跑完再跳走
+    return true;
+  }
+
   // ---------- UI ----------
   var CSS =
     '#mt-an-bd{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:19998;opacity:0;pointer-events:none;transition:opacity .2s;}' +
@@ -139,6 +158,7 @@
     '.mt-an .row{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid #eef0f2;font-size:15px;color:#1a1a1a;}' +
     '.mt-an .row .nm{flex:1;}' +
     '.mt-an .row.master{font-weight:700;}' +
+    '.mt-an .sec{font-size:12.5px;font-weight:700;color:#1a73e8;margin:14px 4px 0;}' +
     '.mt-an .sw{position:relative;width:46px;height:27px;border-radius:14px;background:#c7ccd1;border:none;cursor:pointer;flex:none;transition:background .15s;}' +
     '.mt-an .sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.3);}' +
     '.mt-an .sw.on{background:#34a853;}.mt-an .sw.on::after{left:22px;}' +
@@ -203,8 +223,9 @@
   }
   function _renderSettings() {
     var on = isOn();
-    _settings.innerHTML = '<div class="in"><h3>🧭 開始後跳轉 App</h3>' +
-      '<p class="sub">按「開始行程」後跳出選單，選要切到哪個 App。只開一個＝直接跳、不問。</p>' +
+    _settings.innerHTML = '<div class="in" style="max-height:calc(100dvh - 40px);overflow-y:auto"><h3>🧭 跳轉 App</h3>' +
+      '<div class="sec">開始行程後</div>' +
+      '<p class="sub" style="margin:2px 4px 0">跳出選單選要切到哪個 App。只開一個＝直接跳、不問。</p>' +
       '<div class="row master"><span class="nm">開始後跳出選單</span><button class="sw' + (on ? ' on' : '') + '" data-master="1" aria-label="總開關"></button></div>' +
       '<div class="apps' + (on ? '' : ' dim') + '">' +
       APPS.map(function (a) {
@@ -213,11 +234,15 @@
           (a.shortcut ? '<div class="scrow"><label>用 iPhone 捷徑開啟（選填，填捷徑名稱）</label>' +
             '<input type="text" data-sc="' + _esc(a.id) + '" placeholder="例如：55688" value="' + _esc(shortcutName(a.id)) + '"></div>' : '');
       }).join('') + '</div>' +
+      '<div class="sec">結束收款後</div>' +
+      '<div class="row master"><span class="nm">🚕 現金／刷卡／簽單後跳 55688</span><button class="sw' + (endOn() ? ' on' : '') + '" data-end="1" aria-label="結束後跳 55688"></button></div>' +
+      '<p class="sub" style="margin:6px 4px 0">選「其他」不會跳。55688 的開法同上（有填捷徑就用捷徑）。</p>' +
       '<button class="cx" data-x="1">完成</button></div>';
     _settings.onclick = function (e) {
       var b = e.target.closest ? e.target.closest('button') : null; if (!b) return;
       if (b.getAttribute('data-x')) { close(); return; }
       if (b.getAttribute('data-master')) { setOn(!isOn()); _renderSettings(); return; }
+      if (b.getAttribute('data-end')) { setEndOn(!endOn()); _renderSettings(); return; }
       var id = b.getAttribute('data-app');
       if (id) { setAppOn(id, !appOn(id)); _renderSettings(); }
     };
@@ -229,13 +254,13 @@
 
   function _syncMenuLabel() {
     var b = document.getElementById('autonav-menu-btn');
-    if (b) b.textContent = '🧭 開始後跳轉 App：' + (isOn() ? '開' : '關');
+    if (b) b.textContent = '🧭 跳轉 App：' + ((isOn() || endOn()) ? '開' : '關');
   }
 
   global.MaptripAutoNav = {
     APPS: APPS,
     isOn: isOn, setOn: setOn, appOn: appOn, setAppOn: setAppOn, enabledApps: enabledApps,
-    decide: decide, launch: launch, urlsFor: urlsFor, shortcutName: shortcutName, setShortcutName: setShortcutName, STEP_MS: STEP_MS, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart,
+    decide: decide, launch: launch, urlsFor: urlsFor, shortcutName: shortcutName, setShortcutName: setShortcutName, STEP_MS: STEP_MS, _openUrl: _openUrl, _isNative: _isNative, _setNav: function (f) { _navTo = f; }, onTripStart: onTripStart, endOn: endOn, setEndOn: setEndOn, decideEnd: decideEnd, onTripEnd: onTripEnd,
     openPicker: openPicker, openSettings: openSettings, close: close,
     syncMenuLabel: _syncMenuLabel
   };

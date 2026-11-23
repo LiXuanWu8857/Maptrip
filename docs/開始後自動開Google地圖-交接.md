@@ -141,3 +141,11 @@ try {
   4. 黑盒子：`autonav:try <id> <url>`、`autonav:ok blur|hidden <id> #<第幾個>`、`autonav:fallback`、`autonav:fail`。
      **若某候選成功（ok … #n），就把那個 scheme 固定到第一個**。
 - 測試 `autonav2.js` 35 項全過。
+
+### v1.1.462：結束收款後跳 55688
+- 使用者需求：「結束行程如果是現金/刷卡/簽單的話，幫我跳轉到 55688，一樣要開關」。
+- 設定面板（選單改名「🧭 跳轉 App」）分兩段：「開始行程後」（原功能）＋「結束收款後」開關 `maptrip_autonav_end`（預設關）。
+- `recorder.finalizeSavedTrip` 存完車資後呼叫 `MaptripAutoNav.onTripEnd(paymentMethod)`：`decideEnd(on, visible, pm)`＝
+  開關開＋前景＋pm∈{cash, card, voucher} 才跳；「其他」（skip 鈕）不跳；Android 浮窗背景存檔不跳（visible 擋）。
+  延遲 500ms（存檔/toast 先跑）後 `launch('taxi55688')`，開法同開始（捷徑→候選 scheme→App Store）。
+- 測試 `autonav2.js` 51 項（真車資對話框：現金/刷卡跳、開關關不跳、車資照存；其他/背景不跳；設定開關）全過。
