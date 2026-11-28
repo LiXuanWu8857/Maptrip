@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.467**（2026-11-23）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.468**（2026-11-28）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -153,6 +153,22 @@
   （上面 v1.1.440/442 的「單獨統計／咖啡色／Excel 簽單欄」描述已被本版取代。）`voucher.js` 24、`bkvoucher.js` 17 全過。
 - **收支報表** `js/finance.js`：月營收（排除「其他」）、淨收入＝營收−抽成/叫車−支出、
   時段/星期分析、支出 CRUD（localStorage maptrip_expenses）
+  - **業績分析（v1.1.468，使用者「全上」）** `js/perf.js`（MaptripPerf，純函式、可測）＋ finance.js 分析分頁擴充：
+    收支報表頂部加 **「日/週/月/季/年」期間切換列**（`_ptype`/`_anchor` 取代單月 `_month`；`‹ 標籤 ›` 走 `shiftPeriod`），
+    兩個分頁都吃期間。`perf.periodInfo` 回 {start,end(不含),label,prev,next,inRange}（日期字串字典序比較）；
+    `perf.money(days,keys,commissions,expenses)` **與 `monthReport` 完全同口徑**（代收取消費淨 0、簽單算刷卡、小費分流、
+    抽成/叫車 fallback）——**血淚**：支出要由呼叫端先依期間過濾再傳入（keys 只含「有趟的日」，用 keySet 濾支出會漏算無趟日支出；
+    有 lock-test 盯著 `money==monthReport`）。`perf.analyze` 回：時間效率（載客/空車 idleRatio＝1−loaded/work、趟間等待 avgGapMin、
+    下車後空跑 avgDeadKm＝相鄰 GPS 趟「上一趟迄點→下一趟起點」haversine、載客時薪＝營收/載客時數）、**各時段時薪**（8 桶，
+    分母＝該桶趟的 `util.workMs` 扣長休息，非營收）、**星期×時段時薪熱力圖**（7×8，綠高紅低 hsl 內插）、
+    短趟盈虧（<NT$150 佔比/實際時薪/接駁空跑）、byHour/byDow 營收，另有 `advice()` 自動行動建議與 `aiText()` 純統計摘要。
+    分析分頁新增：時間效率卡、各時段時薪、熱力圖、短趟盈虧、行動建議、**「📋 複製業績數據·給 AI 討論」綠鈕** `copyAi()`
+    （navigator.clipboard＋textarea 後備；**不含座標/個資**，解決「我讀不到使用者即時 DB」→ 讓他貼到對話要個人化建議）；
+    **保留**原本每小時淨收入等四卡、各時段/各星期營收圖、上車熱點。`monthReport` 單一算錢來源不動＝記帳者報表不受影響。
+    熱力圖 cell 也接上 `bindChartTips`（`.fin-bar,.fin-hc.cell`）。載入序：util.js→perf.js→finance.js。
+    測試：`perftest.js` 56（periodInfo 各型態、keysInRange、money lock-test、analyze 數學、aiText 無座標、空資料不崩）、
+    `perfwire.js` 33（開報表/5 顆期間鈕/分析全區塊/複製給 AI 產純統計＋toast/日週季年切換＋前後導航）全過零 pageerror。
+    **待辦**：短趟門檻、桶定義、熱力圖配色可依回饋微調；aiText 可再加天氣/油價等情境。
   - **v290 長條圖長按看金額**：分析頁「各時段營收／各星期營收」長條圖手機看不到金額（`title` 只在桌面 hover）。
     新增 `bindChartTips`（`render` 畫完分析頁後綁；委派在 `#finance-body` 只綁一次、跨 render 有效）：每根長條
     加 `data-tip="時段/星期　NT$ 金額　N 趟"`，**長按 220ms** 顯示深色金額氣泡（`#fin-tip` 掛 document.body、
