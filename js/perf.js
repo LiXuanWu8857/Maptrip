@@ -115,6 +115,27 @@
   function firstC(t) { return t.coords[0]; }
   function lastC(t) { return t.coords[t.coords.length - 1]; }
 
+  // 建議班表：從 7×8 熱力圖挑「明顯高於平均＝建議多出車」與「明顯低於＝可休息」的格。
+  // refHr＝整體營收時薪；門檻 ±15%。**最少 2 趟**才納入（避免某天一張幸運長程被當常態）；
+  // 可用格太少時放寬到 ≥1 趟。各取最多 4 格。
+  function scheduleFrom(heat, refHr) {
+    function collect(minN) {
+      var out = [];
+      heat.forEach(function (row, dw) {
+        row.forEach(function (c, b) { if (c.has && c.hr > 0 && (c.n || 0) >= minN) out.push({ dw: dw, b: b, hr: c.hr, n: c.n || 0 }); });
+      });
+      return out;
+    }
+    var cells = collect(2);
+    if (cells.length < 4) cells = collect(1);
+    cells.sort(function (a, b) { return b.hr - a.hr; });
+    var hi = refHr * 1.15, lo = refHr * 0.85;
+    var go = cells.filter(function (c) { return c.hr >= hi; }).slice(0, 4);
+    var restAll = cells.filter(function (c) { return c.hr <= lo; });
+    var rest = restAll.slice(Math.max(0, restAll.length - 4)).reverse();   // 最低的在前
+    return { go: go, rest: rest };
+  }
+
   // ---------- 核心分析 ----------
   // opts: { commissions, expenses, restMinOf(day)->分鐘, shortThreshold }
   function analyze(days, keys, opts) {
@@ -128,7 +149,7 @@
     var byHour = []; for (var i = 0; i < 24; i++) byHour.push({ fare: 0, n: 0 });
     var byDow = []; for (i = 0; i < 7; i++) byDow.push({ fare: 0, n: 0 });
     var buckRev = [0,0,0,0,0,0,0,0], buckWork = [0,0,0,0,0,0,0,0], buckN = [0,0,0,0,0,0,0,0];
-    var cellRev = {}, cellWork = {};   // "dow-bucket"
+    var cellRev = {}, cellWork = {}, cellN = {};   // "dow-bucket"
     var gaps = [], deads = [];
     var fareN = 0, shortN = 0, shortRev = 0, shortLoadMs = 0, shortGapMs = 0, shortDeadKm = 0, shortDeadN = 0;
 
@@ -149,6 +170,7 @@
         buckRev[b] += rev; buckWork[b] += w; buckN[b] += g.length;
         var ck = dw + '-' + b;
         cellRev[ck] = (cellRev[ck] || 0) + rev; cellWork[ck] = (cellWork[ck] || 0) + w;
+        cellN[ck] = (cellN[ck] || 0) + g.length;
       });
 
       // 各時段/星期營收（沿用既有圖，含所有計入營收的趟）
@@ -196,7 +218,7 @@
       var row = [];
       for (var b2 = 0; b2 < 8; b2++) {
         var ck2 = d2 + '-' + b2, w2 = cellWork[ck2] || 0;
-        row.push({ hr: w2 > 0 ? (cellRev[ck2] || 0) / (w2 / 3600000) : 0, has: w2 > 0 });
+        row.push({ hr: w2 > 0 ? (cellRev[ck2] || 0) / (w2 / 3600000) : 0, has: w2 > 0, n: cellN[ck2] || 0 });
       }
       heat.push(row);
     }
@@ -206,12 +228,15 @@
       if (!best || c.hr > best.hr) best = { hr: c.hr, dw: dw2, b: b3 };
       if (!worst || c.hr < worst.hr) worst = { hr: c.hr, dw: dw2, b: b3 };
     }); });
+    var refHr = workH > 0.02 ? m.fare / workH : 0;
+    var schedule = scheduleFrom(heat, refHr);
 
     return {
       money: m, workMs: workMsTotal, loadedMs: loadedMs, idleMs: idleMs,
       idleRatio: workMsTotal > 0 ? idleMs / workMsTotal : 0,
       perHrNet: workH > 0.02 ? m.net / workH : 0,
-      perHrGross: workH > 0.02 ? m.fare / workH : 0,
+      perHrGross: refHr,
+      schedule: schedule,
       loadedRate: loadedMs > 0 ? m.fare / (loadedMs / 3600000) : 0,
       perKm: m.dist > 0 ? m.fare / (m.dist / 1000) : 0,
       perTrip: m.trips > 0 ? m.fare / m.trips : 0,
@@ -256,6 +281,8 @@
     L.push('各時段時薪：' + a.bucketHr.map(function (x) { return x.label + ' ' + nf(x.hr); }).join('、'));
     if (a.best) L.push('最賺：' + cellName(a.best) + ' ' + nf(a.best.hr) + '/hr');
     if (a.worst) L.push('最不賺：' + cellName(a.worst) + ' ' + nf(a.worst.hr) + '/hr');
+    if (a.schedule && a.schedule.go.length) L.push('建議多出車：' + a.schedule.go.map(function (c) { return cellName(c) + ' ' + nf(c.hr) + '/hr(' + c.n + '趟)'; }).join('、'));
+    if (a.schedule && a.schedule.rest.length) L.push('建議可休息：' + a.schedule.rest.map(function (c) { return cellName(c) + ' ' + nf(c.hr) + '/hr'; }).join('、'));
     L.push('短趟<' + a.shortTh + '：佔 ' + Math.round(a.shortPct * 100) + '%、實際時薪 ' + nf(a.shortEffHr) + '、接駁空跑 ' + a.shortDeadKm.toFixed(1) + ' km');
     if (topPlaces && topPlaces.length) L.push('常見上車點：' + topPlaces.slice(0, 5).join('、'));
     L.push('請用上面數據，具體建議我怎麼安排班表/走位來拉高時薪與載客。');
@@ -266,6 +293,6 @@
     TBUCKETS: TBUCKETS, WD: WD, SHORT_TH: SHORT_TH,
     periodInfo: periodInfo, keysInRange: keysInRange, money: money, analyze: analyze,
     advice: advice, aiText: aiText, cellName: cellName,
-    _bucketOf: bucketOf, _dowOf: dowOf, _addDays: addDays   // 供測試
+    _bucketOf: bucketOf, _dowOf: dowOf, _addDays: addDays, _scheduleFrom: scheduleFrom   // 供測試
   };
 })(typeof window !== 'undefined' ? window : globalThis);

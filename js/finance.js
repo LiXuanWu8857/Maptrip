@@ -380,8 +380,20 @@
       '.fin-hc.hh{background:none;color:#9aa0a6;font-size:.56rem;height:auto;padding-bottom:1px}' +
       '.fin-hc.hr{background:none;color:#5f6368;font-size:.62rem;font-weight:600}' +
       '.fin-hc.empty{background:#eceff1}' +
-      '.fin-hc.cell{cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+      '.fin-hc.cell{cursor:pointer;-webkit-tap-highlight-color:transparent;position:relative}' +
       '.fin-hc.cell.press{outline:2px solid #202124;outline-offset:-1px}' +
+      '.hm-dot{position:absolute;top:2px;right:2px;width:5px;height:5px;border-radius:50%}' +
+      '.hm-dot.go{background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.35)}' +
+      '.hm-dot.rest{background:rgba(0,0,0,.6)}' +
+      // 建議班表
+      '.fin-sched{margin-top:8px;background:#f8f9fa;border-radius:12px;padding:10px 12px}' +
+      '.fsc-row{display:flex;gap:8px;align-items:flex-start;margin:4px 0}' +
+      '.fsc-tag{flex:none;font-size:.78rem;font-weight:700;padding:2px 2px;white-space:nowrap}' +
+      '.fsc-tag.go{color:#188038}.fsc-tag.rest{color:#d93025}' +
+      '.fsc-list{display:flex;flex-wrap:wrap;gap:6px}' +
+      '.fsc-cell{font-size:.8rem;color:#3c4043;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:3px 8px}' +
+      '.fsc-cell b{font-weight:700;color:#202124}' +
+      '.fsc-note{font-size:.68rem;color:#9aa0a6;margin-top:6px}' +
       // 短趟盈虧 + 行動建議
       '.fin-short{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.fin-short .fin-stat .val{font-size:1.05rem}' +
       '.fin-advice{background:rgba(26,115,232,.06);border:1px solid rgba(26,115,232,.16);border-radius:12px;padding:10px 12px}' +
@@ -461,6 +473,8 @@
       '.fin-effm .v{color:#e8eaed}.fin-effm .k{color:#9aa0a6}' +
       '.fin-hc.empty{background:#2a2a2a}.fin-hc.hr{color:#9aa0a6}' +
       '.fin-advice{background:rgba(138,180,248,.08);border-color:rgba(138,180,248,.2)}.fin-advice li{color:#c8ccd2}' +
+      '.fin-sched{background:#242424}.fsc-cell{background:#2a2a2a;border-color:rgba(255,255,255,.12);color:#c8ccd2}.fsc-cell b{color:#e8eaed}' +
+      '.fsc-tag.go{color:#81c995}.fsc-tag.rest{color:#f28b82}' +
       '.fin-card,.fin-catcell,.fin-stat,.fin-form{background:#242424}' +
       '.fin-card .lbl,.fin-stat .lbl,.fin-catcell .nm{color:#9aa0a6}.fin-card .val,.fin-stat .val,.fin-catcell .am{color:#e8eaed}' +
       '.fin-exprow .t1{color:#e8eaed}.fin-chip{background:#2a2a2a;border-color:rgba(255,255,255,.15);color:#c8ccd2}' +
@@ -630,12 +644,16 @@
   var HEAT_DOW = [1, 2, 3, 4, 5, 6, 0];
   var HEAT_WD = ['一', '二', '三', '四', '五', '六', '日'];
   var HEAT_BK = ['清晨', '早峰', '上午', '中午', '下午', '晚峰', '晚間', '深夜'];
-  // 星期 × 時段 時薪熱力圖（綠＝高、紅＝低；空白＝該格無載客）
+  // 星期 × 時段 時薪熱力圖（綠＝高、紅＝低；空白＝該格無載客）；
+  // 建議出車格加白點、建議休息格加深點（來自 a.schedule）。
   function renderHeat(a) {
     var vals = [];
     a.heat.forEach(function (row) { row.forEach(function (c) { if (c.has && c.hr > 0) vals.push(c.hr); }); });
     var mn = vals.length ? Math.min.apply(null, vals) : 0;
     var mx = vals.length ? Math.max.apply(null, vals) : 1;
+    var goKey = {}, restKey = {};
+    (a.schedule && a.schedule.go || []).forEach(function (c) { goKey[c.dw + '-' + c.b] = 1; });
+    (a.schedule && a.schedule.rest || []).forEach(function (c) { restKey[c.dw + '-' + c.b] = 1; });
     var h = '<div class="fin-heat"><div class="fin-hc hh"></div>';
     HEAT_BK.forEach(function (lb) { h += '<div class="fin-hc hh">' + lb + '</div>'; });
     HEAT_DOW.forEach(function (dw, ri) {
@@ -645,11 +663,24 @@
         if (!c.has || c.hr <= 0) { h += '<div class="fin-hc empty"></div>'; continue; }
         var t = mx > mn ? (c.hr - mn) / (mx - mn) : 1;        // 0..1
         var hue = Math.round(120 * t);                        // 紅0 → 綠120
-        var tip = HEAT_WD[ri] + ' ' + HEAT_BK[b] + '　NT$ ' + nf(c.hr) + '/hr';
-        h += '<div class="fin-hc cell" title="' + tip + '" data-tip="' + tip + '" style="background:hsl(' + hue + ',62%,45%)"></div>';
+        var k = dw + '-' + b;
+        var dot = goKey[k] ? '<i class="hm-dot go"></i>' : (restKey[k] ? '<i class="hm-dot rest"></i>' : '');
+        var tip = HEAT_WD[ri] + ' ' + HEAT_BK[b] + '　NT$ ' + nf(c.hr) + '/hr　' + c.n + ' 趟' +
+          (goKey[k] ? '　建議出車' : (restKey[k] ? '　可休息' : ''));
+        h += '<div class="fin-hc cell" title="' + tip + '" data-tip="' + tip + '" style="background:hsl(' + hue + ',62%,45%)">' + dot + '</div>';
       }
     });
     return h + '</div>';
+  }
+  // 建議班表文字塊（多出車／可休息）
+  function renderSchedule(a) {
+    var s = a.schedule || { go: [], rest: [] };
+    if (!s.go.length && !s.rest.length) return '';
+    function lc(c) { return '<span class="fsc-cell">' + PF().cellName(c) + ' <b>NT$' + nf(c.hr) + '</b></span>'; }
+    var h = '<div class="fin-sched">';
+    if (s.go.length) h += '<div class="fsc-row"><span class="fsc-tag go">🟢 多出車</span><span class="fsc-list">' + s.go.map(lc).join('') + '</span></div>';
+    if (s.rest.length) h += '<div class="fsc-row"><span class="fsc-tag rest">🔴 可休息</span><span class="fsc-list">' + s.rest.map(lc).join('') + '</span></div>';
+    return h + '<div class="fsc-note">依你的時薪挑出，已排除趟數太少的時段</div></div>';
   }
 
   function renderAnalytics(ctx) {
@@ -697,9 +728,10 @@
     });
     h += '</div></div>';
 
-    // 星期 × 時段 時薪熱力圖
-    h += '<div class="fin-sec">星期 × 時段 時薪熱力圖 <span class="fin-hint">綠＝高 · 紅＝低</span></div>';
+    // 星期 × 時段 時薪熱力圖 ＋ 建議班表
+    h += '<div class="fin-sec">星期 × 時段 時薪熱力圖 <span class="fin-hint">綠高紅低 · ⚪出車 ⚫休息</span></div>';
     h += renderHeat(a);
+    h += renderSchedule(a);
 
     // 短趟盈虧
     h += '<div class="fin-sec">短趟盈虧（車資 &lt; NT$ ' + a.shortTh + '）</div><div class="fin-short">' +
