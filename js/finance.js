@@ -680,7 +680,8 @@
     var h = '<div class="fin-sched">';
     if (s.go.length) h += '<div class="fsc-row"><span class="fsc-tag go">🟢 多出車</span><span class="fsc-list">' + s.go.map(lc).join('') + '</span></div>';
     if (s.rest.length) h += '<div class="fsc-row"><span class="fsc-tag rest">🔴 可休息</span><span class="fsc-list">' + s.rest.map(lc).join('') + '</span></div>';
-    return h + '<div class="fsc-note">依你的時薪挑出，已排除趟數太少的時段</div></div>';
+    var note = '依你的時薪挑出，已排除趟數太少的時段' + (a.cappedN ? '與極端車資' : '');
+    return h + '<div class="fsc-note">' + note + '</div></div>';
   }
 
   function renderAnalytics(ctx) {
@@ -715,8 +716,9 @@
       '<div class="fin-effm"><div class="v">NT$ ' + nf(a.loadedRate) + '</div><div class="k">載客時薪</div></div>' +
       '</div></div>';
 
-    // 各時段時薪（8 條；點一下看明細）
-    h += '<div class="fin-sec">各時段時薪 <span class="fin-hint">點一下看明細</span></div><div class="fin-chart"><div class="fin-bars bk">';
+    // 各時段時薪（8 條；點一下看明細）；已排除極端車資的話標註
+    var trimHint = a.cappedN ? '已排除 ' + a.cappedN + ' 筆極端車資 · 點一下看明細' : '點一下看明細';
+    h += '<div class="fin-sec">各時段時薪 <span class="fin-hint">' + trimHint + '</span></div><div class="fin-chart"><div class="fin-bars bk">';
     var maxBk = Math.max.apply(null, a.bucketHr.map(function (x) { return x.hr; })) || 1;
     a.bucketHr.forEach(function (x) {
       var pct = Math.round(x.hr / maxBk * 100);

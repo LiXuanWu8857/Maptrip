@@ -27,6 +27,18 @@
   function keyOf(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
   function addDays(key, n) { var d = dateOf(key); d.setDate(d.getDate() + n); return keyOf(d); }
   function avg(a) { return a.length ? a.reduce(function (s, x) { return s + x; }, 0) / a.length : 0; }
+  var OUTLIER_MIN = 8;   // 少於這麼多筆就不裁（樣本太小、怕誤殺）
+  // 極端值門檻＝Q3 + 1.5×IQR（標準「離群值」定義）；資料太少回 Infinity（＝不裁）。
+  function iqrCap(vals) {
+    if (!vals || vals.length < OUTLIER_MIN) return Infinity;
+    var s = vals.slice().sort(function (a, b) { return a - b; });
+    function q(p) { var i = (s.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return s[lo] + (s[hi] - s[lo]) * (i - lo); }
+    var q1 = q(0.25), q3 = q(0.75);
+    return q3 + 1.5 * (q3 - q1);
+  }
+  function capTo(v, cap) { return v > cap ? cap : v; }
+  // 把陣列裡的極端值壓到 IQR 門檻（給平均值用，避免單筆 GPS 飆值/長空檔灌水）
+  function winsor(arr) { var cap = iqrCap(arr); return arr.map(function (v) { return capTo(v, cap); }); }
 
   // 時段 index（0-23 → 0-7）；深夜段 22–隔日5 跨午夜
   function bucketOf(h) {
@@ -145,6 +157,17 @@
     var shortTh = opts.shortThreshold || SHORT_TH;
     var m = money(days, keys, commissions, expenses);
 
+    // 極端車資處理（只影響「時薪/熱力圖/建議班表」等比較指標，不動實際收入）：
+    // 先蒐集所有載客趟車資(含小費)，算出 Q3+1.5×IQR 門檻；算時薪時把超過門檻的壓到門檻（winsorize），
+    // 一張爆賺長程就不會把某時段灌成假金礦。opts.trimOutliers=false 可關閉。
+    var allVals = [];
+    keys.forEach(function (day) {
+      (days[day] || []).filter(isGps).forEach(function (t) { allVals.push((t.fare || 0) + (t.tip || 0)); });
+    });
+    var fareCap = opts.trimOutliers === false ? Infinity : iqrCap(allVals);
+    var cappedN = allVals.filter(function (v) { return v > fareCap; }).length;
+    function val(t) { return capTo((t.fare || 0) + (t.tip || 0), fareCap); }
+
     var workMsTotal = 0, loadedMs = 0;
     var byHour = []; for (var i = 0; i < 24; i++) byHour.push({ fare: 0, n: 0 });
     var byDow = []; for (i = 0; i < 7; i++) byDow.push({ fare: 0, n: 0 });
@@ -165,7 +188,7 @@
       var dw = dowOf(day);
       Object.keys(byB).forEach(function (bk) {
         var b = +bk, g = byB[bk];
-        var rev = g.reduce(function (s, t) { return s + (t.fare || 0) + (t.tip || 0); }, 0);
+        var rev = g.reduce(function (s, t) { return s + val(t); }, 0);   // 極端車資壓到門檻
         var w = wm(g, 0);   // 該段趟的 span 扣長休息＝該段工時
         buckRev[b] += rev; buckWork[b] += w; buckN[b] += g.length;
         var ck = dw + '-' + b;
@@ -240,7 +263,8 @@
       loadedRate: loadedMs > 0 ? m.fare / (loadedMs / 3600000) : 0,
       perKm: m.dist > 0 ? m.fare / (m.dist / 1000) : 0,
       perTrip: m.trips > 0 ? m.fare / m.trips : 0,
-      avgGapMin: avg(gaps), avgDeadKm: avg(deads),
+      avgGapMin: avg(winsor(gaps)), avgDeadKm: avg(winsor(deads)),
+      fareCap: fareCap, cappedN: cappedN,
       byHour: byHour, byDow: byDow, bucketHr: bucketHr, heat: heat, best: best, worst: worst,
       shortTh: shortTh, shortN: shortN, shortPct: fareN > 0 ? shortN / fareN : 0,
       shortDeadKm: shortDeadN ? shortDeadKm / shortDeadN : 0,
@@ -278,7 +302,7 @@
     L.push('趟數 ' + m.trips + ' / 里程 ' + (m.dist / 1000).toFixed(1) + ' km / 工時 ' + (a.workMs / 3600000).toFixed(1) + ' 小時');
     L.push('時薪：淨 ' + nf(a.perHrNet) + ' / 營收 ' + nf(a.perHrGross) + '；每公里 ' + a.perKm.toFixed(1) + '；每趟 ' + nf(a.perTrip));
     L.push('時間效率：載客 ' + Math.round((1 - a.idleRatio) * 100) + '% / 空車 ' + Math.round(a.idleRatio * 100) + '%；趟間等待 ' + a.avgGapMin.toFixed(1) + ' 分；下車後空跑 ' + a.avgDeadKm.toFixed(1) + ' km；載客時薪 ' + nf(a.loadedRate));
-    L.push('各時段時薪：' + a.bucketHr.map(function (x) { return x.label + ' ' + nf(x.hr); }).join('、'));
+    L.push('各時段時薪' + (a.cappedN ? '（已排除 ' + a.cappedN + ' 筆極端車資）' : '') + '：' + a.bucketHr.map(function (x) { return x.label + ' ' + nf(x.hr); }).join('、'));
     if (a.best) L.push('最賺：' + cellName(a.best) + ' ' + nf(a.best.hr) + '/hr');
     if (a.worst) L.push('最不賺：' + cellName(a.worst) + ' ' + nf(a.worst.hr) + '/hr');
     if (a.schedule && a.schedule.go.length) L.push('建議多出車：' + a.schedule.go.map(function (c) { return cellName(c) + ' ' + nf(c.hr) + '/hr(' + c.n + '趟)'; }).join('、'));
@@ -293,6 +317,6 @@
     TBUCKETS: TBUCKETS, WD: WD, SHORT_TH: SHORT_TH,
     periodInfo: periodInfo, keysInRange: keysInRange, money: money, analyze: analyze,
     advice: advice, aiText: aiText, cellName: cellName,
-    _bucketOf: bucketOf, _dowOf: dowOf, _addDays: addDays, _scheduleFrom: scheduleFrom   // 供測試
+    _bucketOf: bucketOf, _dowOf: dowOf, _addDays: addDays, _scheduleFrom: scheduleFrom, _iqrCap: iqrCap   // 供測試
   };
 })(typeof window !== 'undefined' ? window : globalThis);
