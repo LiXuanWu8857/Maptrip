@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maptrip</title>
+<style>
+  html,body{height:100%;margin:0;font-family:-apple-system,sans-serif;background:#fff;color:#5f6368;}
+  .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px;}
+  .dot{width:14px;height:14px;border-radius:50%;background:#1a73e8;animation:p 1.2s infinite;}
+  @keyframes p{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+</style>
+</head>
+<body>
+  <!--
+    這個頁面只是「離線備援」。
+    App 正常啟動時，Capacitor 會依 capacitor.config.json 的 server.url
+    直接載入 https://lixuanwu8857.github.io/Maptrip/（線上最新版）。
+    只有在完全連不上網路時才會看到這一頁。
+  -->
+  <div class="wrap">
+    <div class="dot"></div>
+    <div>正在載入 Maptrip…<br><small>請確認網路連線</small></div>
+  </div>
+</body>
+</html>
