@@ -1,6 +1,6 @@
 # Maptrip — 專案交接文件
 
-**目前版本：v1.1.438**（2026-10-25）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
+**目前版本：v1.1.467**（2026-11-23）。使用者是台灣的計程車司機（繁體中文、台灣用語，例如「動態島」不是「靈動島」、「螢幕鎖定」不是「鎖屏」）。溝通原則：「科學一點」——先重現、量測、用測試驗證，不要用猜的。
 注意：這支專案可能有多個 session 並行開發，push 前務必 `git fetch` 並 fast-forward/rebase 到最新（v245 找客熱區、v246 GPS 飄移群清理、v253 找客熱區崩潰修復、v254 每小時收入都由不同 session 加入）。**詳細並行開發規則見文末「慣例」。**
 
 ## 架構
@@ -99,6 +99,31 @@
   有時沒重算、整條飄離底圖（點/標記正常，只有線脫鉤；投影本身正確）。`redrawAllLines()`
   在 zoomend/moveend/去抖 rotate 後強制以目前投影重畫所有折線（allMapLayers/soloLayers/
   dayPreviewLayers/replayTempLayers/activePolyline）。GL 模式 redraw 不存在自動略過
+- **休息空檔不連線、放 ☕（v1.1.455）**：今日路線兩趟之間原本一律畫紅虛線貝茲曲線（`drawGapLine`）。
+  使用者要「有休息時結束與開始不要連起來」→ 空檔達休息門檻（`MaptripUtil.isRestGap`＝兩趟間隔
+  `≥ GAP_REST_MIN`＝90 分，**與 workMs 自動扣休息同一門檻**）就**不連線、改在空檔中點放一個 ☕**
+  （使用者選：不寫時間）；短空檔（等客/排班，<90 分）仍維持紅虛線。`util.js isRestGap(a,b)`（純函式、
+  缺 start/end 時間＝不算休息照舊連線）、`icons.js makeRestIcon()`（白底圓＋☕ divIcon、anchor 置中）、
+  `app.js drawRestCoffee(from,to)`（marker 入 todayMarks pane＋`_applyTodayMode`，隨今日圖層一起隱藏/淡化）、
+  `drawTripGap(prev,cur,from,to)` 分流。兩個呼叫點 `saveTripFinal`（新完成一趟）、`loadTodayFromStorage`
+  （開 App 重建今日路線）都走 `drawTripGap`。**範圍＝今日路線**；歷史整日預覽本就每趟各自畫、無連接線。
+  測試 `restgap.js` 14 項（isRestGap 門檻 89/90/120 分邊界＋缺時間＋負空檔、makeRestIcon 含 ☕、分流 marker/line）全過。
+- **開始後跳轉 App（v1.1.459）** `js/autonav.js`（MaptripAutoNav）：選單⚙️設定「🧭 開始後跳轉 App」＝總開關＋各 App 開關
+  （預設 55688 司機版／Google 地圖開、Apple 地圖關）。前景按開始→底部選單選 App（只開一個＝直接跳）；scheme 1.5 秒沒跳走→後備網址
+  （55688 官方 scheme 查無：依序試 4 個候選、每個 1.2 秒，都沒跳走→`itms-apps://` App Store 頁；**可填「iPhone 捷徑」名稱＝最穩的直接跳法**，排最先試）。
+  App 殼內一律 `location.href` 開（**WKWebView 的 window.open 只在點擊當下放行**，v1.1.460 血淚）；黑盒子 `autonav:try/ok/fallback/fail`。
+  **v1.1.462 結束收款後跳 55688**：同面板「結束收款後」開關 `maptrip_autonav_end`（預設關）；`recorder.finalizeSavedTrip` 存完車資呼叫
+  `MaptripAutoNav.onTripEnd(pm)`，現金／刷卡／簽單＋前景才跳（「其他」不跳），延遲 500ms 讓存檔先跑。
+  **v1.1.463 結束段改成跟開始一樣**＝總開關＋各 App 開關（`maptrip_autonav_apps.end`，預設只開 55688），開 ≥2 個跳「收款完成！」選單；捷徑名稱兩段共用。
+  **v1.1.464 主頁右上角快捷鈕**：`#top-actions` 前插 `#an-bar`（色塊字標按鈕 55/G/U/A），各 App 開關 `prefs.bar`（預設 55688／Google）；
+  **v1.1.465 使用者要求拔掉 Uber**（舊設定殘留 uberdriver 無害、不顯示）。另有**自訂 App**（`prefs.custom`，名稱＋iPhone 捷徑名稱，任何 App 都能開，開始/結束清單也有）。
+  `_fitBar` 頂列放不下先縮（`an-tight`）再從尾端藏鈕（390 寬約放 3 顆），MutationObserver 盯 `#top-left` 文字變化重量。測試 `autonavbar.js` 35。
+  **v1.1.466 官方 App 圖示**：裝置上用 iTunes lookup（storeId 批次）/search（自訂 App 用名稱）**JSONP** 查 App Store 圖示（沙箱連不到 itunes，測試用 route mock），
+  快取 `maptrip_appicons`（7 天；查不到 1 天後重試；網路失敗不寫快取）；`<img>` 疊在色塊字標上，載入失敗 onerror 移除＝退回字標。測試 `autonavicon.js` 18。
+  **v1.1.467 安卓**：`FloatingWindowPlugin.java` 加 `setShortcuts({apps:[{id,label,pkg}]})`（浮窗下方等寬捷徑鈕、系統真圖示、沒裝不顯示、車資鍵盤時藏）＋
+  `launchApp({pkg})`（套件名稱直接開；有浮窗權限＝背景也能開）。網頁 `autonav.js` 安卓優先 `launchApp`，失敗/舊版殼→`androidUrls`/`androidFallback`
+  （Google 一般網址、55688 `market://`）；`syncFloat` 跟 `prefs.bar` 同步（簽章去重）。**需 manifest `<queries>`（Android-打包說明 4.7）＋重編安卓**。
+  javac＋假安卓類別編譯通過、Capacitor 6 API 簽章已對；測試 `autonavandroid.js` 20（模擬安卓新/舊殼/未安裝、iPhone 不受影響）。詳見 `docs/開始後自動開Google地圖-交接.md`
 - **記帳**：每趟車資、現金/刷卡/其他（其他可填備註 label；改回現金/刷卡會清 label）、
   抽成 commission、叫車費 dispatch
 - **叫車費切換 + 抽成延後填（v249；v250 預設有）**：叫車費改成單一切換按鈕（`toggleDispatch`），
@@ -110,6 +135,22 @@
 - **批次編輯抽成（v249）** `app.js openCommissionBatch/saveCommissionBatch`：歷史每日標題列
   新增「抽成」鈕，開底部 sheet 列出當日各趟（時間／車資），各自填不同抽成、一次「全部儲存」，
   逐筆 `_pushCommission` 上雲並 `syncDays`。純 DOM 面板（`#commission-sheet`，樣式在 style.css）
+- **紙本簽單（v1.1.440）** `fare-dialog.js bindCashButton`：行程完成/編輯對話框的「現金」鈕**長按 500ms**切換
+  現金⇄紙本簽單（咖啡色、震動回饋），單擊立即用目前模式存檔。簽單＝`paymentMethod 'voucher'`，**單獨統計、計入總計/營收**，
+  沒有簽單就不顯示：`util._fareStats`（回 voucher）/`_fareLineHtml`（簽單欄夾在刷卡與現金之間，因歷史清單在「現金」後換行）/
+  `_payTag`、`finance.monthReport.voucher`、`bookkeeper._daySummary.voucher`、export-excel/trash 標籤。
+  **長按坑**：觸控後瀏覽器補發的模擬 mousedown（1 秒內）要忽略、長按後 700ms 內的 click 要忽略（否則放手誤存檔）；
+  iOS 加 `-webkit-touch-callout:none`。測試 `voucher.js` 23 項（CDP 真觸控長按＋補發 click、滑鼠長按、舊版重現 5 失敗）。
+  **v1.1.442 記帳者＋Excel**：`bookkeeper.js` 篩選列「簽單」chip（**當月有簽單才出現**）、`_resolve`/`saveComm` 接受
+  `payOverride='voucher'`（改付款下拉＋補登下拉加「紙本簽單」；簽單不鎖抽成，只有現金鎖）；`export-excel.js summaryRows`
+  **任一月有簽單才在「刷卡」後插「簽單」欄**（沒有＝欄位同以前）。司機端 `applyCommission` 本來就接受任何 payOverride、
+  Firestore 規則不限值 → 不用改規則。**未做**：Google Sheets 每日上傳（sheet-sync pushDay）未另傳簽單欄（總計已含）。
+  測試 `bkvoucher.js` 17 項全過零 pageerror。
+  **v1.1.443 使用者改需求：簽單「算在刷卡裡」＋整列紅框**：`_fareStats`/`monthReport`/`_daySummary` 把 voucher 併入 card
+  （仍回 `voucher`＝其中簽單多少），**不再另列「簽單：X」**、Excel 月彙總不另開簽單欄（逐趟明細付款仍寫「紙本簽單」）。
+  簽單趟整列紅框：司機 `.trip-row.voucher-row`（inset 2px #d93025＋淡紅底；外距 6＋內距 12＝原 18 → 內容寬度不變不換行；
+  深色 #f28b82）、記帳者 `.bk-trow.voucher`；「簽單」標籤紅底白字、長按切出的「紙本簽單」鈕改紅色。記帳者「簽單」篩選鈕保留。
+  （上面 v1.1.440/442 的「單獨統計／咖啡色／Excel 簽單欄」描述已被本版取代。）`voucher.js` 24、`bkvoucher.js` 17 全過。
 - **收支報表** `js/finance.js`：月營收（排除「其他」）、淨收入＝營收−抽成/叫車−支出、
   時段/星期分析、支出 CRUD（localStorage maptrip_expenses）
   - **v290 長條圖長按看金額**：分析頁「各時段營收／各星期營收」長條圖手機看不到金額（`title` 只在桌面 hover）。
@@ -395,6 +436,11 @@
   `_fareFlag(profile,access)`（讀得到 access 以它為準、否則看 profile）。寫入授權仍由規則用 `get(access)` 把關，
   profile 只有司機本人可寫＝記帳者無法偽造。測試 `fareflag.js` 9 項（假 Firestore 照真規則：重現/補寫/關閉同步/
   偽造被拒；舊版重現失敗）。
+  **v1.1.439 記帳者看得到小費**：小費（`t.tip/tipMethod`）原本已算進記帳者當日現金/刷卡小計與淨利，但畫面沒任何地方標出
+  「小費」→ 使用者以為記帳者看不到。改：每趟車資下方小標 `_tipTag`（「+小費 50 現/刷」）、當日總結 `_daySummary` 回 `tip`
+  並顯示「小費 X」（**已含在現金/刷卡內，只是標示、不重複加**）、篩選小計 `_filterSum` 加 `tip`、Excel 明細 `TRIP_HEAD`
+  在「車資」後加「小費」欄（月彙總營收本來就含小費）。記帳者**只能看、不能改小費**（若要改需新 override 欄位＋規則把關）。
+  測試 `bktip.js` 10 項（舊版重現 5 失敗）＋`bkpayedit.js` 回歸 8 項全過。
   **v1.1.419 修 `.bk-` 撞名漏到預約面板（血淚）**：記帳者樣式是動態注入的全域 `<style id=bk-css>`，其中
   `.bk-copy/.bk-sec/.bk-card/.bk-chip(s)/.bk-empty/.bk-mini/.bk-note` 與預約（booking.js）同名 → **開過一次記帳者面板後**，
   預約卡「複製訊息」被 `.bk-copy{width:100%}` 撐滿、「標記已確認/直接完成」被擠出畫面、`.bk-sec` margin 讓按鈕列歪（使用者截圖回報）。

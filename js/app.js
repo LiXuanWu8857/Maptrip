@@ -1,4 +1,4 @@
-const APP_VERSION  = '1.1.438';
+const APP_VERSION  = '1.1.467';
 const TEST_MODE_ON = new URLSearchParams(location.search).has('test');
 const STORAGE_KEY = TEST_MODE_ON ? 'maptrip_test_v1' : 'maptrip_v1';
 // 行程儲存讀寫一律走 TripStore（IndexedDB，見 js/store.js）：
@@ -14,19 +14,31 @@ function saveTrips(raw) { TripStore.setAll(raw); }
 function applyCommission(tripId, commission, dispatch, fareOverride, payOverride) {
   try {
     const id = isNaN(+tripId) ? tripId : +tripId;   // 趟 id 通常是數字
-    const raw = loadTrips();
-    let changed = false;
-    const apply = (t) => {
-      if (!(t && (t.id === id || String(t.id) === String(tripId)))) return;
+    const apply = (t) => {   // 回傳是否真的改到這筆
+      if (!(t && (t.id === id || String(t.id) === String(tripId)))) return false;
+      let c = false;
       if ((t.commission || 0) !== (commission || 0) || (t.dispatch || 0) !== (dispatch || 0)) {
-        t.commission = commission || 0; t.dispatch = dispatch || 0; changed = true;
+        t.commission = commission || 0; t.dispatch = dispatch || 0; c = true;
       }
-      if (fareOverride != null && (t.fare || 0) !== fareOverride) { t.fare = fareOverride; delete t._roadBad; changed = true; }
-      if (payOverride != null && payOverride !== '' && t.paymentMethod !== payOverride) { t.paymentMethod = payOverride; changed = true; }
+      if (fareOverride != null && (t.fare || 0) !== fareOverride) { t.fare = fareOverride; delete t._roadBad; c = true; }
+      if (payOverride != null && payOverride !== '' && t.paymentMethod !== payOverride) { t.paymentMethod = payOverride; c = true; }
+      return c;
     };
-    Object.keys(raw).forEach(day => (raw[day] || []).forEach(apply));
+    // 單日化（v1.1.458）：唯讀掃描找出該趟在哪天，只重寫那天（免 clone 整個歷史）。
+    const S = window.TripStore;
+    const peek = (S && S.peekAll) ? S.peekAll() : loadTrips();
+    let changed = false; const changedDays = {};
+    Object.keys(peek).forEach(day => {
+      const arr0 = peek[day]; if (!Array.isArray(arr0)) return;
+      if (!arr0.some(t => t && (t.id === id || String(t.id) === String(tripId)))) return;   // 這天沒有 → 不碰
+      const arr = (S && S.getDay) ? S.getDay(day) : arr0.slice();   // 只拷貝這一天
+      let dayChanged = false;
+      arr.forEach(t => { if (apply(t)) dayChanged = true; });
+      if (dayChanged) { changedDays[day] = arr; changed = true; }
+    });
     if (changed) {
-      saveTrips(raw);
+      if (S && S.setDays) S.setDays(changedDays);
+      else { const raw = loadTrips(); Object.keys(changedDays).forEach(d => raw[d] = changedDays[d]); saveTrips(raw); }
       todayTrips.forEach(apply);   // 記憶體中的今日清單也同步
     }
     return changed;
@@ -658,10 +670,11 @@ function showFareDialog(trip) { return MaptripFareDialog.showFareDialog(trip); }
 function saveTripFinal(trip) {
   if (todayTrips.length > 0) {
     try {
-      const prevCoords = tripPath(todayTrips[todayTrips.length - 1]);
+      const prevTrip   = todayTrips[todayTrips.length - 1];
+      const prevCoords = tripPath(prevTrip);
       const curCoords  = tripPath(trip);
       if (prevCoords.length && curCoords.length)
-        allMapLayers.push(drawGapLine(prevCoords.at(-1), curCoords[0]));
+        allMapLayers.push(drawTripGap(prevTrip, trip, prevCoords.at(-1), curCoords[0]));
     } catch (_) {}
   }
   drawTripLine(trip, todayTrips.length + 1);
@@ -739,6 +752,19 @@ function drawGapLine(from, to) {
     { color: '#EA4335', weight: 2.5, opacity: 0.75, dashArray: '6 5', pane: _todayPane('todayLines') }).addTo(map);
   _applyTodayMode([gap]);
   return gap;
+}
+
+// 兩趟之間是「休息」（長空檔 ≥ 90 分）＝不連線，改在空檔中點放一個 ☕ 標（使用者選擇：不寫時間）。
+function _isRestGap(a, b) { return MaptripUtil.isRestGap(a, b); }
+function drawRestCoffee(from, to) {
+  const mid = [(from.lat + to.lat) / 2, (from.lng + to.lng) / 2];
+  const m = L.marker(mid, { icon: makeRestIcon(), pane: _todayPane('todayMarks'), zIndexOffset: 5 }).addTo(map);
+  _applyTodayMode([m]);
+  return m;
+}
+// 休息＝放 ☕、短空檔＝紅虛線；回傳畫出的圖層（存進 allMapLayers，刪趟/隱藏一起處理）。
+function drawTripGap(prevTrip, curTrip, from, to) {
+  return _isRestGap(prevTrip, curTrip) ? drawRestCoffee(from, to) : drawGapLine(from, to);
 }
 
 // 回傳存在的 today pane 名稱；不存在（GL 模式或建立失敗）回 undefined → 用預設 pane
@@ -828,6 +854,7 @@ function makeStartIcon() { return MaptripIcons.makeStartIcon(); }
 function makeEndIcon() { return MaptripIcons.makeEndIcon(); }
 function makePreviewDotIcon() { return MaptripIcons.makePreviewDotIcon(); }
 function makePreviewSquareIcon(dark) { return MaptripIcons.makePreviewSquareIcon(dark); }
+function makeRestIcon() { return MaptripIcons.makeRestIcon(); }
 
 function centerOnMe() {
   if (!currentPos) { toast('尚未取得位置'); return; }
@@ -972,6 +999,7 @@ function _dispatchMenu(action) {
   else if (action === 'metro') { closeSheet(); if (window.openMetroSettings) window.openMetroSettings(); }
   else if (action === 'flight') { closeSheet(); if (window.MaptripFlight && MaptripFlight.openLookup) MaptripFlight.openLookup(); }
   else if (action === 'glmap') toggleGlEngine();
+  else if (action === 'autonav') toggleAutoNav();
   else if (action === 'reviewtoggle') { if (window.MaptripDesktop) MaptripDesktop.toggle(); }
 }
 window._dispatchMenu = _dispatchMenu;
@@ -1007,6 +1035,10 @@ function toggleGlEngine() {
   try { sessionStorage.removeItem('gl_fail'); localStorage.removeItem('mt_glfail'); localStorage.removeItem('mt_rl'); } catch (_) {}
   location.reload();
 }
+
+// 「開始後跳轉 App」設定（v1.1.459 起改為選單＋各 App 開關，邏輯在 js/autonav.js；這裡只是薄包裝）
+function _syncAutoNavLabel() { if (window.MaptripAutoNav) MaptripAutoNav.syncMenuLabel(); }
+function toggleAutoNav() { closeTopMenu(); if (window.MaptripAutoNav) MaptripAutoNav.openSettings(); }
 
 function toggleTopMenu() {
   const menu = document.getElementById('top-menu');
@@ -1064,7 +1096,30 @@ function goHome() {
 // 心法：手指「起手的列」（touchstart target）永遠正確（真機黑盒子證實），故點按改由該列直接觸發，
 // 並 preventDefault 擋掉可能被 iOS 位移的原生 click；回饋高亮也加在正確那列。
 
+// 金額＝主體，用「字體顏色」分付款方式：現金=黑、刷卡=藍、簽單=紅、其他=灰
+function _payClass(pm) {
+  return pm === 'card' ? 'amt-card' : pm === 'voucher' ? 'amt-voucher' : pm === 'other' ? 'amt-other' : 'amt-cash';
+}
+// 上排右邊的加收標籤（小費／抽成／叫車）；不含現金/刷卡（改用金額顏色表示）
+function _rowTags(t) {
+  let s = '';
+  if (t.dispatch)   s += `<span class="extra-tag">叫車 ${t.dispatch}</span>`;   // 順序：叫車 → 小費 → 抽成
+  if (t.tip)        s += `<span class="extra-tag">小費 ${t.tip}${(t.tipMethod === 'card') ? '刷' : '現'}</span>`;
+  if (t.commission) s += `<span class="extra-tag">抽成 ${t.commission}</span>`;
+  return s;
+}
+function _amtHtml(t) {
+  if (t.fare) return `<span class="trip-amt ${_payClass(t.paymentMethod)}"><span class="au">NT$</span>${(t.fare || 0).toLocaleString()}</span>`;
+  return `<span class="trip-amt amt-other">${t.paymentMethod === 'other' ? (t.label || '其他') : '—'}</span>`;
+}
+// GPS 趟（今日/歷史共用）的 .trip-meta 內容：上排＝金額→距離→加收標籤；下排＝時長＋開始→結束
+function _tripMetaInner(t) {
+  return `<div class="trip-top">${_amtHtml(t)}<span class="trip-dist">${fmtDist(t.totalDist)}</span><span class="trip-tags">${_rowTags(t)}</span></div>`
+       + `<div class="trip-bot"><span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span><span class="trip-trange">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</span></div>`;
+}
+
 function renderTripSheet() {
+  if (window.MaptripRowSwipe) MaptripRowSwipe.reset();   // 列表重畫 → 清掉舊的「已滑開」狀態
   const body = document.getElementById('sheet-body');
   const dk = todayKey();
   // 併入記帳者補登的手動紀錄（顯示層，不進 days）：依 startTime 排序
@@ -1076,52 +1131,78 @@ function renderTripSheet() {
   const restMin = getRestMin(dk);
   const restHr = restMin ? +(restMin / 60).toFixed(2) : '';
   const work = workMs(merged, restMin);              // 手動趟無 endTime，workMs 內部自動排除
-  const fareLine = _fareLineHtml(merged, work);      // 車資統計含手動趟
-  const summary = `<div class="day-summary">
-    <div class="ds-top">
-      <span>${merged.length} 趟</span>
-      <span>${fmtDist(totalDist)}</span>
-      <button class="screenshot-btn" onclick="captureTripsScreenshot(null)">截圖</button>
-    </div>
-    ${fareLine ? `<div class="ds-bot">${fareLine}</div>` : ''}
-    <div class="ds-time">
-      <span>工作 <b>${fmtWork(work)}</b></span>
-      <span class="rest-wrap">休息
-        <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5"
-               value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span>
+  const tfs = _fareStats(merged);                    // {card, cash, total}（含手動趟）
+  const tRate = work > 0 ? Math.round(tfs.total / (work / 3600000)) : 0;
+  // 卡片化＋左滑露出「截圖」（v1.1.451）：總計＋每小時當主角、刷卡/現金色分、下排細字＝趟數·里程·工時＋休息
+  const summary = `<div class="day-summary swipeable">
+    <div class="trip-actions"><button class="swa a-shot" onclick="captureTripsScreenshot(null)"><span>📷</span><small>截圖</small></button></div>
+    <div class="trip-swipe tsum">
+      <div class="ts-hero">
+        <div class="ts-left"><span class="ts-lbl">總計</span><span class="ts-tot"><span class="u">NT$</span>${tfs.total.toLocaleString()}</span>${tRate ? `<span class="ts-rate">$${tRate.toLocaleString()}/hr</span>` : ''}</div>
+        <div class="ts-pay"><span class="fl-card">刷卡 ${tfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${tfs.cash.toLocaleString()}</span></div>
+      </div>
+      <div class="ts-meta">
+        <div class="ts-meta-l"><span>${merged.filter(t => !t.cancelCollect).length} 趟</span><span class="dot">·</span><span>${fmtDist(totalDist)}</span><span class="dot">·</span><span>工作 <b>${fmtWork(work)}</b></span></div>
+        <span class="rest-wrap">休息 <input class="rest-input" type="number" inputmode="decimal" min="0" step="0.5" value="${restHr}" placeholder="0" onchange="setTodayRest(this.value)"> 小時</span>
+      </div>
     </div>
   </div>`;
   body.innerHTML = summary + merged.map((t, i) => {
     if (t._manual) return _manualRowHtml(t, i + 1);
+    if (t.cancelCollect) return _collectRowHtml(t, `deleteTodayTrip(event,${todayTrips.indexOf(t)})`);
     const oi = todayTrips.indexOf(t);                // GPS 趟：用真實索引呼叫既有 handler
     return `
-    <div class="trip-row" data-row="t${i}" onclick="showSoloTripFromToday(${oi}); closeSheet()">
-      <div class="trip-num">${i + 1}</div>
-      <div class="trip-meta">
-        <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-        <div class="trip-stats">
-          ${fmtDist(t.totalDist)}
-          ${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}
-          <button class="fare-edit-btn" onclick="editFare(event,${oi})">${(t.fare || t.paymentMethod === 'other') ? '✏' : '＋金額'}</button>
-        </div>
+    <div class="trip-row swipeable${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="t${i}">
+      <div class="trip-actions">
+        <button class="swa edit" onclick="editFare(event,${oi})"><span>✏</span><small>${(t.fare || t.paymentMethod === 'other') ? '編輯' : '金額'}</small></button>
+        <button class="swa shot" onclick="captureTodayTripShot(event,${oi})"><span>📷</span><small>截圖</small></button>
+        <button class="swa del" onclick="deleteTodayTrip(event,${oi})"><span>🗑</span><small>刪除</small></button>
       </div>
-      <span class="trip-shot" onclick="captureTodayTripShot(event,${oi})">📷</span>
-      <span class="trip-del" onclick="deleteTodayTrip(event,${oi})">🗑</span>
+      <div class="trip-swipe" onclick="showSoloTripFromToday(${oi}); closeSheet()">
+        <div class="trip-num">${i + 1}</div>
+        <div class="trip-meta">${_tripMetaInner(t)}</div>
+        <span class="trip-go">‹</span>
+      </div>
     </div>`;
   }).join('');
 }
 
 // 手動紀錄列（記帳者補登；司機可刪、不可編、無地圖）。n＝顯示序號。
 function _manualRowHtml(t, n) {
-  const fareTag = t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t);
   return `
-    <div class="trip-row manual-row">
-      <div class="trip-num">${n}</div>
-      <div class="trip-meta">
-        <div class="trip-time">${fmtTime(t.startTime)}　<span class="manual-badge">手動</span></div>
-        <div class="trip-stats">${fareTag}${_extraTag(t)}</div>
+    <div class="trip-row swipeable manual-row${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}">
+      <div class="trip-actions">
+        <button class="swa del" onclick="deleteManualRow(event,'${String(t.id).replace(/'/g, "\\'")}')"><span>🗑</span><small>刪除</small></button>
       </div>
-      <span class="trip-del" onclick="deleteManualRow(event,'${String(t.id).replace(/'/g, "\\'")}')">🗑</span>
+      <div class="trip-swipe" style="cursor:default">
+        <div class="trip-num">${n}</div>
+        <div class="trip-meta">
+          <div class="trip-top">${_amtHtml(t)}<span class="manual-badge">手動</span><span class="trip-tags">${_rowTags(t)}</span></div>
+          <div class="trip-bot"><span class="trip-trange">${fmtTime(t.startTime)}</span></div>
+        </div>
+        <span class="trip-go">‹</span>
+      </div>
+    </div>`;
+}
+
+// 代收取消費列（v1.1.455，淨 0）：咖啡色、無路線、右邊顯示 現金+a / 刷卡−a / 淨0；可刪。
+// delOnclick＝刪除按鈕的 onclick 字串（今日/歷史各自帶對應 handler）。
+function _collectRowHtml(t, delOnclick) {
+  const a = (t.fare || 0).toLocaleString();
+  return `
+    <div class="trip-row swipeable collect-row">
+      <div class="trip-actions">
+        <button class="swa del" onclick="${delOnclick}"><span>🗑</span><small>刪除</small></button>
+      </div>
+      <div class="trip-swipe" style="cursor:default">
+        <div class="cc-ico">🧾</div>
+        <div class="cc-body">
+          <div class="cc-title">代收取消費</div>
+          <div class="cc-note">公司將從刷卡扣回 · 不計入收入</div>
+        </div>
+        <div class="cc-pay"><span class="cc-p">現金 +${a}</span><span class="cc-m">刷卡 −${a}</span><span class="cc-net">淨 0</span></div>
+        <span class="trip-go">‹</span>
+      </div>
     </div>`;
 }
 
@@ -1192,7 +1273,7 @@ function editFare(e, idx) {
     renderTripSheet();
   };
 
-  cashBtn.onclick = () => saveEdit('cash');
+  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 長按切換 現金／紙本簽單
   cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
 }
@@ -1238,8 +1319,8 @@ function editHistoryFare(e, day, idx) {
     const ex = _readFareExtra();
     const tp = _readTip();
     const tipMethod = tp.tip ? tp.tipMethod : '';
-    const cur = loadTrips();
-    const target = (cur[day] || []).find(t => t.id === tripId);
+    const arr = TripStore.getDay(day);   // 只拷貝這一天（v1.1.458，免 clone 整個歷史）
+    const target = arr.find(t => t.id === tripId);
     if (target) {
       target.fare = fare;
       target.paymentMethod = paymentMethod;
@@ -1247,7 +1328,7 @@ function editHistoryFare(e, day, idx) {
       target.dispatch = ex.dispatch;
       target.tip = tp.tip; target.tipMethod = tipMethod;
       if (paymentMethod !== 'other') target.label = '';   // 由「其他」轉成付費 → 清掉備注
-      saveTrips(cur);
+      TripStore.setDays({ [day]: arr });   // 只寫這一天，其他天原封不動
       if (window.MaptripSync) MaptripSync.syncDays([day]);
     }
     // 若編輯的是「今日」的趟，記憶體中的 todayTrips 也要同步，
@@ -1259,7 +1340,7 @@ function editHistoryFare(e, day, idx) {
     renderHistorySheet(true);   // 保留目前展開的月/日與捲動位置，不跳回最新那天
   };
 
-  cashBtn.onclick = () => saveEdit('cash');
+  MaptripFareDialog.bindCashButton(cashBtn, trip.paymentMethod, saveEdit);   // 長按切換 現金／紙本簽單
   cardBtn.onclick = () => saveEdit('card');
   skipBtn.onclick = close;
 }
@@ -1297,7 +1378,7 @@ function openCommissionBatch(day) {
   const body = document.getElementById('cb-body');
   body.innerHTML = trips.map((t, i) => {
     const pay = t.paymentMethod === 'other' ? '其他'
-      : (t.fare ? `NT$ ${t.fare} ${t.paymentMethod === 'card' ? '刷卡' : '現金'}` : '未填金額');
+      : (t.fare ? `NT$ ${t.fare} ${t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'voucher' ? '簽單' : '現金')}` : '未填金額');
     return `<div class="cb-row">
         <span class="cb-num">${i + 1}</span>
         <div class="cb-mid"><div class="cb-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}</div>
@@ -1324,8 +1405,7 @@ function saveCommissionBatch() {
   const day = _cbDay;
   if (!day) return;
   const inputs = document.querySelectorAll('#cb-body .cb-inp');
-  const cur = loadTrips();
-  const arr = cur[day] || [];
+  const arr = TripStore.getDay(day);   // 只拷貝這一天（v1.1.458）
   let changed = 0;
   inputs.forEach(inp => {
     const id = inp.getAttribute('data-id');
@@ -1340,7 +1420,7 @@ function saveCommissionBatch() {
     }
   });
   if (changed) {
-    saveTrips(cur);
+    TripStore.setDays({ [day]: arr });   // 只寫這一天
     if (window.MaptripSync) MaptripSync.syncDays([day]);
   }
   closeCommissionBatch();
@@ -1584,8 +1664,7 @@ function deleteTodayTrip(e, idx) {
 // 刪除「歷史」某趟（含雲端與墓碑，同今日刪除的安全機制）
 function deleteHistoryTrip(e, day, idx) {
   e.stopPropagation();
-  const raw = loadTrips();
-  const trip = (raw[day] || [])[idx];
+  const trip = TripStore.getDay(day)[idx];   // 只拷貝這一天（v1.1.458）
   if (!trip) return;
   if (!confirm(`刪除 ${day} 第 ${idx + 1} 趟行程？`)) return;
   // 若剛好是今日的趟：同步清掉記憶體與地圖圖層
@@ -1670,6 +1749,7 @@ if (typeof window !== 'undefined') window._workDaysCount = _workDaysCount;
 
 
 function renderHistorySheet(keepState) {
+  if (window.MaptripRowSwipe) MaptripRowSwipe.reset();   // 列表重畫 → 清掉舊的「已滑開」狀態
   // keepState：保留目前展開的月/日與捲動位置（編輯/刪除/補抽成後用），避免跳回最新那天
   const _snap = keepState ? _historySnapshot() : null;
   const body = document.getElementById('history-body');
@@ -1699,7 +1779,6 @@ function renderHistorySheet(keepState) {
     const mWork = mDays.reduce((s, d) => s + workMs(mergedByDay[d], getRestMin(d)), 0);
     // 單月實際跑車天數：整天只有「其他」（自用/非載客）的日子不算
     const mWorkDays = _workDaysCount(mDays.map(d => mergedByDay[d]));
-    const mFareLine = _fareLineHtml(mTrips, mWork);
     const [yy, mm] = mk.split('-');
     const monthLabel = `${yy}年${parseInt(mm, 10)}月`;
     const monthOpen = monthIdx === 0;   // 最近月份展開，較遠月份預設收折
@@ -1710,7 +1789,9 @@ function renderHistorySheet(keepState) {
       const dRestMin = getRestMin(day);
       const dRestHr = dRestMin ? +(dRestMin / 60).toFixed(2) : '';
       const dWork = workMs(trips, dRestMin);
-      const fareLine = _fareLineHtml(trips, dWork);
+      const dfs = _fareStats(trips);                       // {card, cash, total}（含小費/手動趟）
+      const dRate = dWork > 0 ? Math.round(dfs.total / (dWork / 3600000)) : 0;
+      const dNum = +day.slice(8, 10);                      // 只顯示「日」數字（2026-11-20 → 20）
       const isOpen = globalDayIdx === 0;   // 全清單最近一天展開
       globalDayIdx++;
       const restRow = `<div class="dr-rest">工作 <b id="work-${day}">${fmtWork(dWork)}</b>　休息
@@ -1723,45 +1804,56 @@ function renderHistorySheet(keepState) {
       const rows = restRow + trips.map((t, i) => {
         const sep = _segStartAfter.has(t) ? '<div class="day-split-sep">↡ 凌晨隔超過 6 小時，新的一天</div>' : '';
         if (t._manual) return sep + _manualRowHtml(t, i + 1);
+        if (t.cancelCollect) return sep + _collectRowHtml(t, `deleteHistoryTrip(event,'${day}',${(raw[day] || []).indexOf(t)})`);
         const oi = (raw[day] || []).indexOf(t);        // GPS 趟：用真實索引呼叫既有 handler
         return sep + `
-        <div class="trip-row" data-row="h${i}" onclick="showHistoryTrip('${day}',${oi})">
-
-          <div class="trip-num">${i + 1}</div>
-          <div class="trip-meta">
-            <div class="trip-time">${fmtTime(t.startTime)} → ${fmtTime(t.endTime)}　<span class="trip-dur">${fmtDur(t.endTime - t.startTime)}</span></div>
-            <div class="trip-stats">${fmtDist(t.totalDist)}${t.fare ? `　<span class="trip-fare-tag">NT$ ${t.fare}</span>${_payTag(t.paymentMethod)}` : _otherTag(t)}${_extraTag(t)}</div>
+        <div class="trip-row swipeable${t.paymentMethod === 'voucher' ? ' voucher-row' : ''}" data-row="h${i}">
+          <div class="trip-actions">
+            <button class="swa edit" onclick="editHistoryFare(event,'${day}',${oi})"><span>✏</span><small>編輯</small></button>
+            <button class="swa del" onclick="deleteHistoryTrip(event,'${day}',${oi})"><span>🗑</span><small>刪除</small></button>
           </div>
-          <span class="trip-edit" onclick="editHistoryFare(event,'${day}',${oi})">✏</span>
-          <span class="trip-del" onclick="deleteHistoryTrip(event,'${day}',${oi})">🗑</span>
-          <span style="color:#9aa0a6;font-size:1rem;padding:4px 2px">›</span>
+          <div class="trip-swipe" onclick="showHistoryTrip('${day}',${oi})">
+            <div class="trip-num">${i + 1}</div>
+            <div class="trip-meta">${_tripMetaInner(t)}</div>
+            <span class="trip-go">‹</span>
+          </div>
         </div>`;
       }).join('');
-      return `<div class="history-day" data-row="D${day}" onclick="toggleDay('${day}')">
-          <div class="day-head">
-            <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
-            <span class="day-info-top">${day}　${trips.length} 趟　${fmtDist(totalDist)}</span>
+      return `<div class="history-day swipeable" data-row="D${day}">
+          <div class="trip-actions day-actions">
+            <button class="swa d-map" onclick="event.stopPropagation();previewDay('${day}')"><span>🗺</span><small>地圖</small></button>
+            <button class="swa d-comm" onclick="event.stopPropagation();openCommissionBatch('${day}')"><span>％</span><small>抽成</small></button>
+            <button class="swa d-replay" onclick="event.stopPropagation();replayDay('${day}')"><span>▶</span><small>回放</small></button>
           </div>
-          <div class="day-body">
-            ${fareLine ? `<span class="day-info-bot">${fareLine}</span>` : '<span class="day-info-bot"></span>'}
-            <div class="day-acts">
-              <button class="preview-map-btn" onclick="event.stopPropagation();previewDay('${day}')">地圖</button>
-              <button class="commission-btn" onclick="event.stopPropagation();openCommissionBatch('${day}')">抽成</button>
-              <button class="replay-btn" onclick="event.stopPropagation();replayDay('${day}')">▶ 回放</button>
+          <div class="trip-swipe day-swipe" onclick="toggleDay('${day}')">
+            <div class="hday-num"><b>${dNum}</b><small>日</small></div>
+            <div class="hday-body">
+              <div class="hday-hero"><span class="hday-tot"><span class="u">NT$</span>${dfs.total.toLocaleString()}</span>${dRate ? `<span class="hday-rate">$${dRate.toLocaleString()}/hr</span>` : ''}</div>
+              <div class="hday-sub"><span class="fl-card">刷卡 ${dfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${dfs.cash.toLocaleString()}</span></div>
             </div>
+            <div class="hday-right"><b>${trips.filter(t => !t.cancelCollect).length} 趟</b><small>${fmtDist(totalDist)}</small></div>
+            <span class="day-caret">${isOpen ? '▼' : '▶'}</span>
           </div>
         </div>
         <div class="day-rows${isOpen ? '' : ' collapsed'}" id="day-rows-${day}">${rows}</div>`;
     }).join('');
 
-    return `<div class="history-month" data-row="M${mk}" onclick="toggleMonth('${mk}')">
-        <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
-        <span class="month-info">
-          <span class="month-title">${monthLabel}</span>
-          <span class="month-sub">${mWorkDays} 天　${mTrips.length} 趟　${fmtDist(mDist)}　工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></span>
-          ${mFareLine ? `<span class="month-fare">${mFareLine}</span>` : ''}
-        </span>
-        <button class="month-shot-btn" onclick="event.stopPropagation();captureMonthShot('${mk}')">📷 月結</button>
+    const mfs = _fareStats(mTrips);                      // {card, cash, total}
+    const mRate = mWork > 0 ? Math.round(mfs.total / (mWork / 3600000)) : 0;
+    // 卡片化＋左滑露出「月結」（v1.1.451）：月份名＋總計＋每小時當主角、刷卡/現金色分、天/趟/里程/工時收成一行細字
+    return `<div class="history-month swipeable" data-row="M${mk}">
+        <div class="trip-actions"><button class="swa a-month" onclick="event.stopPropagation();captureMonthShot('${mk}')"><span>📷</span><small>月結</small></button></div>
+        <div class="trip-swipe mrow" onclick="toggleMonth('${mk}')">
+          <div class="month-body">
+            <div class="month-title">${monthLabel}</div>
+            <div class="month-hero">
+              <div class="m-left"><span class="m-tot"><span class="u">NT$</span>${mfs.total.toLocaleString()}</span>${mRate ? `<span class="m-rate">$${mRate.toLocaleString()}/hr</span>` : ''}</div>
+              <div class="m-pay"><span class="fl-card">刷卡 ${mfs.card.toLocaleString()}</span><span class="fl-cash">現金 ${mfs.cash.toLocaleString()}</span></div>
+            </div>
+            <div class="month-meta">${mWorkDays} 天 <span class="dot">·</span> ${mTrips.filter(t => !t.cancelCollect).length} 趟 <span class="dot">·</span> ${fmtDist(mDist)} <span class="dot">·</span> 工作 <span id="mwork-${mk}">${fmtWork(mWork)}</span></div>
+          </div>
+          <span class="month-caret">${monthOpen ? '▼' : '▶'}</span>
+        </div>
       </div>
       <div class="month-days${monthOpen ? '' : ' collapsed'}" id="month-days-${mk}">${daysHtml}</div>`;
   }).join('');
@@ -1828,11 +1920,12 @@ function previewDay(dayKey) {
   closeHistory();
 
   // 先顯示 bar（讓 fitMapToRoute 量到正確高度）
-  const totalDist = trips.reduce((s, t) => s + (t.totalDist || 0), 0);
-  const totalFare = trips.reduce((s, t) => s + (t.fare || 0), 0);
+  const realTrips = trips.filter(t => !t.cancelCollect);   // 代收取消費不計趟數/金額（淨0）
+  const totalDist = realTrips.reduce((s, t) => s + (t.totalDist || 0), 0);
+  const totalFare = realTrips.reduce((s, t) => s + (t.fare || 0), 0);
   document.getElementById('dp-info').innerHTML =
     `<div class="dp-day">${dayKeyToLabel(dayKey)}</div>` +
-    `<div class="dp-stats">${trips.length} 趟　${fmtDist(totalDist)}${totalFare ? `　NT$ ${totalFare.toLocaleString()}` : ''}</div>`;
+    `<div class="dp-stats">${realTrips.length} 趟　${fmtDist(totalDist)}${totalFare ? `　NT$ ${totalFare.toLocaleString()}` : ''}</div>`;
   document.getElementById('day-preview-bar').style.display = 'flex';
   document.body.classList.add('day-preview-active');
   // 日預覽時：雙擊地圖回主頁（暫時關掉 Leaflet 雙擊放大避免衝突）
@@ -1909,9 +2002,9 @@ function captureMonthShot(ym) {
   const fs = MaptripUtil._fareStats(mTrips);          // {card, cash, total}（含小費、含手動趟；與列表總計一致）
   const mWork = mDays.reduce((s, d) => s + workMs(mergedByDay[d], getRestMin(d)), 0);
   return MaptripShot.captureMonthScreenshot(ym, {
-    fare: fs.total, cash: fs.cash, card: fs.card,
+    fare: fs.total, cash: fs.cash, card: fs.card, voucher: fs.voucher,
     workMs: mWork, workDays: _workDaysCount(mDays.map(d => mergedByDay[d])),
-    trips: mTrips.length, dist: mTrips.reduce((s, t) => s + (t.totalDist || 0), 0)
+    trips: mTrips.filter(t => !t.cancelCollect).length, dist: mTrips.reduce((s, t) => s + (t.totalDist || 0), 0)
   });
 }
 function captureSingleTripScreenshot(trip) { return MaptripShot.captureSingleTripScreenshot(trip); }
@@ -2083,9 +2176,9 @@ function storageBytes() { return MaptripStorage.storageBytes(); }
 function removeTripFromStorage(id) { return MaptripStorage.removeTripFromStorage(id); }
 
 function loadTodayFromStorage() {
-  let raw = {};
-  try { raw = loadTrips(); } catch (_) {}
-  const saved = raw[todayKey()] || [];
+  let saved = [];
+  // 只讀今天那一天（v1.1.458，免每次開 App 都 clone 整個歷史）
+  try { saved = (window.TripStore && TripStore.getDay) ? TripStore.getDay(todayKey()) : (loadTrips()[todayKey()] || []); } catch (_) {}
   if (!saved.length) return;
   saved.forEach((t, i) => {
     // 用同一個物件入陣列並畫線：_layers 才會掛在 todayTrips 內的那份，
@@ -2094,10 +2187,11 @@ function loadTodayFromStorage() {
     const copy = { ...t };
     try {
       if (i > 0) {
-        const prevCoords = tripPath(todayTrips[todayTrips.length - 1]);
+        const prevTrip   = todayTrips[todayTrips.length - 1];
+        const prevCoords = tripPath(prevTrip);
         const curCoords  = tripPath(t);
         if (prevCoords.length && curCoords.length)
-          allMapLayers.push(drawGapLine(prevCoords.at(-1), curCoords[0]));
+          allMapLayers.push(drawTripGap(prevTrip, t, prevCoords.at(-1), curCoords[0]));
       }
     } catch (_) {}
     todayTrips.push(copy);
@@ -2375,6 +2469,30 @@ function healBogusRoads(notify) {
 
 // 一次性清理「未貼路且含飄移群」的既有行程：不受 _snapN 重試上限影響
 // （今天貼路一直失敗、_snapN 已滿的鋸齒趟也要清）。以版本旗標保證每版只跑一次。
+// 一次性修復：v1.1.456 前 serializeTrip 白名單漏掉 cancelCollect → 存檔/重開後代收取消費趟
+// 退化成「普通現金 $40」（旗標消失、呈現與統計都錯）。用 label＋現金＋無路線的特徵還原旗標。
+function healCollectFlags() {
+  try {
+    if (localStorage.getItem('maptrip_ccfix') === '1') return;
+    const all = loadTrips();
+    let changed = false;
+    Object.keys(all).forEach(day => (all[day] || []).forEach(t => {
+      if (t && !t.cancelCollect && t.label === '代收取消費' &&
+          t.paymentMethod === 'cash' && (t.fare || 0) > 0 &&
+          (!t.coords || !t.coords.length) && !(t.totalDist > 0)) {
+        t.cancelCollect = true; changed = true;
+      }
+    }));
+    if (changed) saveTrips(all);
+    try { todayTrips.forEach(t => {
+      if (t && !t.cancelCollect && t.label === '代收取消費' && t.paymentMethod === 'cash' &&
+          (t.fare || 0) > 0 && (!t.coords || !t.coords.length) && !(t.totalDist > 0)) t.cancelCollect = true;
+    }); } catch (_) {}
+    localStorage.setItem('maptrip_ccfix', '1');
+    if (changed) { try { renderTripSheet(); } catch (_) {} }
+  } catch (_) {}
+}
+
 function healZigzagTraces() {
   try {
     if (localStorage.getItem('maptrip_zigfix') === 'v275') return;   // v275 加收紅燈原地飄移圈 → 重跑一次
@@ -2450,10 +2568,12 @@ function boot() {
   healBogusRoads(true);
   setTimeout(() => healBogusRoads(false), 25000);
   healZigzagTraces();   // 一次性清理既有鋸齒/飄移群的未貼路趟
+  healCollectFlags();   // 一次性修復：v1.1.456 前存檔漏掉 cancelCollect 旗標的代收取消費趟
   initMap();
   // 依目前引擎更新選單文字
   const glBtn = document.getElementById('glmap-menu-btn');
   if (glBtn) glBtn.textContent = window.MAPTRIP_GL ? '🗺 換回標準地圖' : '🧪 新地圖引擎（Beta）';
+  _syncAutoNavLabel();   // 還原「開始後跳轉 App」開關文字
   // 朝行進方向預設開啟（按指北針可關，選擇會記住）
   try {
     headingUp = localStorage.getItem('maptrip_headup') !== '0';

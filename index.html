@@ -112,7 +112,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <title>Maptrip 行程紀錄</title>
 <!-- index.html 版本：app.js 會比對此值，偵測到舊版 index 就自動重新整理 -->
-<script>window.INDEX_VERSION = '1.1.438';</script>
+<script>window.INDEX_VERSION = '1.1.467';</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';"/>
 <!-- 防止 WKWebView 快取舊版：每次載入都帶時間戳，強制取得最新 CSS -->
@@ -301,6 +301,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
     <button data-menu="metro">🚇 捷運到站提醒</button>
     <button data-menu="flight">✈ 航班查詢</button>
     <button data-menu="glmap" id="glmap-menu-btn">🧪 新地圖引擎（Beta）</button>
+    <button data-menu="autonav" id="autonav-menu-btn">🧭 跳轉 App：關</button>
   </div>
   <!-- 找客熱區／加油站／停車場／便利商店／搜尋地址 已整合到右下角 🔍 搜尋，這裡不再重複 -->
 </div>
@@ -346,7 +347,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
       <span class="ctrl-icon">▶</span>
       <span class="ctrl-label">開始</span>
     </button>
-    <button class="ctrl-btn" id="cancelfee-btn" onclick="MaptripCancelFee&&MaptripCancelFee.record()" title="乘客取消 $40 刷卡">
+    <button class="ctrl-btn" id="cancelfee-btn" title="單擊：乘客取消 $40 刷卡收入　長按：代收取消費（淨0）">
       <span class="ctrl-icon">🚫</span>
       <span class="ctrl-label">取消費用</span>
     </button>
@@ -555,6 +556,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/sheet-drag.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 一鍵導航選單（純 UI）＋ 向量地圖車站/機場/加油站/停車場圖層（gl-compat 樣式載入後安裝） -->
 <script>document.write('<scr' + 'ipt src="js/nav.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<script>document.write('<scr' + 'ipt src="js/autonav.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <script>document.write('<scr' + 'ipt src="js/transit.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 找附近（加油站／停車場）：Overpass 依直線距離排序、點一下用 MaptripNav 開車導航 -->
 <script>document.write('<scr' + 'ipt src="js/nearby.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
@@ -574,6 +576,8 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 <script>document.write('<scr' + 'ipt src="js/cancel-fee.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 <!-- 行程列點按錯位修正（iOS）：點按改由「起手那一列」直接觸發，擋掉被位移的原生 click -->
 <script>document.write('<scr' + 'ipt src="js/row-tap.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
+<!-- 行程列向左滑顯示動作（編輯/截圖/刪除）iPhone 式 -->
+<script>document.write('<scr' + 'ipt src="js/row-swipe.js?v=' + window.INDEX_VERSION + '"></scr' + 'ipt>');</script>
 
 <!-- Leaflet 多 CDN 備援載入：冷開機時某個 CDN 載入失敗會自動換下一個，
      全部失敗才自動重載一次（避免「第一次開地圖掛掉、要按重置」）。 -->

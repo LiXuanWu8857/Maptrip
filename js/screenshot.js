@@ -43,6 +43,8 @@ async function captureTripsScreenshot(dayKey, includeOther) {
     dateLabel = dayKeyToLabel(todayKey());
   }
   if (!trips.length) { toast('無行程可截圖'); return; }
+  trips = trips.filter(t => !t.cancelCollect);   // 代收取消費（淨0、無路線）不入截圖
+  if (!trips.length) { toast('無行程可截圖'); return; }
   // 「其他」行程（自用/非載客）預設不放進截圖；預覽上有勾選框可加回（v290）。
   const hasOther = trips.some(t => t.paymentMethod === 'other');
   if (includeOther === undefined) includeOther = false;      // 預設：不含「其他」
@@ -208,7 +210,7 @@ async function captureMonthScreenshot(ym, stats) {
   const monthTrips = [];   // 只畫有 GPS 的載客路線（手動趟無座標；「其他」不畫）
   Object.keys(raw).forEach(d => {
     if (d.slice(0, 7) !== ym) return;
-    (raw[d] || []).forEach(t => { if (t.paymentMethod !== 'other') monthTrips.push(t); });
+    (raw[d] || []).forEach(t => { if (t.paymentMethod !== 'other' && !t.cancelCollect) monthTrips.push(t); });
   });
 
   // 統計優先用呼叫端（app.js captureMonthShot）算好的 stats：與歷史「每月」列表逐一相同
@@ -347,7 +349,7 @@ function _monthWorkDays(raw, ym) {
   let n = 0;
   Object.keys(merged).forEach(d => {
     if (d.slice(0, 7) !== ym) return;
-    if ((merged[d] || []).some(t => t.paymentMethod !== 'other')) n++;
+    if ((merged[d] || []).some(t => t.paymentMethod !== 'other' && !t.cancelCollect)) n++;
   });
   return n;
 }

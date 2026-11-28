@@ -118,6 +118,34 @@ App 開啟後就常駐浮一張小卡片在 Google Maps、55688 導航等其他 
 第一次開 App 會問是否開啟浮動視窗，按確定會跳到系統「顯示在其他應用程式上層」
 設定頁，把 Maptrip 打開後切回來，卡片就會常駐顯示了。
 
+### 4.7 浮動視窗捷徑鈕（v1.1.467：55688／Google 地圖一鍵切換）
+
+浮動視窗下方會多一排捷徑鈕（55688、地圖，等寬填滿），點一下用**套件名稱直接開那個 App**，
+圖示是手機裡那個 App 的真圖示。顯示哪幾顆跟 App 內「⚙️設定 →🧭 跳轉 App → 主頁右上角快捷鈕」同一組開關；
+沒安裝的 App 自動不顯示。輸入車資時捷徑列會先藏起來。
+
+Android 11 以後，App 要先宣告「會去找哪些 App」，否則系統一律說找不到（捷徑鈕不會出現）。
+編輯 `android/app/src/main/AndroidManifest.xml`，在 `<manifest>` 標籤內、`<application>` **之前**加入：
+
+```xml
+<queries>
+  <!-- 浮動視窗捷徑鈕／跳轉 App：用套件名稱直接開這些 App -->
+  <package android:name="tw.com.masterhand.twtaxidriver" />
+  <package android:name="com.google.android.apps.maps" />
+  <!-- 之後要加其他 App 也能找到（所有有桌面圖示的 App） -->
+  <intent>
+    <action android:name="android.intent.action.MAIN" />
+    <category android:name="android.intent.category.LAUNCHER" />
+  </intent>
+</queries>
+```
+
+然後把最新的 `native/android/FloatingWindowPlugin.java` 再複製一次、蓋掉
+`android/app/src/main/java/com/maptrip/app/FloatingWindowPlugin.java`，按綠色 ▶ 重新 Run。
+
+> 沒重編之前（舊版安卓 App）網頁端也不會壞：右上角/開始/結束跳轉會改用網址開
+> （Google 地圖開一般網址、55688 開 Google Play 頁面），只是浮動視窗上還沒有捷徑鈕。
+
 ### 5. 在手機上開啟開發者模式
 - 手機：設定 → 關於手機 → 連點「版本號碼」7 下 → 開啟「開發人員選項」
 - 開發人員選項裡 → 開啟「USB 偵錯」
@@ -143,6 +171,7 @@ App 下次開啟就是最新版（因為它是遠端載入 GitHub Pages）。
 只有以下情況才需要回到 Android Studio 重跑 `npx cap sync android` 並重新 Run：
 - 換了原生外掛 / 改了 `capacitor.config.json`
 - 改了 `AndroidManifest.xml` 權限設定
+- 改了 `native/android/FloatingWindowPlugin.java`（例如 v1.1.467 浮動視窗捷徑鈕）：複製蓋掉舊檔後重新 Run
 
 ---
 

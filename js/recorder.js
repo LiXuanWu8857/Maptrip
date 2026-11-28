@@ -227,6 +227,10 @@
     floatWin()?.showRecording({ elapsed: 0, distance: 0 }).catch(() => {});
     saveActiveTrip();   // 立即存一份，供重載復原
 
+    // 「開始後跳轉 App」（v1.1.459，邏輯在 js/autonav.js）：總開關開＋僅前景 → 跳選單（55688／Google 地圖…），
+    // 只開一個 App 就直接跳。鎖定畫面/背景（widget）啟動不跳；MapTrip 在背景照常記錄 GPS。
+    try { global.MaptripAutoNav && global.MaptripAutoNav.onTripStart(); } catch (_) {}
+
     // 螢幕常亮（避免 iOS 熄屏後 GPS 被節流）
     await requestWakeLock();
   }
@@ -304,6 +308,9 @@
     saveTodayToStorage();   // 車資先存（貼路成功與否不影響金額）
     if (commission || dispatch) _pushCommission(trip.id, commission, dispatch);   // 抽成上雲
     updateTopBar();
+
+    // 「結束收款後跳 55688」（v1.1.462，邏輯在 js/autonav.js）：現金／刷卡／簽單＋開關開＋前景才跳
+    try { global.MaptripAutoNav && global.MaptripAutoNav.onTripEnd(paymentMethod); } catch (_) {}
 
     // 共享熱點：完成一趟載客（有上車點、非「其他」）→ 對去識別化格子 count +1
     // （只有加入車隊＋開分享才真的寫；前端去重＝一趟一次、每日上限）。座標只用粗網格。

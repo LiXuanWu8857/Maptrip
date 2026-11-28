@@ -928,6 +928,121 @@ textarea.bk-in { resize: vertical; }
 .trip-shot:active { opacity: 1; }
 .trip-edit  { color: #1a73e8; opacity: 0.7; padding: 4px 4px; font-size: 0.9rem; }
 .trip-edit:active { opacity: 1; }
+
+/* ===== 行程列「向左滑顯示動作」（iPhone 式，v1.1.444）===== */
+.trip-row.swipeable {               /* 圓角卡片：邊角圓弧、每列之間留空、不用底線分隔 */
+  display: block; position: relative; overflow: hidden;
+  padding: 0; gap: 0; border-bottom: none;
+  margin: 6px 10px; border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
+}
+.trip-swipe {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  background: #fff; position: relative; z-index: 1; border-radius: inherit;
+  transition: transform 0.22s cubic-bezier(0.2,0.8,0.2,1); will-change: transform;
+  -webkit-user-select: none; user-select: none;
+  /* manipulation（不設 pan-y）：水平左滑由本模組非被動 preventDefault 接管，
+     垂直仍讓 sheet-drag 能 preventDefault 拖曳 sheet（pan-y 會擋掉垂直 preventDefault）*/
+  touch-action: manipulation;
+}
+.trip-actions {               /* 藏在內容後面（右側）；平常隱藏，左滑/打開才顯示 → 杜絕上下拖時底部露出色塊 */
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 0;
+  display: flex; align-items: stretch;
+  opacity: 0; transition: opacity 0.12s;
+}
+.swipeable.swiping .trip-actions,
+.swipeable.swipe-open .trip-actions { opacity: 1; }
+.swa {
+  border: none; margin: 0; padding: 0 2px; width: 74px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;   /* 圖與字拉開 */
+  font-family: inherit; line-height: 1; color: #fff; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.swa span  { font-size: 1.3rem; }
+.swa small { font-size: 0.64rem; font-weight: 600; }
+.swa.edit { background: #1a73e8; }
+.swa.shot { background: #5f6368; }
+.swa.del  { background: #ea4335; }
+.swa.d-map    { background: #34a853; }   /* 歷史每日列：地圖＝綠 */
+.swa.d-comm   { background: #e8710a; }   /* 抽成＝橘 */
+.swa.d-replay { background: #1a73e8; }   /* 回放＝藍 */
+.swa.a-shot   { background: #1a73e8; }   /* 今日摘要：截圖＝藍 */
+.swa.a-month  { background: #e5508a; }   /* 月份標題：月結＝粉 */
+.swa:active { filter: brightness(0.9); }
+.trip-go { color: #c3c7cc; font-size: 1rem; padding: 4px 0 4px 2px; flex-shrink: 0; width: 16px; text-align: center; }
+/* 號碼造型 D（極簡大數字，無圈灰色）＋ 資訊向右填滿：時間在左、時長推到最右，右邊保留 ‹ 箭頭位 */
+.trip-swipe .trip-num {
+  width: 26px; min-width: 26px; height: auto; flex-shrink: 0;   /* 固定寬：1 位/2 位數字都對齊，後面欄位不跑位 */
+  background: none; border-radius: 0; color: #9aa0a6;
+  font-size: 1.2rem; font-weight: 800; font-variant-numeric: tabular-nums;
+  display: block; text-align: center; line-height: 1;
+}
+/* ===== 兩排版面：上排＝金額(主體，顏色分付款)→距離→加收標籤；下排＝時長＋開始→結束時間 ===== */
+.trip-swipe .trip-meta { flex: 1; min-width: 0; }
+.trip-swipe .trip-top { display: flex; align-items: baseline; gap: 10px; }
+.trip-swipe .trip-amt { font-size: 1.16rem; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.trip-swipe .trip-amt .au { font-size: 0.72rem; font-weight: 700; opacity: 0.6; margin-right: 2px; }
+.trip-swipe .amt-cash    { color: #202124; }   /* 現金＝黑 */
+.trip-swipe .amt-card    { color: #1a73e8; }   /* 刷卡＝藍 */
+.trip-swipe .amt-voucher { color: #d93025; }   /* 簽單＝紅 */
+.trip-swipe .amt-other   { color: #5f6368; font-size: 0.95rem; font-weight: 700; }   /* 其他＝灰、顯示備註 */
+.trip-swipe .trip-dist { font-size: 0.8rem; color: #5f6368; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.trip-swipe .trip-tags { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; overflow: hidden; }
+.trip-swipe .trip-bot { display: flex; align-items: baseline; gap: 10px; margin-top: 4px; font-size: 0.82rem; color: #5f6368; font-variant-numeric: tabular-nums; }
+.trip-swipe .trip-dur { color: #9aa0a6; min-width: 46px; white-space: nowrap; }
+.trip-swipe .trip-trange { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-color-scheme: dark) {
+  .trip-swipe .trip-num { color: #8a8f98; }
+  .trip-swipe .amt-cash    { color: #e8eaed; }   /* 深色下現金用亮白（黑字會看不到）*/
+  .trip-swipe .amt-card    { color: #8ab4f8; }
+  .trip-swipe .amt-voucher { color: #f28b82; }
+}
+/* 手動列底色改掛在滑動層（不透明底才蓋得住後面的動作鈕）*/
+.trip-row.swipeable.manual-row { background: transparent; box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(245,124,0,0.18); }
+.trip-row.swipeable.manual-row .trip-swipe { background-image: linear-gradient(rgba(245,124,0,0.06), rgba(245,124,0,0.06)); }
+/* 簽單紅框改掛在滑動層（隨內容一起滑、吃圓角）；卡片外框維持 */
+.trip-row.swipeable.voucher-row { background: transparent; margin: 6px 10px; border-radius: 14px; padding: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04); }
+.trip-row.swipeable.voucher-row .trip-swipe {
+  box-shadow: inset 0 0 0 2px #d93025;
+  background-image: linear-gradient(rgba(217,48,37,0.06), rgba(217,48,37,0.06));
+}
+@media (prefers-color-scheme: dark) {
+  .trip-row.swipeable { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); }
+  .trip-swipe { background: #242424; }
+  .trip-row.swipeable.manual-row { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(245,124,0,0.25); }
+  .trip-row.swipeable.voucher-row .trip-swipe {
+    box-shadow: inset 0 0 0 2px #f28b82;
+    background-image: linear-gradient(rgba(242,139,130,0.10), rgba(242,139,130,0.10));
+  }
+}
+/* 代收取消費列（v1.1.455，淨 0）：咖啡色外框、無路線；右邊 現金+a / 刷卡−a / 淨0 */
+.trip-row.swipeable.collect-row { box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(142,91,42,0.22); }
+.trip-swipe .cc-ico { width: 26px; min-width: 26px; flex-shrink: 0; text-align: center; font-size: 1.1rem; }
+.trip-swipe .cc-body { flex: 1; min-width: 0; }
+.cc-title { font-size: 1rem; font-weight: 800; color: #8e5b2a; }
+.cc-note { font-size: 0.72rem; color: #5f6368; margin-top: 3px; }
+.cc-pay { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3;
+  font-variant-numeric: tabular-nums; font-size: 0.86rem; }
+.cc-pay .cc-p { color: #34a853; font-weight: 800; white-space: nowrap; }
+.cc-pay .cc-m { color: #1a73e8; font-weight: 800; white-space: nowrap; }
+.cc-pay .cc-net { font-size: 0.66rem; color: #9aa0a6; }
+@media (prefers-color-scheme: dark) {
+  .trip-row.swipeable.collect-row { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(200,150,100,0.32); }
+  .cc-title { color: #d2a679; } .cc-note { color: #9aa0a6; }
+  .cc-pay .cc-p { color: #81c995; } .cc-pay .cc-m { color: #8ab4f8; }
+}
+/* 桌面（細指標、可 hover）：沒有左滑手勢 → 動作鈕直接內嵌右側（維持舊操作、不靠滑動）*/
+@media (hover: hover) and (pointer: fine) {
+  .trip-row.swipeable, .history-day.swipeable { display: flex; align-items: center; overflow: visible; }
+  .trip-swipe { flex: 1; transform: none !important; order: 1; }
+  .trip-actions { position: static; opacity: 1; order: 2; }   /* 桌面不靠手勢 → 動作一直顯示在右側 */
+  .swa { width: auto; flex-direction: row; gap: 4px; padding: 6px 10px; background: transparent !important; }
+  .swa span { font-size: 0.95rem; } .swa small { display: none; }
+  .swa.edit { color: #1a73e8; } .swa.del { color: #ea4335; } .swa.shot { color: #9aa0a6; }
+  .swa.d-map { color: #34a853; } .swa.d-comm { color: #e8710a; } .swa.d-replay { color: #1a73e8; }
+  .trip-go { display: none; }
+}
 /* 換日分隔線：一日桶內凌晨隔超過 6h 的段界（全自動，無手動鈕） */
 .day-split-sep {
   font-size: 0.72rem; color: #e8710a; text-align: center;
@@ -941,48 +1056,70 @@ textarea.bk-in { resize: vertical; }
 
 .empty-state { padding: 36px 20px; text-align: center; color: #9aa0a6; font-size: 0.88rem; line-height: 1.7; }
 
-.history-day {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 10px 18px 4px; font-size: 0.75rem; font-weight: 600; color: #1a73e8; letter-spacing: 0.04em;
-  cursor: pointer;
+/* ===== 歷史「每日」列：卡片＋向左滑露出 地圖/抽成/回放（v1.1.450）=====
+   日期只顯示「日」大數字（藍）；上排主角＝總計＋每小時，下排＝刷卡/現金，最右＝趟數/里程 */
+.history-day.swipeable {
+  display: block; position: relative; overflow: hidden; cursor: pointer;
+  margin: 8px 10px; border-radius: 14px; padding: 0; color: #202124;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
   /* iOS：禁止選字/長按選單/點擊高亮 → 避免點日期列時高亮/選取被合成位移到下一列 */
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-/* 不用 :active（iOS 會把它畫到相鄰列＝顯示錯位）；點按會展開該日＝已有回饋 */
-/* 第一排：展開箭頭＋日期列（吃整行寬度，完整顯示不截斷）*/
-.day-head { display: flex; align-items: center; gap: 8px; }
-.day-caret { font-size: 0.65rem; color: #9aa0a6; flex-shrink: 0; width: 12px; }
-.day-info-top { flex: 1 1 auto; min-width: 0; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
-/* 第二排：左邊總計文字（兩行）＋右邊按鈕，縮排對齊日期文字（讓過箭頭寬度）*/
-.day-body { display: flex; align-items: center; gap: 8px; padding-left: 20px; }
-/* 總計那行：刷卡／現金 第一行、總計／每小時收入 第二行（使用者要求）*/
-.day-info-bot { flex: 1 1 auto; min-width: 0; font-size: 0.68rem; font-weight: 400; color: #5f6368; letter-spacing: 0.02em; line-height: 1.55; }
-/* 地圖/抽成/回放 放在總計文字右側（同第二排，垂直置中）*/
-.day-acts { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
-.history-day .replay-btn { flex-shrink: 0; }
+.hday-num { min-width: 30px; flex-shrink: 0; text-align: center; line-height: 1; }
+.hday-num b { display: block; font-size: 1.4rem; font-weight: 800; color: #1a73e8; font-variant-numeric: tabular-nums; }
+.hday-num small { font-size: 0.56rem; font-weight: 700; letter-spacing: 1px; color: #9aa0a6; }
+.hday-body { flex: 1; min-width: 0; }
+.hday-hero { display: flex; align-items: baseline; gap: 10px; }
+.hday-tot { font-size: 1.18rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hday-tot .u { font-size: 0.72rem; font-weight: 700; opacity: 0.6; margin-right: 2px; }
+.hday-rate { font-size: 0.92rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
+.hday-sub { font-size: 0.76rem; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.hday-sub .fl-card { color: #1a73e8; font-weight: 700; margin-right: 10px; }
+.hday-sub .fl-cash { color: #34a853; font-weight: 700; }
+.hday-right { flex-shrink: 0; text-align: right; line-height: 1.15; }
+.hday-right b { display: block; font-size: 0.95rem; font-weight: 800; color: #5f6368; font-variant-numeric: tabular-nums; }
+.hday-right small { font-size: 0.68rem; color: #9aa0a6; }
+.day-caret { font-size: 0.7rem; color: #c3c7cc; flex-shrink: 0; width: 14px; text-align: center; }
+@media (prefers-color-scheme: dark) {
+  .history-day.swipeable { color: #e8eaed; box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); }
+  .hday-num b { color: #8ab4f8; }
+  .hday-tot { color: #e8eaed; }
+  .hday-sub .fl-card { color: #8ab4f8; } .hday-sub .fl-cash { color: #81c995; }
+  .hday-right b { color: #9aa0a6; }
+}
 .day-rows.collapsed { display: none; }
 
-/* 月份分組 */
-.history-month {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px 10px; cursor: pointer;
+/* ===== 月份分組：卡片＋左滑露出「月結」（v1.1.451）=====
+   月份名＋總計＋每小時當主角、刷卡/現金色分、天/趟/里程/工時收成一行細字；右端 ▼/▶＝展開狀態 */
+.history-month.swipeable {
+  display: block; position: relative; overflow: hidden; cursor: pointer;
+  margin: 12px 10px 8px; border-radius: 14px; padding: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.05);
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
-  background: #f1f3f5; border-top: 1px solid rgba(0,0,0,0.06);
 }
-.history-month:first-child { border-top: none; }
-.month-caret { font-size: 0.7rem; color: #5f6368; flex-shrink: 0; width: 12px; }
-.month-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.month-title { font-size: 0.95rem; font-weight: 800; color: #202124; }
-.month-sub { font-size: 0.72rem; color: #5f6368; font-weight: 600; }
-.month-fare { font-size: 0.68rem; line-height: 1.55; }
-.month-fare .fl-card, .month-fare .fl-cash, .month-fare .fl-total { margin-right: 8px; }
+.trip-swipe.mrow { gap: 10px; padding: 12px 12px 12px 14px; }
+.month-body { flex: 1; min-width: 0; }
+.month-title { font-size: 1rem; font-weight: 800; color: #202124; letter-spacing: 0.01em; }
+/* 上排：左＝總計＋每小時（主角）；右＝刷卡/現金 直排靠右（填右側空白，v1.1.453）*/
+.month-hero { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.m-left { display: flex; align-items: baseline; gap: 9px; flex: 1; min-width: 0; }
+.m-tot { font-size: 1.3rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.01em; }
+.m-tot .u { font-size: 0.74rem; font-weight: 700; opacity: 0.55; margin-right: 2px; }
+.m-rate { font-size: 0.96rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
+.m-pay { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  font-size: 0.8rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.m-pay span { white-space: nowrap; }
+.month-meta { font-size: 0.72rem; color: #5f6368; margin-top: 5px; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.month-caret { font-size: 0.72rem; color: #c3c7cc; flex-shrink: 0; width: 14px; text-align: center; align-self: center; }
 .month-days.collapsed { display: none; }
 @media (prefers-color-scheme: dark) {
-  .history-month { background: #1c1c1e; border-top-color: rgba(255,255,255,0.06); }
-  .month-title { color: #e8eaed; }
-  .month-sub, .month-caret { color: #9aa0a6; }
+  .history-month.swipeable { box-shadow: 0 1px 2px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); }
+  .month-title, .m-tot { color: #e8eaed; }
+  .month-meta { color: #9aa0a6; }
+  .m-pay .fl-card { color: #8ab4f8; } .m-pay .fl-cash { color: #81c995; }
 }
 
 .toast {
@@ -1143,6 +1280,18 @@ textarea.bk-in { resize: vertical; }
 #fare-cash  { background: #34a853; }
 #fare-card  { background: #1a73e8; }
 #fare-cash:active, #fare-card:active { opacity: 0.85; }
+/* 現金鈕長按 → 紙本簽單（v1.1.440）；關掉 iOS 長按選取/放大鏡/選單 */
+#fare-cash { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#fare-cash.voucher { background: #d93025; }
+.pay-voucher { background: #d93025; color: #fff; }
+/* 紙本簽單（算在刷卡）：整列紅框顯著標示（v1.1.443）。inset box-shadow 不改版面高度 */
+.trip-row.voucher-row { box-shadow: inset 0 0 0 2px #d93025; border-radius: 10px; background: rgba(217,48,37,0.06);
+  margin: 4px 6px; padding-left: 12px; padding-right: 12px; }   /* 外距 6＋內距 12＝原本 18 → 內容寬度不變、不換行 */
+.trip-row.manual-row.voucher-row { background: rgba(217,48,37,0.06); }
+@media (prefers-color-scheme: dark) {
+  .trip-row.voucher-row { box-shadow: inset 0 0 0 2px #f28b82; background: rgba(242,139,130,0.10); }
+  .pay-voucher { background: #f28b82; color: #202124; }
+}
 .pay-tag { display: inline-block; font-size: 0.68rem; font-weight: 600;
   padding: 1px 5px; border-radius: 5px; margin-left: 4px; vertical-align: middle; }
 .pay-cash { background: rgba(52,168,83,0.12); color: #34a853; }
@@ -1153,28 +1302,48 @@ textarea.bk-in { resize: vertical; }
   background: rgba(217,48,37,0.10); color: #c5221f; }
 @media (prefers-color-scheme: dark) { .extra-tag { background: rgba(242,139,130,0.16); color: #f28b82; } }
 
-.day-summary {
-  display: flex; flex-direction: column; gap: 5px;
-  padding: 10px 18px; background: #f8f9fa;
-  font-size: 0.82rem; color: #5f6368; font-weight: 500;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  /* 總計恆置頂：捲動下方清單時，這塊固定在最上面 */
-  position: sticky; top: 0; z-index: 3;
+/* ===== 今日行程 摘要：卡片＋左滑露出「截圖」（v1.1.451）=====
+   總計＋每小時當主角、刷卡/現金色分、下排細字＝趟數·里程·工時＋休息；恆置頂 */
+.day-summary.swipeable {
+  display: block; position: relative; overflow: hidden;
+  margin: 8px 10px; border-radius: 14px; padding: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04);
+  position: sticky; top: 8px; z-index: 5;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
-.ds-top { display: flex; gap: 12px; align-items: center; }
-.ds-top .screenshot-btn { margin-left: auto; }
-.ds-bot { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
-.ds-time { display: flex; gap: 14px; align-items: center; font-size: 0.8rem; }
-.ds-time b { color: #202124; font-weight: 700; }
-.rest-wrap { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.trip-swipe.tsum { display: block; padding: 12px 16px; cursor: default; }
+/* 上排：左＝總計＋每小時（主角）；右＝刷卡/現金 直排置中，和下面休息對齊成同一右欄（v1.1.453）*/
+.ts-hero { display: flex; align-items: center; gap: 10px; }
+.ts-left { display: flex; align-items: baseline; gap: 9px; flex: 1; min-width: 0; }
+.ts-lbl { font-size: 0.72rem; color: #5f6368; font-weight: 700; align-self: center; }
+.ts-tot { font-size: 1.5rem; font-weight: 800; color: #202124; font-variant-numeric: tabular-nums; white-space: nowrap; letter-spacing: -0.01em; }
+.ts-tot .u { font-size: 0.78rem; font-weight: 700; opacity: 0.55; margin-right: 2px; }
+.ts-rate { font-size: 1rem; font-weight: 800; color: #e8710a; white-space: nowrap; }
+.ts-pay { flex-shrink: 0; width: 118px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  font-size: 0.84rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.ts-pay span { white-space: nowrap; }
+.ts-meta { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.06); font-size: 0.75rem; color: #5f6368; font-variant-numeric: tabular-nums; }
+.ts-meta-l { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; row-gap: 4px; }
+.ts-meta b { color: #202124; font-weight: 700; }
+.ts-meta .dot, .month-meta .dot { color: #c3c7cc; }
+/* 休息：固定同寬右欄、置中 → 和上面刷卡/現金對齊成一欄 */
+.rest-wrap { flex-shrink: 0; width: 118px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .rest-input {
   width: 46px; text-align: center; font-size: 0.82rem; font-family: inherit;
   border: 1px solid rgba(0,0,0,0.18); border-radius: 7px; padding: 3px 4px;
   background: #fff; color: #202124; outline: none;
 }
+/* 今日摘要深色（放在今日樣式之後，才不會被上面的基底色蓋回＝自 v1.1.451 的 dark-on-dark 修正）*/
+@media (prefers-color-scheme: dark) {
+  .ts-tot, .ts-meta b { color: #e8eaed; }
+  .ts-lbl { color: #9aa0a6; }
+  .ts-pay .fl-card { color: #8ab4f8; } .ts-pay .fl-cash { color: #81c995; }
+}
 .dr-rest {
   padding: 6px 18px 8px; font-size: 0.76rem; color: #5f6368;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
 }
 .dr-rest b { color: #1a73e8; font-weight: 700; }
 @media (prefers-color-scheme: dark) {
@@ -1184,9 +1353,10 @@ textarea.bk-in { resize: vertical; }
 }
 .fl-card  { color: #1a73e8; font-weight: 700; }
 .fl-cash  { color: #34a853; font-weight: 700; }
+.fl-voucher { color: #8e5b2a; font-weight: 700; }
 .fl-total { color: #202124; font-weight: 700; margin-left: auto; }
 .fl-rate  { color: #e8710a; font-weight: 700; margin-left: 10px; }
-.day-info-bot .fl-card, .day-info-bot .fl-cash, .day-info-bot .fl-total {
+.day-info-bot .fl-card, .day-info-bot .fl-voucher, .day-info-bot .fl-cash, .day-info-bot .fl-total {
   margin-right: 10px; font-weight: 600;
 }
 /* 第二行：總計與每小時收入之間留間距（gap 由 fl-total 的 margin-right 提供）*/
@@ -1371,6 +1541,7 @@ textarea.bk-in { resize: vertical; }
   .day-summary { background: #222; border-bottom-color: rgba(255,255,255,0.05); color: #9aa0a6; }
   .fl-card { color: #6ab4ff; }
   .fl-cash { color: #6fcf80; }
+  .fl-voucher { color: #d6a36e; }
   .fl-total { color: #e8eaed; }
   .fl-rate { color: #f9ab00; }
   .history-day { color: #6ab4ff; }

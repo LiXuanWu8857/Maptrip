@@ -44,6 +44,7 @@
   function _payTag(pm) {
     if (pm === 'cash') return '<span class="pay-tag pay-cash">現金</span>';
     if (pm === 'card') return '<span class="pay-tag pay-card">刷卡</span>';
+    if (pm === 'voucher') return '<span class="pay-tag pay-voucher">簽單</span>';
     return '';
   }
   function _otherTag(t) {
@@ -58,21 +59,25 @@
     return s;
   }
   function _fareStats(trips) {
-    let card = 0, cash = 0, total = 0;
+    let card = 0, cash = 0, voucher = 0, total = 0;
     trips.forEach(t => {
+      // 代收取消費（v1.1.455）：幫公司代收、客人給現金但公司從刷卡扣回 → 現金+a、刷卡−a、總計不變（淨 0）
+      if (t.cancelCollect) { const a = t.fare || 0; cash += a; card -= a; return; }
       const f = t.fare || 0; total += f;
       if (t.paymentMethod === 'card') card += f;
       else if (t.paymentMethod === 'cash') cash += f;
+      else if (t.paymentMethod === 'voucher') { card += f; voucher += f; }   // 紙本簽單：算進刷卡（v1.1.443）；voucher＝其中簽單多少
       // 小費/加收：計入總計，並依「小費付款方式」分流到刷卡/現金
       const tip = t.tip || 0;
       if (tip) { total += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
     });
-    return { card, cash, total };
+    return { card, cash, voucher, total };
   }
   // 傳入 workMsVal（實際工作時長 ms）且 > 0 時，在總計旁加上每小時金額 $X/hr（v1.1.254）。
   function _fareLineHtml(trips, workMsVal) {
     const { card, cash, total } = _fareStats(trips);
     if (!total) return '';
+    // 紙本簽單已算進「刷卡」（v1.1.443），不另列；簽單趟在清單用紅框標示
     let html = `<span class="fl-card">刷卡：${card.toLocaleString()}</span>` +
            `<span class="fl-cash">現金：${cash.toLocaleString()}</span>` +
            `<span class="fl-total">總計：${total.toLocaleString()}</span>`;
@@ -105,7 +110,7 @@
     const segs = [];
     for (let i = 0; i < trips.length; i++) {
       const x = trips[i];
-      if (!x || x.paymentMethod === 'other' || !x.startTime) continue;
+      if (!x || x.paymentMethod === 'other' || x.cancelCollect || !x.startTime) continue;   // 代收取消費非載客，不算工時
       segs.push({ s: x.startTime, e: x.endTime || x.startTime });
     }
     if (!segs.length) return 0;
@@ -126,6 +131,13 @@
     return Math.max(0, (maxEnd - minStart) - autoRest - (restMin || 0) * 60000);
   }
 
+  // 兩趟之間的空檔是否達「休息」門檻（≥ GAP_REST_MIN 分）＝路線顯示時不連線、改放 ☕。
+  // 與 workMs 的自動扣休息同一門檻，地圖呈現與工時計算一致。缺時間資訊＝不算休息（照舊連線）。
+  function isRestGap(a, b) {
+    if (!a || !b || !a.endTime || !b.startTime) return false;
+    return (b.startTime - a.endTime) >= GAP_REST_MIN * 60000;
+  }
+
   // 初始化：對齊 app.js 的 TEST_MODE_ON，決定 REST_KEY
   function init(opts) {
     opts = opts || {};
@@ -139,7 +151,7 @@
     _payTag: _payTag, _otherTag: _otherTag, _extraTag: _extraTag,
     _fareStats: _fareStats, _fareLineHtml: _fareLineHtml,
     getRestMin: getRestMin, setRestMin: setRestMin, workMs: workMs,
-    GAP_REST_MIN: GAP_REST_MIN
+    GAP_REST_MIN: GAP_REST_MIN, isRestGap: isRestGap
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

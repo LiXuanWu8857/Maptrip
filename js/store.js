@@ -149,6 +149,38 @@ window.TripStore = (function () {
       });
   }
 
+  // 只拷貝「某一天」（存檔/編輯/同步熱路徑用，避免 clone 整個歷史）。回傳深拷貝陣列。
+  function getDay(day) { return clone(cache[day] || []); }
+
+  // 唯讀「全量視圖」：直接回快取本體、不 clone。**呼叫端保證只讀不改**（如 assignKeys）。
+  // 用在「需要看全部天、但不會 mutate」的地方，省掉整個歷史的深拷貝。
+  function peekAll() { return cache; }
+
+  // 只更新「指定的這幾天」（update/新增）＋刪除「明確點名要刪的天」；其他天原封不動。
+  // 血淚護欄：絕不「沒列到就當作要刪」——沒出現在 partial/delDays 的天一律保留。
+  // changedDays/delDays 只處理熱路徑（存檔/編輯/刪一天/單日同步），避免 setAll 的全量 clone＋全日 stringify。
+  function setDays(partial, delDays) {
+    const puts = {}, dels = [];
+    Object.keys(partial || {}).forEach(day => {
+      const v = partial[day] || [];
+      const j = JSON.stringify(v);
+      if (dayJson[day] !== j) { cache[day] = clone(v); dayJson[day] = j; puts[day] = cache[day]; }
+    });
+    (delDays || []).forEach(day => {
+      if ((day in cache) || (day in dayJson)) { delete cache[day]; delete dayJson[day]; dels.push(day); }
+    });
+    if (useLS) {
+      // localStorage 退回模式：單一 blob，只能整包寫（quota 例外往外拋，呼叫端壓實重試）。
+      if (Object.keys(puts).length || dels.length) localStorage.setItem(lsKey, JSON.stringify(cache));
+      return;
+    }
+    if (!Object.keys(puts).length && !dels.length) return;
+    const putsCopy = clone(puts);
+    writeChain = writeChain
+      .then(() => idbWrite(putsCopy, dels))
+      .catch(() => { try { localStorage.setItem(lsKey, JSON.stringify(cache)); } catch (_) {} });
+  }
+
   // 等待所有排隊中的寫入完成（測試/診斷用）
   function flush() { return writeChain; }
 
@@ -182,5 +214,5 @@ window.TripStore = (function () {
     return writeChain;
   }
 
-  return { init, getAll, setAll, flush, bytes, mode, dayCount, clearAll };
+  return { init, getAll, setAll, getDay, setDays, peekAll, flush, bytes, mode, dayCount, clearAll };
 })();

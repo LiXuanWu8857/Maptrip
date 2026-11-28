@@ -70,7 +70,7 @@
     return out;
   }
 
-  function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label, commission, dispatch, tip, tipMethod, newDay }) {
+  function serializeTrip({ id, startTime, endTime, coords, totalDist, fare, roadCoords, paymentMethod, label, commission, dispatch, tip, tipMethod, newDay, cancelCollect }) {
     // 注意：t 可能不存在（壓實後的舊資料）。絕不能寫成 t: undefined —
     // Firestore 會以 invalid-argument 拒收整份文件，導致雲端備份失敗。
     const slimCoords = (coords || []).map(c =>
@@ -88,6 +88,7 @@
       ...(tip ? { tip } : {}),                  // 小費/加收（金額）
       ...(tip && tipMethod ? { tipMethod } : {}),   // 小費付款方式（cash/card）
       ...(newDay != null ? { newDay } : {}),        // 換日手動覆蓋：true=起新日 / false=併回前一天（!=null 保住 false）
+      ...(cancelCollect ? { cancelCollect: true } : {}),   // 代收取消費旗標（淨0，必須保留才會特殊呈現/統計）
       ...(slimRoad ? { roadCoords: slimRoad } : {}) };
   }
 
@@ -126,14 +127,18 @@
     try { return new Set(JSON.parse(localStorage.getItem(DELETED_KEY) || '[]').map(d => d && d.id).filter(v => v != null)); }
     catch (_) { return new Set(); }
   }
+  // 單日存檔（v1.1.458）：不再 clone 整個歷史＋stringify 每一天（舊 loadTrips+saveTrips 全量）。
+  //   - assignKeys 需要看全時間線 → 用 TripStore.peekAll()（唯讀、不 clone）
+  //   - 只合併/寫回「受影響的那幾天」：既有那天用 TripStore.getDay(day)（只拷貝一天）
+  //   - TripStore.setDays(changed, del)：只更新這幾天、空了的明確刪、其他天原封不動
   function saveTodayToStorage() {
-    const raw = loadTrips();
     const dead = _deletedIdSet();
     const today = ctx.getTodayTrips();
-    // gap-aware 分桶：以「全時間線（raw ∪ 今日趟）」重算每趟的日 key，讓新錄的凌晨行程也
-    // 存到正確日曆日（與遷移後的舊資料一致）；未載入 day-boundary 時退回舊 businessDayKey。
+    const S = window.TripStore;
+    // gap-aware 分桶：以「全時間線」重算每趟的日 key（assignKeys 只讀不改，故傳唯讀視圖免 clone）。
+    const peek = (S && S.peekAll) ? S.peekAll() : (typeof loadTrips === 'function' ? loadTrips() : {});
     const keyMap = (window.MaptripDayBoundary && MaptripDayBoundary.assignKeys)
-      ? MaptripDayBoundary.assignKeys(raw, today) : null;
+      ? MaptripDayBoundary.assignKeys(peek, today) : null;
     const affected = new Set([todayKey()]);
     const grouped = {};
     for (const t of today) {
@@ -141,24 +146,27 @@
       affected.add(key);
       (grouped[key] = grouped[key] || []).push(serializeTrip(t));
     }
+    const changed = {}, del = [];
     affected.forEach(day => {
       const byId = new Map();
-      (raw[day] || []).forEach(t => { if (t && t.id != null && !dead.has(t.id)) byId.set(t.id, t); });
+      // 既有那天（只拷貝一天；沒有 getDay 的舊版退回全量讀）
+      const existing = (S && S.getDay) ? S.getDay(day) : ((typeof loadTrips === 'function' ? loadTrips() : {})[day] || []);
+      existing.forEach(t => { if (t && t.id != null && !dead.has(t.id)) byId.set(t.id, t); });
       (grouped[day] || []).forEach(t => { if (t && t.id != null && !dead.has(t.id)) byId.set(t.id, t); });
       const merged = [...byId.values()].sort((a, b) => a.startTime - b.startTime);
-      if (merged.length) raw[day] = merged; else delete raw[day];
+      if (merged.length) changed[day] = merged; else del.push(day);
     });
+    const commit = () => {
+      if (S && S.setDays) S.setDays(changed, del);
+      else { const raw = loadTrips(); Object.keys(changed).forEach(d => raw[d] = changed[d]); del.forEach(d => delete raw[d]); saveTrips(raw); }
+    };
     try {
-      saveTrips(raw);
+      commit();
     } catch (e) {
       // 儲存空間滿：先壓實歷史資料再重試一次，仍失敗才提示
       compactStorage(true);
-      try {
-        saveTrips(raw);
-        toast('儲存空間已自動整理');
-      } catch (e2) {
-        toast('⚠ 本機儲存空間不足，行程可能無法保存！');
-      }
+      try { commit(); toast('儲存空間已自動整理'); }
+      catch (e2) { toast('⚠ 本機儲存空間不足，行程可能無法保存！'); }
     }
     if (window.MaptripSync) MaptripSync.syncDays([...affected]);
   }
@@ -224,18 +232,22 @@
   // 明確從本機移除某趟（供刪除使用，不會被合併存檔／雲端救回）
   function removeTripFromStorage(id) {
     addDeletedId(id);   // 先立墓碑，避免同步又加回來
-    const raw = loadTrips();
-    const affected = [];
-    Object.keys(raw).forEach(day => {
-      if (!Array.isArray(raw[day])) return;
-      const hit = raw[day].find(t => t && t.id === id);
-      if (hit && window.MaptripTrash) { try { MaptripTrash.push(hit, day); } catch (_) {} }   // ★ 先進回收桶（24h 可復原）再刪
-      const before = raw[day].length;
-      raw[day] = raw[day].filter(t => t.id !== id);
-      if (raw[day].length !== before) affected.push(day);
-      if (!raw[day].length) delete raw[day];
+    const S = window.TripStore;
+    const peek = (S && S.peekAll) ? S.peekAll() : loadTrips();   // 唯讀掃描找出該趟在哪天（免 clone 整個歷史）
+    const affected = [], changed = {}, del = [];
+    Object.keys(peek).forEach(day => {
+      if (!Array.isArray(peek[day])) return;
+      const hit = peek[day].find(t => t && t.id === id);
+      if (!hit) return;   // 這天沒有該趟 → 原封不動
+      if (window.MaptripTrash) { try { MaptripTrash.push(hit, day); } catch (_) {} }   // ★ 先進回收桶（24h 可復原）再刪
+      const arr = ((S && S.getDay) ? S.getDay(day) : peek[day].slice()).filter(t => t.id !== id);   // 只拷貝這一天
+      affected.push(day);
+      if (arr.length) changed[day] = arr; else del.push(day);
     });
-    saveTrips(raw);
+    if (affected.length) {
+      if (S && S.setDays) S.setDays(changed, del);
+      else { const raw = loadTrips(); affected.forEach(d => { if (changed[d]) raw[d] = changed[d]; else delete raw[d]; }); saveTrips(raw); }
+    }
     // 從雲端移除該趟 + 把刪除名單推上雲端（跨裝置生效）
     if (window.MaptripSync) {
       if (MaptripSync.deleteTripFromCloud) affected.forEach(day => MaptripSync.deleteTripFromCloud(day, id));

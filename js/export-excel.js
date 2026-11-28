@@ -17,6 +17,7 @@ window.MaptripExport = (function () {
   function payLabel(t) {
     if (t.paymentMethod === 'card') return '刷卡';
     if (t.paymentMethod === 'cash') return '現金';
+    if (t.paymentMethod === 'voucher') return '紙本簽單';
     return t.label || '其他';
   }
 
@@ -61,7 +62,7 @@ window.MaptripExport = (function () {
     var merged = _mergeManual(days, manualTrips);
     var out = {};
     Object.keys(merged).forEach(function (d) {
-      out[d] = merged[d].map(function (t) {
+      out[d] = merged[d].filter(function (t) { return !(t && t.cancelCollect); }).map(function (t) {   // 代收取消費不進 Excel
         var c = commissions && commissions[String(t.id)];
         if (c && c.fareOverride != null && c.fareOverride !== t.fare) {
           var nt = {}; for (var k in t) nt[k] = t[k]; nt.fare = c.fareOverride; return nt;
@@ -83,6 +84,7 @@ window.MaptripExport = (function () {
     (expenses || []).forEach(function (e) { if (e.day) months[String(e.day).slice(0, 7)] = true; });
     var list = Object.keys(months).sort();
     var rows = [SUM_HEAD.slice()];
+    // 紙本簽單已算進「刷卡」欄（v1.1.443；逐趟明細付款欄仍寫「紙本簽單」可辨識）
     list.forEach(function (m) {
       var r = F.monthReport(resolved, commissions, expenses, m);
       rows.push([m, r.fare, r.cash, r.card, r.comm, r.disp, r.expTotal, r.net, r.trips, km(r.dist)]);
@@ -91,7 +93,7 @@ window.MaptripExport = (function () {
   }
 
   // ② 逐趟明細：所有月份、每趟一列（排除「其他/自用」，與帳務一致）。ym 非空則只出該月。
-  var TRIP_HEAD = ['日期', '星期', '時間', '付款', '車資', '抽成', '叫車', '里程(km)', '來源', '備註'];
+  var TRIP_HEAD = ['日期', '星期', '時間', '付款', '車資', '小費', '抽成', '叫車', '里程(km)', '來源', '備註'];
   function tripRows(days, commissions, manualTrips, ym) {
     var merged = _mergeManual(days, manualTrips);
     var month = ym ? String(ym).slice(0, 7) : null;
@@ -101,11 +103,11 @@ window.MaptripExport = (function () {
     var rows = [TRIP_HEAD.slice()];
     dayKeys.forEach(function (day) {
       merged[day].forEach(function (t) {
-        if (t.paymentMethod === 'other') return;   // 自用/非載客不計帳
+        if (t.paymentMethod === 'other' || t.cancelCollect) return;   // 自用/非載客、代收取消費不計帳
         var f = _tripFields(t, commissions);
         rows.push([
           day, wd(day), hm(t.startTime), payLabel(t),
-          f.fare, f.comm, f.disp, km(t.totalDist),
+          f.fare, (t.tip || 0), f.comm, f.disp, km(t.totalDist),   // 小費另列一欄（月彙總營收已含小費）
           t._manual ? '手動' : 'GPS', t.label || ''
         ]);
       });

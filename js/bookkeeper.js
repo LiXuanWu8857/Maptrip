@@ -11,7 +11,7 @@
   var _expEdit = null;     // 支出編輯狀態：null=無／'__new__'=新增中／<id>=編輯該筆
   var _addDay = null;      // 正在新增手動紀錄的日期 'YYYY-MM-DD'（null=無）
   var _month = null;       // 司機檢視目前選的月份 'YYYY-MM'（null=用最近月份）
-  var _payF = 'all';       // 每趟清單篩選：付款方式 'all'|'cash'|'card'
+  var _payF = 'all';       // 每趟清單篩選：付款方式 'all'|'cash'|'card'|'voucher'（紙本簽單，v1.1.442）
   var _dayF = null;        // 每趟清單篩選：只看某一天 'YYYY-MM-DD'（null=整個月）
   var _dispF = false;      // 每趟清單篩選：只看有叫車費的趟（可與現金/刷卡疊加）
   var _cache = null;       // 某司機的 { days, commissions, expenses, name }
@@ -176,6 +176,11 @@
       '.bk-trow{border-bottom:.5px solid var(--bk-bd);padding:10px 8px;cursor:pointer;display:grid;' +
       'grid-template-columns:52px 38px 1fr auto auto;align-items:center;gap:8px;font-size:.86rem;font-variant-numeric:tabular-nums}' +
       '.bk-trow.warn{background:var(--bk-warn-bg);border-radius:8px}' +
+      // 紙本簽單（算在刷卡）：整列紅框顯著標示（v1.1.443）
+      '.bk-trow.voucher{border:2px solid #d93025;border-radius:8px;background:rgba(217,48,37,.07);margin:3px 0}' +
+      '.bk-trow.voucher .p{color:#d93025;font-weight:700}' +
+      '.bk-trow.collect{background:rgba(142,91,42,.08);border-radius:8px;margin:3px 0;cursor:default}' +
+      '.bk-trow.collect .p,.bk-trow.collect .f{color:#8e5b2a;font-weight:700}' +
       '.bk-trow .t{color:var(--bk-t2)}.bk-trow .p{color:var(--bk-muted);font-size:.74rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
       '.bk-trow .f{text-align:left;color:var(--bk-t2)}.bk-trow .f.edited{color:var(--bk-acc-t);font-weight:700}' +
       '.bk-trow .rc{text-align:right;font-weight:600;min-width:44px;color:var(--bk-text);white-space:nowrap}.bk-trow .rc.todo{color:var(--bk-warn-t)}' +
@@ -184,6 +189,8 @@
       '.bk-tedit-lock{flex-basis:100%;font-size:.78rem;line-height:1.5;color:var(--bk-t2);background:var(--bk-s1);border-radius:8px;padding:8px 10px}' +
       '.bk-tedit select{flex:1;min-width:0;padding:9px 8px;border:.5px solid var(--bk-bd2);border-radius:8px;font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text)}' +
       '.bk-trow .p.edited{color:var(--bk-acc-t);font-weight:700}' +
+      '.bk-trow .f .tip{font-size:.72rem;color:#188038;font-weight:600}' +
+      '.bk-daygrp .dg-sum .dg-tip b{color:#188038}' +
       '.bk-tedit .lb{font-size:.76rem;color:var(--bk-t2)}' +
       '.bk-tedit input{flex:1;min-width:0;box-sizing:border-box;padding:9px 10px;border:.5px solid var(--bk-bd2);border-radius:8px;' +
       'font-size:1rem;font-family:inherit;background:var(--bk-s2);color:var(--bk-text);text-align:right}' +
@@ -417,10 +424,24 @@
   // ---------- 某司機檢視（記帳者）：載入 + 繪製分離（月份切換/編輯免重抓） ----------
   async function loadDriver() {
     setTitle('司機：' + (_view.name || ''));
-    setBody('<button class="bk-back" onclick="MaptripBookkeeper.back()">‹ 返回</button><div class="bk-empty">載入中…</div>');
+    var uid = _view.driverUid;
+    var painted = false;
+    // 1) 先用本機快取「秒畫」（stale-while-revalidate）：重度司機不必每次等雲端全撈。
+    var cached = _loadDataCache(uid);
+    if (cached && cached.days) {
+      _cache = cached;
+      var cms = _monthsOf(cached.days);
+      if (!_month || cms.indexOf(_month) < 0) _month = cms[0] || _monthNow();
+      paintDriver();
+      painted = true;
+    } else {
+      setBody('<button class="bk-back" onclick="MaptripBookkeeper.back()">‹ 返回</button><div class="bk-empty">載入中…</div>');
+    }
+    // 2) 背景抓最新 → 更新快取並重畫
     var data;
-    try { data = await S().readDriverData(_view.driverUid); }
+    try { data = await S().readDriverData(uid); }
     catch (e) {
+      if (painted) return;   // 已有快取畫面就留著，不要用錯誤蓋掉（雲端暫時讀不到時仍可看）
       var code = (e && (e.code || e.message)) || '未知錯誤';
       var perm = /permission|denied|insufficient|missing/i.test(String(code));
       var msg = perm
@@ -430,7 +451,10 @@
         '<div class="bk-empty" style="text-align:left;line-height:1.7">' + msg + '</div>');
       return;
     }
+    // 期間使用者可能已切到別的司機 / 返回首頁 → 丟棄這次結果，不要蓋畫面
+    if (!_view || _view.driverUid !== uid) return;
     _cache = data;
+    _saveDataCache(uid, data);
     if (data.name && data.name !== _view.name) { _view.name = data.name; }
     if (!_drivers.length) { try { _drivers = (await S().listLinkedDrivers()) || []; } catch (_) {} }
     // 預設月份＝資料裡最近的月份（沒有就用當月）
@@ -499,7 +523,10 @@
     // 日期下拉只列「當月有載客趟」的日子；選的日子不在清單（換月/資料變動）就回到整月
     var tripDays = monthKeys.filter(function (d) { return (days[d] || []).some(function (t) { return t.paymentMethod !== 'other'; }); });
     if (_dayF && tripDays.indexOf(_dayF) < 0) _dayF = null;
-    if (tripDays.length) h += _filterBarHtml(tripDays);
+    // 當月有紙本簽單才出現「簽單」篩選鈕（沒有就不顯示）
+    var hasVoucher = monthKeys.some(function (d) { return (days[d] || []).some(function (t) { return t.paymentMethod === 'voucher'; }); });
+    if (_payF === 'voucher' && !hasVoucher) _payF = 'all';
+    if (tripDays.length) h += _filterBarHtml(tripDays, hasVoucher);
     // 篩選：付款方式（現金/刷卡）＋日期；只影響下方每趟清單與當日總結，上方淨利卡/月報表維持整月
     var dayKeys = _dayF ? [_dayF] : monthKeys;
     var fsum = _filterSum(days, dayKeys, data.commissions, _payF, _dispF);
@@ -524,12 +551,13 @@
           '<button class="dg-done' + (done ? ' on' : '') + '" onclick="event.stopPropagation();MaptripBookkeeper.toggleDay(\'' + day + '\')">' +
             (done ? '↺ 展開' : '✓ 已完成紀錄') + '</button>' +
         '</div>' +
-        '<div class="dg-r"><span class="dg-n">' + trips.length + ' 趟</span></div>' +
+        '<div class="dg-r"><span class="dg-n">' + trips.filter(function (t) { return !t.cancelCollect; }).length + ' 趟</span></div>' +
         '<div class="dg-sum">' +
           '<span>現金 <b>' + nf(sm2.cash) + '</b></span>' +
           '<span>刷卡 <b>' + nf(sm2.card) + '</b></span>' +
           '<span>抽成 <b>' + nf(sm2.comm) + '</b></span>' +
           '<span>叫車 <b>' + nf(sm2.disp) + '</b></span>' +
+          (sm2.tip ? '<span class="dg-tip">小費 <b>' + nf(sm2.tip) + '</b></span>' : '') +
           '<span class="dg-total">總計 <b>NT$ ' + nf(sm2.total) + '</b></span>' +
         '</div>' +
         '</div>';
@@ -538,6 +566,16 @@
       if (done) return;   // 已完成＝收折：不畫每趟
       trips.forEach(function (t) {
         var idS = String(t.id);
+        // 代收取消費（淨0）：唯讀咖啡色列，顯示 現金+a / 刷卡−a，不進抽成編輯
+        if (t.cancelCollect) {
+          var ca = t.fare || 0;
+          h += '<div class="bk-trow collect">' +
+            '<span class="t">' + fmtT(t.startTime) + '</span>' +
+            '<span class="p">代收</span>' +
+            '<span class="f">現金 +' + nf(ca) + '　刷卡 −' + nf(ca) + '</span>' +
+            '<span class="rc">-</span><span class="rc">-</span></div>';
+          return;
+        }
         var c = data.commissions[idS] || {};
         var touched = c.commission != null;
         var cashLock = t.paymentMethod === 'cash';   // 現金：抽成鎖 0、不可輸入
@@ -545,15 +583,15 @@
         var disp = c.dispatch != null ? c.dispatch : (t.dispatch || 0);
         // 「其他（自用）」與「現金」不需填抽成 → 不標待填
         var filled = touched || comm > 0 || t.paymentMethod === 'other' || cashLock;
-        var pay = t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'cash' ? '現金' : (t.paymentMethod === 'other' ? (t.label || '其他') : ''));
+        var pay = t.paymentMethod === 'card' ? '刷卡' : (t.paymentMethod === 'cash' ? '現金' : t.paymentMethod === 'voucher' ? '簽單' : (t.paymentMethod === 'other' ? (t.label || '其他') : ''));
         var cells = _cells(cashLock, filled, comm, disp);
         // 車資/付款：days 已由 _resolve 套用記帳者改過的值；改過的加標記
         var shownFare = t.fare || 0;
         var fareEdited = !!t._fareEd;
-        h += '<div class="bk-trow' + (filled ? '' : ' warn') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
+        h += '<div class="bk-trow' + (filled ? '' : ' warn') + (t.paymentMethod === 'voucher' ? ' voucher' : '') + '" onclick="MaptripBookkeeper.edit(\'' + esc(idS) + '\')">' +
           '<span class="t">' + fmtT(t.startTime) + (t._manual ? '<br><span class="man">手動</span>' : '') + '</span>' +
           '<span class="p' + (t._payEd ? ' edited' : '') + '">' + esc(pay) + '</span>' +
-          '<span class="f' + (fareEdited ? ' edited' : '') + '">' + nf(shownFare) + '</span>' +
+          '<span class="f' + (fareEdited ? ' edited' : '') + '">' + nf(shownFare) + _tipTag(t) + '</span>' +
           '<span class="rc' + (filled ? '' : ' todo') + '">' + cells.comm + '</span>' +
           '<span class="rc">' + cells.disp + '</span></div>';
         if (String(_editId) === idS) {
@@ -583,6 +621,7 @@
   function _filterTrips(trips, pay, disp, commissions) {
     return (trips || []).filter(function (t) {
       if (!t || t.paymentMethod === 'other') return false;
+      if (t.cancelCollect) return (!pay || pay === 'all') && !disp;   // 代收取消費只在「全部」顯示（影響現金+刷卡兩欄）
       if (pay && pay !== 'all' && t.paymentMethod !== pay) return false;
       if (disp) {
         var c = (commissions && commissions[String(t.id)]) || {};
@@ -591,23 +630,32 @@
       return true;
     });
   }
+  // 每趟車資下方的小費小標（「+小費 50 現」）；沒小費回空字串。小費已算進當日現金/刷卡小計。
+  function _tipTag(t) {
+    var tip = (t && t.tip) || 0;
+    if (!(tip > 0)) return '';
+    return '<br><span class="tip">+小費 ' + nf(tip) + ((t.tipMethod === 'card') ? ' 刷' : ' 現') + '</span>';
+  }
   function _filterOn() { return _payF !== 'all' || !!_dayF || _dispF; }
   // 純函式：篩選結果合計（趟數／車資含改過的車資／抽成／叫車）
   function _filterSum(days, dayKeys, commissions, pay, dispOnly) {
-    var n = 0, fare = 0, comm = 0, disp = 0;
+    var n = 0, fare = 0, comm = 0, disp = 0, tip = 0;
     (dayKeys || []).forEach(function (d) {
       _filterTrips((days || {})[d], pay, dispOnly, commissions).forEach(function (t) {
+        if (t.cancelCollect) return;   // 代收取消費不計入篩選合計（趟數/車資/抽成）
         var c = (commissions && commissions[String(t.id)]) || {};
         n++;
         fare += (c.fareOverride != null ? c.fareOverride : (t.fare || 0));
+        tip += t.tip || 0;
         if (t.paymentMethod !== 'cash') comm += c.commission != null ? c.commission : (t.commission || 0);
         disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
       });
     });
-    return { n: n, fare: fare, comm: comm, disp: disp };
+    return { n: n, fare: fare, comm: comm, disp: disp, tip: tip };
   }
-  function _filterBarHtml(tripDays) {
+  function _filterBarHtml(tripDays, hasVoucher) {
     var pays = [['all', '全部'], ['cash', '現金'], ['card', '刷卡']];
+    if (hasVoucher) pays.push(['voucher', '簽單']);
     var h = '<div class="bk-filter" id="bk-filter"><span class="fl">篩選</span>';
     pays.forEach(function (p) {
       h += '<button class="bk-chip' + (_payF === p[0] ? ' on' : '') + '" data-pay="' + p[0] + '" onclick="MaptripBookkeeper.setPayFilter(\'' + p[0] + '\')">' + p[1] + '</button>';
@@ -622,15 +670,16 @@
   function _filterSumHtml(fs) {
     var parts = [];
     if (_dayF) parts.push(_dayF.slice(5).replace('-', '/') + ' ' + wdOf(_dayF));
-    if (_payF !== 'all') parts.push(_payF === 'cash' ? '現金' : '刷卡');
+    if (_payF !== 'all') parts.push(_payF === 'cash' ? '現金' : (_payF === 'voucher' ? '紙本簽單' : '刷卡'));
     if (_dispF) parts.push('有叫車');
     return '<div class="bk-fsum" id="bk-fsum"><span>' + esc(parts.join('・')) + '</span>' +
       '<span><b>' + fs.n + '</b> 趟</span><span>車資 <b>NT$ ' + nf(fs.fare) + '</b></span>' +
+      (fs.tip ? '<span>小費 <b>' + nf(fs.tip) + '</b></span>' : '') +
       (fs.comm ? '<span>抽成 <b>' + nf(fs.comm) + '</b></span>' : '') +
       (fs.disp ? '<span>叫車 <b>' + nf(fs.disp) + '</b></span>' : '') +
       '<button onclick="MaptripBookkeeper.clearFilter()">清除篩選</button></div>';
   }
-  function setPayFilter(p) { _payF = (p === 'cash' || p === 'card') ? p : 'all'; _editId = null; _addDay = null; paintDriver(); }
+  function setPayFilter(p) { _payF = (p === 'cash' || p === 'card' || p === 'voucher') ? p : 'all'; _editId = null; _addDay = null; paintDriver(); }
   function setDayFilter(d) { _dayF = /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : null; _editId = null; _addDay = null; paintDriver(); }
   function toggleDispFilter() { _dispF = !_dispF; _editId = null; _addDay = null; paintDriver(); }
   function clearFilter() { _payF = 'all'; _dayF = null; _dispF = false; _editId = null; paintDriver(); }
@@ -659,7 +708,7 @@
     var all = { n: 0, comm: 0, disp: 0 }, month = { n: 0, comm: 0, disp: 0 };
     Object.keys(days || {}).forEach(function (day) {
       (days[day] || []).forEach(function (t) {
-        if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與記帳
+        if (t.paymentMethod === 'other' || t.cancelCollect) return;   // 「其他/自用」與代收取消費不參與記帳
         var c = (commissions && commissions[String(t.id)]) || {};
         var comm = c.commission != null ? c.commission : (t.commission || 0);
         var disp = c.dispatch != null ? c.dispatch : (t.dispatch || 0);
@@ -682,7 +731,7 @@
       if (ym && String(day).slice(0, 7) !== ym) return;
       var arr = days[day] || [];
       arr.forEach(function (t) {
-        if (t.paymentMethod === 'other') return;
+        if (t.paymentMethod === 'other' || t.cancelCollect) return;
         fare += (t.fare || 0) + (t.tip || 0);   // 車資＋小費/加收都算營收
         var c = commissions && commissions[String(t.id)];
         comm += (c && c.commission != null) ? c.commission : (t.commission || 0);
@@ -735,7 +784,7 @@
   // 套用記帳者改過的車資／付款方式（commissions.fareOverride / payOverride）→ 回傳「新的 days map」（不改原物件）。
   // 司機端 applyCommission 要等司機開 App 才會寫回 days；記帳者這邊先自己套，讓清單、當日總結、
   // 淨利卡、月報表、篩選、匯出全部用同一份「改後」的值（否則改成刷卡後現金/刷卡小計還算在舊的那邊）。
-  // 改過的趟標 _fareEd / _payEd（顯示用）；payOverride 只接受 cash/card。
+  // 改過的趟標 _fareEd / _payEd（顯示用）；payOverride 只接受 cash/card/voucher。
   function _resolve(days, commissions) {
     var out = {};
     Object.keys(days || {}).forEach(function (d) {
@@ -744,7 +793,7 @@
         if (!c) return t;
         var fo = c.fareOverride, po = c.payOverride;
         var fareCh = fo != null && fo !== '' && !isNaN(+fo) && +fo !== (t.fare || 0);
-        var payCh = (po === 'cash' || po === 'card') && po !== t.paymentMethod;
+        var payCh = (po === 'cash' || po === 'card' || po === 'voucher') && po !== t.paymentMethod;
         if (!fareCh && !payCh) return t;
         var nt = {}; for (var k in t) nt[k] = t[k];
         if (fareCh) { nt.fare = +fo; nt._fareEd = true; }
@@ -759,7 +808,8 @@
     return '<div class="bk-tedit-pf">' +
       '<span class="lb">付款</span><select id="bk-p" onchange="var c=document.getElementById(\'bk-c\');if(c){c.disabled=this.value===\'cash\';if(c.disabled)c.value=0;}">' +
         '<option value="cash"' + (pm === 'cash' ? ' selected' : '') + '>現金</option>' +
-        '<option value="card"' + (pm === 'card' ? ' selected' : '') + '>刷卡</option></select>' +
+        '<option value="card"' + (pm === 'card' ? ' selected' : '') + '>刷卡</option>' +
+        '<option value="voucher"' + (pm === 'voucher' ? ' selected' : '') + '>紙本簽單</option></select>' +
       '<span class="lb">車資</span><input id="bk-f" type="number" inputmode="numeric" value="' + (fare || 0) + '">' +
       '</div>';
   }
@@ -790,19 +840,22 @@
   // 當日總結（供每日標題）：現金/刷卡各自加總、抽成/叫車、總計＝現金＋刷卡−抽成−叫車。
   // 現金/刷卡只算各自付款方式的車資（「其他/自用」不計）；抽成/叫車與逐趟顯示同口徑（commissions 優先）。
   function _daySummary(trips, commissions) {
-    var cash = 0, card = 0, comm = 0, disp = 0;
+    var cash = 0, card = 0, voucher = 0, comm = 0, disp = 0, tips = 0;
     (trips || []).forEach(function (t) {
-      if (t.paymentMethod === 'other') return;   // 「其他/自用」完全不參與（不計車資/抽成/叫車）
+      if (t.paymentMethod === 'other') return;   // 「其他/自用」不參與記帳
+      if (t.cancelCollect) { var a = t.fare || 0; cash += a; card -= a; return; }   // 代收取消費：現金+a、刷卡−a（淨0，不計抽成/叫車）
       var c = (commissions && commissions[String(t.id)]) || {};
       var f = t.fare || 0;
       if (t.paymentMethod === 'cash') cash += f;
       else if (t.paymentMethod === 'card') card += f;
+      else if (t.paymentMethod === 'voucher') { card += f; voucher += f; }   // 紙本簽單：算進刷卡（voucher＝其中簽單）
       var tip = t.tip || 0;   // 小費/加收：依小費付款方式分流
-      if (tip) { if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
+      if (tip) { tips += tip; if ((t.tipMethod || 'cash') === 'card') card += tip; else cash += tip; }
       comm += c.commission != null ? c.commission : (t.commission || 0);
       disp += c.dispatch != null ? c.dispatch : (t.dispatch || 0);
     });
-    return { cash: cash, card: card, comm: comm, disp: disp, total: cash + card - comm - disp };
+    // tip＝當日小費合計（已含在 cash/card 裡，僅供顯示「其中小費多少」）
+    return { cash: cash, card: card, voucher: voucher, comm: comm, disp: disp, tip: tips, total: cash + card - comm - disp };
   }
   // 「已完成紀錄」收折狀態：記在本機（依司機分開）。回傳/切換某日是否已完成（＝收折）。
   function _doneKey() { return 'bk_done_' + ((_view && _view.driverUid) || ''); }
@@ -824,7 +877,7 @@
         '<input id="bk-nt" type="time" value="' + hh + ':' + mm + '">' +
       '</div>' +
       '<div class="tf-row">' +
-        '<select id="bk-np"><option value="cash">現金</option><option value="card">刷卡</option></select>' +
+        '<select id="bk-np"><option value="cash">現金</option><option value="card">刷卡</option><option value="voucher">紙本簽單</option></select>' +
         '<button onclick="MaptripBookkeeper.saveTrip(\'' + day + '\')">新增</button>' +
         '<button class="gh" onclick="MaptripBookkeeper.addTrip(\'' + day + '\')">取消</button>' +
       '</div></div>';
@@ -920,6 +973,27 @@
   function _catOf(k) { var m = (window.MaptripFinance && MaptripFinance.CAT_MAP) || {}; return m[k] || { label: k || '其他', icon: '📦' }; }
   function _today() { try { return (window.todayKey && todayKey()) || new Date().toISOString().slice(0, 10); } catch (_) { return new Date().toISOString().slice(0, 10); } }
   function _monthNow() { return _today().slice(0, 7); }
+
+  // ---- 司機資料本機快取（stale-while-revalidate：開司機時先用快取秒畫，再背景抓最新重畫）----
+  // key 綁「記帳者自己的 uid」＝換帳號不會看到上一個帳號快取的司機資料（安全）。
+  function _myUid() { try { return (S() && S().myUid && S().myUid()) || ''; } catch (_) { return ''; } }
+  function _dataKey(driverUid) { var me = _myUid(); return me ? ('bk_data_' + me + '_' + driverUid) : ''; }
+  function _loadDataCache(driverUid) {
+    var k = _dataKey(driverUid); if (!k) return null;
+    try { var s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch (_) { return null; }
+  }
+  function _saveDataCache(driverUid, data) {
+    var k = _dataKey(driverUid); if (!k || !data) return;
+    try { localStorage.setItem(k, JSON.stringify(data)); } catch (_) {}   // 滿了就跳過，不影響功能
+  }
+  // 換帳號清掉所有 bk_data_* 快取（由 sync._clearLocalForSwitch 呼叫）
+  function clearDataCache() {
+    try {
+      var rm = [];
+      for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('bk_data_') === 0) rm.push(k); }
+      rm.forEach(function (k) { try { localStorage.removeItem(k); } catch (_) {} });
+    } catch (_) {}
+  }
 
   function _expForm(e) {
     var cat = e ? (e.cat || 'fuel') : 'fuel';
@@ -1080,7 +1154,7 @@
     var payEl = document.getElementById('bk-p'), fareEl = document.getElementById('bk-f');
     var canPF = !!(t && (t._manual || (_cache && _cache.allowFareEdit)));
     var newPay = null, newFare = null;
-    if (canPF && payEl && (payEl.value === 'cash' || payEl.value === 'card')) newPay = payEl.value;
+    if (canPF && payEl && (payEl.value === 'cash' || payEl.value === 'card' || payEl.value === 'voucher')) newPay = payEl.value;
     if (canPF && fareEl) { var v = parseInt(fareEl.value, 10); if (!isNaN(v) && v >= 0) newFare = v; }
     var pm = newPay || (t && t.paymentMethod);
     var cashLock = pm === 'cash';   // 現金：抽成強制 0（依「改後」的付款方式）
@@ -1143,11 +1217,12 @@
     openDriver: openDriver, switchDriver: switchDriver, toggleDrvMenu: toggleDrvMenu, setMonth: setMonth,
     setPayFilter: setPayFilter, setDayFilter: setDayFilter, clearFilter: clearFilter, toggleDispFilter: toggleDispFilter, _filterTrips: _filterTrips, _filterSum: _filterSum,
     back: back, edit: edit, saveComm: saveComm, toggleFareEdit: toggleFareEdit,
+    clearDataCache: clearDataCache, _dataKey: _dataKey, _loadDataCache: _loadDataCache, _saveDataCache: _saveDataCache,
     expAdd: expAdd, expEdit: expEdit, expCancel: expCancel, expSave: expSave, expDel: expDel,
     sheetSave: sheetSave, sheetTest: sheetTest, sheetToggleAuto: sheetToggleAuto,
     toggleDay: toggleDay, addTrip: addTrip, saveTrip: saveTrip, delTrip: delTrip,
     fontUp: fontUp, fontDown: fontDown, _fontCtlHtml: _fontCtlHtml,
-    _summary: _summary, _mergeManual: _mergeManual, _resolve: _resolve, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
+    _tipTag: _tipTag, _summary: _summary, _mergeManual: _mergeManual, _resolve: _resolve, _dayTotals: _dayTotals, _daySummary: _daySummary, _localDay: _localDay, _cells: _cells, _netStats: _netStats,
     _bkExpOnly: _bkExpOnly, _cats: _cats, _scopeCss: _scopeCss, BK_EXP_CATS: BK_EXP_CATS
   };
   window.openBookkeeper = open;
