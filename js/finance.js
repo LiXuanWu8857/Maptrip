@@ -34,7 +34,10 @@
   var PK_TOP  = 6;         // 熱點排行顯示前幾名
   var GEO_KEY = 'maptrip_geocache';
 
-  var _month = null;       // 'YYYY-MM'（目前檢視月份）
+  var _month = null;       // 'YYYY-MM'（相容保留；期間改由 _ptype/_anchor 驅動）
+  var _ptype = 'month';    // 期間型態：day/week/month/quarter/year（業績分析 v1.1.468）
+  var _anchor = null;      // 期間錨點（某日 key）；null＝今天
+  var _lastCtx = null;     // 最近一次 render 的分析結果（供「複製給 AI」沿用）
   var _view = 'io';        // 'io'（收支）/ 'an'（分析）
   var _addOpen = false;
   var _lastPk = null;      // 最近一次上車熱點分析結果（供地名補上）
@@ -93,6 +96,37 @@
   function monthOf(dayKey) { return String(dayKey || '').slice(0, 7); }
   function curMonth() { return monthOf(window.todayKey ? todayKey() : new Date().toISOString().slice(0, 10)); }
   function nf(n) { return (Math.round(n) || 0).toLocaleString(); }
+
+  // ---------- 期間系統（業績分析 v1.1.468）----------
+  // 以 MaptripPerf 的純函式做「日/週/月/季/年」切換與分析；finance 只負責取資料與畫面。
+  var PSEG = [{ k: 'day', t: '日' }, { k: 'week', t: '週' }, { k: 'month', t: '月' }, { k: 'quarter', t: '季' }, { k: 'year', t: '年' }];
+  function PF() { return window.MaptripPerf; }
+  function curToday() { return window.todayKey ? todayKey() : new Date().toISOString().slice(0, 10); }
+  function restMinOf(day) { try { return window.getRestMin ? getRestMin(day) : 0; } catch (_) { return 0; } }
+  // 併入記帳者補登手動趟（顯示層，不進 days）→ 車資算進營收；工時 workMs 內部排除手動。
+  function mergedDays() {
+    var raw = (window.loadTrips ? loadTrips() : {}) || {};
+    if (window.MaptripManual && MaptripManual.mergeInto) { try { raw = MaptripManual.mergeInto(raw); } catch (_) {} }
+    return raw;
+  }
+  function curInfo() { return PF().periodInfo(_ptype, _anchor || curToday()); }
+  // 期間內支出（依日期範圍，非趟 key；避免無趟日支出被漏算）
+  function expsInPeriod(info) {
+    var byCat = {}, total = 0, rows = [];
+    loadExp().forEach(function (e) {
+      if (!info.inRange(String(e.day || ''))) return;
+      total += e.amount || 0; byCat[e.cat] = (byCat[e.cat] || 0) + (e.amount || 0); rows.push(e);
+    });
+    rows.sort(function (a, b) { return (b.day + '').localeCompare(a.day + '') || (b.ts || 0) - (a.ts || 0); });
+    return { total: total, byCat: byCat, rows: rows };
+  }
+  // 一次算出目前期間的 money + 效率分析（兩個 tab 共用，避免重複計算）
+  function curAnalysis() {
+    var info = curInfo(), md = mergedDays(), keys = PF().keysInRange(md, info);
+    var exps = expsInPeriod(info);
+    var a = PF().analyze(md, keys, { commissions: null, expenses: exps.rows, restMinOf: restMinOf });
+    return { info: info, keys: keys, exps: exps, a: a };
+  }
 
   // 月報表核心（純函式，單一算錢來源）：吃 days/commissions/expenses/月份 → 營收/抽成/叫車/支出/淨利。
   // 記帳者報表用 readDriverData 餵、finance 自己用 loadTrips 餵（commissions=null→用行程自帶 t.commission）。
@@ -324,6 +358,34 @@
       '.fin-tabs{display:flex;gap:8px;padding:0 16px 8px}' +
       '.fin-tab{flex:1;padding:9px;border:none;border-radius:10px;background:#f1f3f4;color:#5f6368;font-weight:600;font-family:inherit;font-size:.9rem;cursor:pointer}' +
       '.fin-tab.active{background:#1a73e8;color:#fff}' +
+      // 期間切換（日/週/月/季/年）
+      '.fin-pseg{display:flex;gap:4px;padding:2px 16px 6px}' +
+      '.fin-ps{flex:1;padding:7px 0;border:none;border-radius:8px;background:#f1f3f4;color:#5f6368;font-weight:600;font-size:.82rem;font-family:inherit;cursor:pointer}' +
+      '.fin-ps.on{background:#1a73e8;color:#fff}' +
+      // 複製給 AI
+      '.fin-ai-btn{width:100%;margin:12px 0 2px;display:flex;flex-direction:column;align-items:center;gap:2px;background:linear-gradient(135deg,#34a853,#188038);color:#fff;border:none;border-radius:14px;padding:13px;font-size:.95rem;font-weight:700;font-family:inherit;cursor:pointer}' +
+      '.fin-ai-btn .sub{font-size:.68rem;font-weight:500;opacity:.9}.fin-ai-btn:active{opacity:.9}' +
+      // 時間效率
+      '.fin-eff{background:#f8f9fa;border-radius:14px;padding:14px}' +
+      '.fin-efflabs{display:flex;justify-content:space-between;font-size:.8rem;font-weight:600;margin-bottom:5px}' +
+      '.fin-efflabs .ld{color:#1a73e8}.fin-efflabs .idl{color:#e8710a}' +
+      '.fin-effbar{display:flex;height:20px;border-radius:7px;overflow:hidden;background:#e8eaed}' +
+      '.fin-effbar .ld{background:#1a73e8}.fin-effbar .idl{background:#f1a33c}' +
+      '.fin-effrow{display:flex;gap:10px;margin-top:12px}' +
+      '.fin-effm{flex:1;text-align:center}.fin-effm .v{font-size:1.02rem;font-weight:700;color:#202124}.fin-effm .k{font-size:.7rem;color:#5f6368;margin-top:2px}' +
+      '.fin-bars.bk .fin-bar .cap{font-size:.6rem}' +
+      // 星期×時段 熱力圖
+      '.fin-heat{display:grid;grid-template-columns:18px repeat(8,1fr);gap:3px}' +
+      '.fin-hc{height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.58rem;color:#fff}' +
+      '.fin-hc.hh{background:none;color:#9aa0a6;font-size:.56rem;height:auto;padding-bottom:1px}' +
+      '.fin-hc.hr{background:none;color:#5f6368;font-size:.62rem;font-weight:600}' +
+      '.fin-hc.empty{background:#eceff1}' +
+      '.fin-hc.cell{cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+      '.fin-hc.cell.press{outline:2px solid #202124;outline-offset:-1px}' +
+      // 短趟盈虧 + 行動建議
+      '.fin-short{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.fin-short .fin-stat .val{font-size:1.05rem}' +
+      '.fin-advice{background:rgba(26,115,232,.06);border:1px solid rgba(26,115,232,.16);border-radius:12px;padding:10px 12px}' +
+      '.fin-advice ul{margin:0;padding-left:18px}.fin-advice li{font-size:.84rem;color:#3c4043;line-height:1.5;margin:3px 0}' +
       '#finance-body{overflow-y:auto;flex:1;padding:0 16px 16px}' +
       '.fin-net{background:linear-gradient(135deg,#1a73e8,#0b57c7);color:#fff;border-radius:16px;padding:16px 18px;margin-bottom:12px}' +
       '.fin-net .lbl{font-size:.8rem;opacity:.85}.fin-net .val{font-size:1.9rem;font-weight:800;margin-top:2px}' +
@@ -394,6 +456,11 @@
       '.pk-rk{background:#2f3b4d;color:#c6dafc}' +
       '#finance-sheet{background:#1a1a1a;border-top-color:rgba(255,255,255,.07)}' +
       '.fin-mbar span{color:#e8eaed}.fin-tab{background:#2a2a2a;color:#9aa0a6}' +
+      '.fin-ps{background:#2a2a2a;color:#9aa0a6}' +
+      '.fin-eff,.fin-short .fin-stat{background:#242424}.fin-effbar{background:#333}' +
+      '.fin-effm .v{color:#e8eaed}.fin-effm .k{color:#9aa0a6}' +
+      '.fin-hc.empty{background:#2a2a2a}.fin-hc.hr{color:#9aa0a6}' +
+      '.fin-advice{background:rgba(138,180,248,.08);border-color:rgba(138,180,248,.2)}.fin-advice li{color:#c8ccd2}' +
       '.fin-card,.fin-catcell,.fin-stat,.fin-form{background:#242424}' +
       '.fin-card .lbl,.fin-stat .lbl,.fin-catcell .nm{color:#9aa0a6}.fin-card .val,.fin-stat .val,.fin-catcell .am{color:#e8eaed}' +
       '.fin-exprow .t1{color:#e8eaed}.fin-chip{background:#2a2a2a;border-color:rgba(255,255,255,.15);color:#c8ccd2}' +
@@ -412,9 +479,12 @@
       '<div class="sheet-handle"></div>' +
       '<div class="sheet-header"><span>收支報表</span>' +
       '<button class="sheet-close" onclick="closeFinance()">✕</button></div>' +
-      '<div class="fin-mbar"><button onclick="MaptripFinance.shiftMonth(-1)">‹</button>' +
-      '<span id="fin-month-label"></span>' +
-      '<button onclick="MaptripFinance.shiftMonth(1)">›</button></div>' +
+      '<div class="fin-pseg">' +
+      PSEG.map(function (p) { return '<button id="fin-ps-' + p.k + '" class="fin-ps" onclick="MaptripFinance.setPeriod(\'' + p.k + '\')">' + p.t + '</button>'; }).join('') +
+      '</div>' +
+      '<div class="fin-mbar"><button onclick="MaptripFinance.shiftPeriod(-1)">‹</button>' +
+      '<span id="fin-period-label"></span>' +
+      '<button onclick="MaptripFinance.shiftPeriod(1)">›</button></div>' +
       '<div class="fin-tabs">' +
       '<button id="fin-tab-io" class="fin-tab active" onclick="MaptripFinance.tab(\'io\')">收支</button>' +
       '<button id="fin-tab-an" class="fin-tab" onclick="MaptripFinance.tab(\'an\')">分析</button></div>' +
@@ -429,12 +499,15 @@
   }
 
   function render() {
-    var lbl = document.getElementById('fin-month-label');
-    if (lbl) lbl.textContent = monthLabel(_month);
+    var ctx = curAnalysis();
+    _lastCtx = ctx;
+    var lbl = document.getElementById('fin-period-label');
+    if (lbl) lbl.textContent = ctx.info.label;
+    PSEG.forEach(function (p) { var b = document.getElementById('fin-ps-' + p.k); if (b) b.classList.toggle('on', _ptype === p.k); });
     document.getElementById('fin-tab-io').classList.toggle('active', _view === 'io');
     document.getElementById('fin-tab-an').classList.toggle('active', _view === 'an');
     var body = document.getElementById('finance-body');
-    body.innerHTML = _view === 'io' ? renderIO() : renderAnalytics();
+    body.innerHTML = _view === 'io' ? renderIO(ctx) : renderAnalytics(ctx);
     if (_view === 'an') { hydratePickupNames(); bindChartTips(); }
   }
 
@@ -473,7 +546,7 @@
 
     // 按一下長條 → 顯示；再按同一根 / 按內容其他地方 → 收起
     body.addEventListener('click', function (e) {
-      var bar = e.target.closest && e.target.closest('.fin-bar');
+      var bar = e.target.closest && e.target.closest('.fin-bar, .fin-hc.cell');
       if (!bar) { hide(); return; }
       if (bar === active) { hide(); return; }
       show(bar);
@@ -487,18 +560,18 @@
     });
   }
 
-  function renderIO() {
-    var rev = revenueOfMonth(_month);
-    var exp = expensesOfMonth(_month);
-    var deduct = rev.comm + rev.disp;   // 抽成 + 叫車費（公司抽走）
-    var net = rev.fare - deduct - exp.total;
+  function renderIO(ctx) {
+    ctx = ctx || curAnalysis();
+    var m = ctx.a.money, exp = ctx.exps;
+    var deduct = m.comm + m.disp;   // 抽成 + 叫車費（公司抽走）
+    var net = m.fare - deduct - exp.total;
     var h = '';
     h += '<div class="fin-net"><div class="lbl">淨收入（營收 − 抽成 − 支出）</div>' +
       '<div class="val">NT$ ' + nf(net) + '</div>' +
-      '<div class="sub"><span>現金 ' + nf(rev.cash) + '</span><span>刷卡 ' + nf(rev.card) + '</span>' +
-      '<span>' + rev.trips + ' 趟</span></div></div>';
+      '<div class="sub"><span>現金 ' + nf(m.cash) + '</span><span>刷卡 ' + nf(m.card) + '</span>' +
+      '<span>' + m.trips + ' 趟</span></div></div>';
     h += '<div class="fin-row2">' +
-      '<div class="fin-card"><div class="lbl">營收</div><div class="val rev">' + nf(rev.fare) + '</div></div>' +
+      '<div class="fin-card"><div class="lbl">營收</div><div class="val rev">' + nf(m.fare) + '</div></div>' +
       '<div class="fin-card"><div class="lbl">抽成/叫車</div><div class="val exp">' + nf(deduct) + '</div></div>' +
       '<div class="fin-card"><div class="lbl">支出</div><div class="val exp">' + nf(exp.total) + '</div></div></div>';
 
@@ -541,7 +614,8 @@
       return '<span class="fin-chip' + (c.k === _formCat ? ' on' : '') + '" onclick="MaptripFinance.pickCat(\'' + c.k + '\')">' +
         c.icon + ' ' + c.label + '</span>';
     }).join('');
-    var defDay = (_month === curMonth() && window.todayKey) ? todayKey() : _month + '-01';
+    var info = curInfo();
+    var defDay = info.inRange(curToday()) ? curToday() : info.start;
     return '<div class="fin-form">' +
       '<div class="fin-chips">' + chips + '</div>' +
       '<input class="fin-inp" id="fin-amt" type="number" inputmode="numeric" placeholder="金額 (NT$)">' +
@@ -552,51 +626,112 @@
       '<button class="fin-ok" onclick="MaptripFinance.saveAdd()">確定</button></div></div>';
   }
 
-  function renderAnalytics() {
-    var rev = revenueOfMonth(_month);
-    var exp = expensesOfMonth(_month);
-    var net = rev.fare - rev.comm - rev.disp - exp.total;
-    var a = analyze(_month);
-    var workH = rev.workMs / 3600000;
-    var perHour = workH > 0.05 ? net / workH : 0;
-    var perKm = rev.dist > 0 ? rev.fare / (rev.dist / 1000) : 0;
-    var perTrip = rev.trips > 0 ? rev.fare / rev.trips : 0;
-    // 最賺時段
-    var bestH = -1, bestV = 0;
-    a.byHour.forEach(function (x, i) { if (x.fare > bestV) { bestV = x.fare; bestH = i; } });
-    var bestLabel = bestH < 0 ? '—' : (bestH + ':00–' + (bestH + 1) + ':00');
+  // 熱力圖顯示順序（週一..週日）與短標籤
+  var HEAT_DOW = [1, 2, 3, 4, 5, 6, 0];
+  var HEAT_WD = ['一', '二', '三', '四', '五', '六', '日'];
+  var HEAT_BK = ['清晨', '早峰', '上午', '中午', '下午', '晚峰', '晚間', '深夜'];
+  // 星期 × 時段 時薪熱力圖（綠＝高、紅＝低；空白＝該格無載客）
+  function renderHeat(a) {
+    var vals = [];
+    a.heat.forEach(function (row) { row.forEach(function (c) { if (c.has && c.hr > 0) vals.push(c.hr); }); });
+    var mn = vals.length ? Math.min.apply(null, vals) : 0;
+    var mx = vals.length ? Math.max.apply(null, vals) : 1;
+    var h = '<div class="fin-heat"><div class="fin-hc hh"></div>';
+    HEAT_BK.forEach(function (lb) { h += '<div class="fin-hc hh">' + lb + '</div>'; });
+    HEAT_DOW.forEach(function (dw, ri) {
+      h += '<div class="fin-hc hr">' + HEAT_WD[ri] + '</div>';
+      for (var b = 0; b < 8; b++) {
+        var c = a.heat[dw][b];
+        if (!c.has || c.hr <= 0) { h += '<div class="fin-hc empty"></div>'; continue; }
+        var t = mx > mn ? (c.hr - mn) / (mx - mn) : 1;        // 0..1
+        var hue = Math.round(120 * t);                        // 紅0 → 綠120
+        var tip = HEAT_WD[ri] + ' ' + HEAT_BK[b] + '　NT$ ' + nf(c.hr) + '/hr';
+        h += '<div class="fin-hc cell" title="' + tip + '" data-tip="' + tip + '" style="background:hsl(' + hue + ',62%,45%)"></div>';
+      }
+    });
+    return h + '</div>';
+  }
+
+  function renderAnalytics(ctx) {
+    ctx = ctx || curAnalysis();
+    var a = ctx.a, m = a.money;
+    var bestBucket = null;
+    a.bucketHr.forEach(function (x) { if (x.hr > 0 && (!bestBucket || x.hr > bestBucket.hr)) bestBucket = x; });
+    var bestLabel = bestBucket ? bestBucket.label : '—';
 
     var h = '<div class="fin-stats">' +
-      '<div class="fin-stat"><div class="lbl">每小時淨收入</div><div class="val">NT$ ' + nf(perHour) + '</div></div>' +
-      '<div class="fin-stat"><div class="lbl">每公里營收</div><div class="val">NT$ ' + perKm.toFixed(1) + '</div></div>' +
-      '<div class="fin-stat"><div class="lbl">平均每趟</div><div class="val">NT$ ' + nf(perTrip) + '</div></div>' +
+      '<div class="fin-stat"><div class="lbl">每小時淨收入</div><div class="val">NT$ ' + nf(a.perHrNet) + '</div></div>' +
+      '<div class="fin-stat"><div class="lbl">每公里營收</div><div class="val">NT$ ' + a.perKm.toFixed(1) + '</div></div>' +
+      '<div class="fin-stat"><div class="lbl">平均每趟</div><div class="val">NT$ ' + nf(a.perTrip) + '</div></div>' +
       '<div class="fin-stat"><div class="lbl">最賺時段</div><div class="val">' + bestLabel + '</div></div>' +
       '</div>';
 
-    if (!rev.trips) return h + '<div class="fin-empty">本月尚無載客紀錄可分析</div>';
+    // 複製給 AI（核心：讓使用者把純統計貼到對話討論）
+    h += '<button class="fin-ai-btn" onclick="MaptripFinance.copyAi()">📋 複製業績數據 · 給 AI 討論' +
+      '<span class="sub">純統計、不含位置／個資，貼到對話即可要建議</span></button>';
 
-    // 每小時營收（24 條）；點一下看金額（data-tip）
+    if (!m.trips) return h + '<div class="fin-empty">此期間尚無載客紀錄可分析</div>';
+
+    // 時間效率
+    var loadedPct = a.workMs > 0 ? Math.round((1 - a.idleRatio) * 100) : 0;
+    var idlePct = 100 - loadedPct;
+    h += '<div class="fin-sec">時間效率</div><div class="fin-eff">' +
+      '<div class="fin-efflabs"><span class="ld">載客 ' + loadedPct + '%</span><span class="idl">空車 ' + idlePct + '%</span></div>' +
+      '<div class="fin-effbar"><div class="ld" style="width:' + loadedPct + '%"></div><div class="idl" style="width:' + idlePct + '%"></div></div>' +
+      '<div class="fin-effrow">' +
+      '<div class="fin-effm"><div class="v">' + a.avgGapMin.toFixed(0) + ' 分</div><div class="k">趟間等待</div></div>' +
+      '<div class="fin-effm"><div class="v">' + a.avgDeadKm.toFixed(1) + ' km</div><div class="k">下車後空跑</div></div>' +
+      '<div class="fin-effm"><div class="v">NT$ ' + nf(a.loadedRate) + '</div><div class="k">載客時薪</div></div>' +
+      '</div></div>';
+
+    // 各時段時薪（8 條；點一下看明細）
+    h += '<div class="fin-sec">各時段時薪 <span class="fin-hint">點一下看明細</span></div><div class="fin-chart"><div class="fin-bars bk">';
+    var maxBk = Math.max.apply(null, a.bucketHr.map(function (x) { return x.hr; })) || 1;
+    a.bucketHr.forEach(function (x) {
+      var pct = Math.round(x.hr / maxBk * 100);
+      var hot = bestBucket && x.label === bestBucket.label && x.hr > 0;
+      var tip = x.label + '　NT$ ' + nf(x.hr) + '/hr　' + x.trips + ' 趟';
+      h += '<div class="fin-bar" title="' + tip + '" data-tip="' + tip + '">' +
+        '<div class="b' + (hot ? '' : ' dim') + '" style="height:' + pct + '%"></div>' +
+        '<div class="cap">' + x.label + '</div></div>';
+    });
+    h += '</div></div>';
+
+    // 星期 × 時段 時薪熱力圖
+    h += '<div class="fin-sec">星期 × 時段 時薪熱力圖 <span class="fin-hint">綠＝高 · 紅＝低</span></div>';
+    h += renderHeat(a);
+
+    // 短趟盈虧
+    h += '<div class="fin-sec">短趟盈虧（車資 &lt; NT$ ' + a.shortTh + '）</div><div class="fin-short">' +
+      '<div class="fin-stat"><div class="lbl">短趟佔比</div><div class="val">' + Math.round(a.shortPct * 100) + '%</div></div>' +
+      '<div class="fin-stat"><div class="lbl">短趟實際時薪</div><div class="val">NT$ ' + nf(a.shortEffHr) + '</div></div>' +
+      '<div class="fin-stat"><div class="lbl">接駁空跑</div><div class="val">' + a.shortDeadKm.toFixed(1) + ' km</div></div>' +
+      '</div>';
+
+    // 行動建議（自動生成）
+    var adv = PF().advice(a);
+    h += '<div class="fin-sec">行動建議</div><div class="fin-advice"><ul>';
+    adv.forEach(function (s) { h += '<li>' + esc(s) + '</li>'; });
+    h += '</ul></div>';
+
+    // 既有圖：各時段營收（24）＋各星期營收（7）
     h += '<div class="fin-sec">各時段營收 <span class="fin-hint">點一下看金額</span></div><div class="fin-chart"><div class="fin-bars">';
     var maxH = Math.max.apply(null, a.byHour.map(function (x) { return x.fare; })) || 1;
+    var bestH = -1, bv = 0; a.byHour.forEach(function (x, i) { if (x.fare > bv) { bv = x.fare; bestH = i; } });
     a.byHour.forEach(function (x, i) {
       var pct = Math.round(x.fare / maxH * 100);
       var cap = (i % 3 === 0) ? i : '';
       var tip = i + ':00–' + (i + 1) + ':00　NT$ ' + nf(x.fare) + '　' + x.n + ' 趟';
-      h += '<div class="fin-bar" title="' + tip + '" data-tip="' + tip + '">' +
-        '<div class="b' + (i === bestH ? '' : ' dim') + '" style="height:' + pct + '%"></div>' +
-        '<div class="cap">' + cap + '</div></div>';
+      h += '<div class="fin-bar" title="' + tip + '" data-tip="' + tip + '"><div class="b' + (i === bestH ? '' : ' dim') + '" style="height:' + pct + '%"></div><div class="cap">' + cap + '</div></div>';
     });
     h += '</div></div>';
 
-    // 星期幾營收（7 條）；點一下看金額
     h += '<div class="fin-sec">各星期營收 <span class="fin-hint">點一下看金額</span></div><div class="fin-chart"><div class="fin-bars wd">';
     var maxW = Math.max.apply(null, a.byDow.map(function (x) { return x.fare; })) || 1;
     a.byDow.forEach(function (x, i) {
       var pct = Math.round(x.fare / maxW * 100);
       var tip = WD[i] + '　NT$ ' + nf(x.fare) + '　' + x.n + ' 趟';
-      h += '<div class="fin-bar" title="' + tip + '" data-tip="' + tip + '">' +
-        '<div class="b" style="height:' + pct + '%"></div>' +
-        '<div class="cap">' + WD[i].slice(1) + '</div></div>';
+      h += '<div class="fin-bar" title="' + tip + '" data-tip="' + tip + '"><div class="b" style="height:' + pct + '%"></div><div class="cap">' + WD[i].slice(1) + '</div></div>';
     });
     h += '</div></div>';
 
@@ -645,7 +780,7 @@
   function open() {
     ensureSheet();
     bindExpenseSync();   // 確保雲端支出同步已啟動（首次會遷移舊資料＋訂閱）
-    _month = _month || curMonth();
+    _anchor = _anchor || curToday();
     _view = 'io'; _addOpen = false;
     var fs = document.getElementById('finance-sheet');
     // 可拖曳展開（把手/標題列往上拉到全螢幕）；開啟時 reset 回預設高度
@@ -661,12 +796,48 @@
     if (ov) { ov.style.display = 'none'; ov.onclick = window.closeActiveSheet || null; }
     _addOpen = false;
   }
-  function shiftMonth(d) {
-    var p = _month.split('-'); var dt = new Date(+p[0], +p[1] - 1 + d, 1);
-    _month = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
-    _addOpen = false; render();
+  // 期間切換（日/週/月/季/年）
+  function setPeriod(t) {
+    if (!PSEG.some(function (p) { return p.k === t; })) return;
+    _ptype = t; _anchor = _anchor || curToday(); _addOpen = false; render();
   }
+  // 上一個／下一個期間（依目前型態）
+  function shiftPeriod(d) {
+    var info = curInfo(); _anchor = d < 0 ? info.prev : info.next; _addOpen = false; render();
+  }
+  // 相容舊呼叫：切到「月」再移動
+  function shiftMonth(d) { setPeriod('month'); shiftPeriod(d); }
   function tab(v) { _view = v; _addOpen = false; render(); }
+  // 複製業績數據給 AI 討論（純統計、不含座標/個資）
+  function copyText(t) {
+    function okToast() { if (window.toast) toast('已複製業績數據，貼到對話即可討論'); }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(okToast, function () { fallbackCopy(t, okToast); });
+        return;
+      }
+    } catch (_) {}
+    fallbackCopy(t, okToast);
+  }
+  function fallbackCopy(t, okToast) {
+    try {
+      var ta = document.createElement('textarea'); ta.value = t;
+      ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); okToast();
+    } catch (_) { if (window.toast) toast('複製失敗，請手動截圖'); }
+  }
+  function copyAi() {
+    var ctx = _lastCtx || curAnalysis();
+    var names = [];
+    try {
+      if (_lastPk && _lastPk.clusters) {
+        names = _lastPk.clusters.slice(0, 5).map(function (c) { return (pickName(c) || '').trim(); })
+          .filter(function (s) { return s && s !== '未命名地點'; });
+      }
+    } catch (_) {}
+    copyText(PF().aiText(ctx.a, ctx.info.label, names));
+  }
   // 主動抓一次記帳者填的抽成（雲端 commissions），套進本機各趟後重畫報表。
   function pullComm() {
     if (!(window.MaptripSync && MaptripSync.pullCommissions)) { if (window.toast) toast('雲端未啟用'); return; }
@@ -693,8 +864,8 @@
     list.push(rec);
     saveExp(list);                                   // 樂觀更新快取（離線也先看得到）
     _addOpen = false;
-    // 若記到別的月份，跳到那個月才看得到
-    if (monthOf(day) !== _month) _month = monthOf(day);
+    // 若記到目前期間之外，把錨點移到那天才看得到（保持目前期間型態）
+    if (!curInfo().inRange(day)) _anchor = day;
     render();
     if (window.toast) toast('已記錄支出 NT$ ' + nf(amt));
     // 推雲端（成功後 onSnapshot 會再回填一次，冪等）。離線／未登入就只留快取。
@@ -711,6 +882,7 @@
   }
 
   window.MaptripFinance = { open: open, close: close, shiftMonth: shiftMonth, tab: tab, toggleAdd: toggleAdd, pickCat: pickCat, saveAdd: saveAdd, delExp: delExp,
+    setPeriod: setPeriod, shiftPeriod: shiftPeriod, copyAi: copyAi,   // 業績分析：期間切換＋複製給 AI（v1.1.468）
     bindExpenseSync: bindExpenseSync, resetExpenseSync: resetExpenseSync,
     CATS: CATS, CAT_MAP: CAT_MAP,   // 供 bookkeeper.js 沿用同一套支出分類（單一來源）
     monthReport: monthReport,       // 單一算錢來源：記帳者月報表與 finance 共用
